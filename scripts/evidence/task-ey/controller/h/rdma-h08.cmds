@@ -1,0 +1,1 @@
+ao-readdir-posix	1	python3 scripts/evidence/ao/qualify_ao_readdir.py --work $T/run --output $T/out --transport rdma --posix

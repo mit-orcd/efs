@@ -1,0 +1,1 @@
+k14-torn-read	1	K14_TRANSPORT=rdma K14_PHASES="1 2 3 4 5 6 7" scripts/evidence/k14/k14_atomic_cluster.sh run $S $T/run 19520 $F; rc=$?; K14_TRANSPORT=rdma K14_PHASES="1 2 3 4 5 6 7" scripts/evidence/k14/k14_atomic_cluster.sh stop $S $T/run 19520 $F; exit $rc

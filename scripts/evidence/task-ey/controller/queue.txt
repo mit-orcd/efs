@@ -1,0 +1,43 @@
+tcp-3x1-id-d4 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-3x1-tcp.json --gates identity,topology,d4-progress
+tcp-3x1-d4e4 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-3x1-tcp.json --gates identity,topology,d4-progress,e4-scale
+tcp-4x1 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-tcp.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale,d5-expiry --allow restart,turnover,remount
+tcp-4x1-e4 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-tcp.json --gates identity,topology,e4-scale
+tcp-5x1 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-5x1-tcp.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale,d5-expiry --allow restart,turnover,remount
+tcp-5x1b /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-5x1-tcp.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale,d5-expiry --allow restart,turnover,remount
+tcp-h01 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h01 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h01.cmds
+tcp-h02 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h02 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h02.cmds
+tcp-h03 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h03 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h03.cmds
+tcp-h04 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h04 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h04.cmds
+tcp-h05 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h05 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h05.cmds
+tcp-h06 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h06 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h06.cmds
+tcp-h07 sh:/home/erbmi1/work/efs-taskEY-login/run_dw.sh tcp-h07 tcp 4
+tcp-h08 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h08 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h08.cmds
+tcp-h09 /home/erbmi1/work/efs-taskEY-login/task-ey/h09-tcp.json --gates identity,topology,h09-extend-eof,h09-excl-create
+tcp-h13 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h13 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h13.cmds
+tcp-h14 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h14 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h14.cmds
+tcp-h15 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h15 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h15.cmds
+tcp-3x1-e4b /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-3x1-tcp.json --gates identity,topology,e4-scale
+tcp-5x1-c5 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-5x1-tcp.json --gates identity,topology,c5-protocol-live
+tcp-h04-k41 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h04-k41 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h04-k41.cmds
+tcp-h14b sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h14b fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h14b.cmds
+tcp-h01-k110 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-h01-k110 fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-h01-k110.cmds
+tcp-k22-ring sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh tcp-k22-ring fcstor012 tcp /home/erbmi1/work/efs-taskEY-login/h/tcp-k22-ring.cmds
+rdma-3x1 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-3x1-rdma.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale --allow restart,turnover,remount
+rdma-4x1 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-rdma.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale --allow restart,turnover,remount
+rdma-5x1 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-5x1-rdma.json --gates identity,topology,b-checks,posix-core,posix-extras,posix-2client,posix-durability,e1-manifest,e2-client-stop,e3-turnover,a13-node-addition,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,d4-progress,e4-scale --allow restart,turnover,remount
+rdma-h01 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h01 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h01.cmds
+rdma-h02 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h02 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h02.cmds
+rdma-h04 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h04 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h04.cmds
+rdma-h05 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h05 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h05.cmds
+rdma-h06 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h06 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h06.cmds
+rdma-h07 sh:/home/erbmi1/work/efs-taskEY-login/run_dw.sh rdma-h07 rdma 10
+rdma-h08 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h08 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h08.cmds
+rdma-h09 /home/erbmi1/work/efs-taskEY-login/task-ey/h09-rdma.json --gates identity,topology,h09-extend-eof,h09-excl-create
+rdma-h12 /home/erbmi1/work/efs-taskEY-login/task-ey/h12-rdma.json --gates identity,topology,h12-posix-all-a,h12-posix-all-b
+rdma-h13 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h13 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h13.cmds
+rdma-h14 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h14 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h14.cmds
+rdma-4x1b /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-rdma.json --gates identity,topology,posix-durability,e1-manifest,e2-client-stop,b6-member-down,c5-protocol-live,d1-packing,d3-efs-load,e4-scale --allow restart,turnover,remount
+rdma-4x1-pd2 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-rdma.json --gates identity,topology,posix-durability --allow restart,turnover,remount
+rdma-4x1-pd3 /home/erbmi1/work/efs-taskEY-login/task-ey/fcstor-4x1-rdma.json --gates identity,topology,posix-durability --allow restart,turnover,remount
+rdma-k42-e2 sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-k42-e2 fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-k42-e2.cmds
+rdma-h01-kill sh:/home/erbmi1/work/efs-taskEY-login/run_h.sh rdma-h01-kill fcstor012 rdma /home/erbmi1/work/efs-taskEY-login/h/rdma-h01-kill.cmds

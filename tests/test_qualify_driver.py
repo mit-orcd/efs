@@ -511,6 +511,13 @@ try:
     checks = [c for ep in (ep0, ep1) for c in H.wire_node(ep, [ep0, ep1], 2)]
     assert checks and all(c['ok'] for c in checks), [c for c in checks if not c['ok']]
     assert any(c.get('via') == [ep1, ep0] for c in checks), 'the follower redirect was followed'
+    # A hint is a raft id (join order), not an index into the node list: a
+    # follower whose hint names its own list slot still reaches the leader.
+    self_hint, ep3 = fake_daemon(1)
+    checks = H.wire_node(ep3, [ep0, ep3], 2)
+    assert checks and all(c['ok'] for c in checks), [c for c in checks if not c['ok']]
+    assert any(c.get('via') == [ep3, ep0] for c in checks), 'the self hint fell through to the leader'
+    self_hint.close()
     lax, ep2 = fake_daemon(None, lax=True)
     failed = {c['check'] for c in H.wire_node(ep2, [ep2], 2) if not c['ok']}
     assert 'unknown-tag-254-group-0-refused' in failed and 'reserved-tag-46-group-2-refused' in failed, failed

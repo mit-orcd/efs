@@ -1,0 +1,5 @@
+pump-file	3	python3 scripts/evidence/pump-logging/pump_logging_profile.py --work $T/run --output $T/out --obs 1 --require-progress --versioned --transport tcp --sink file
+pump-blocked	3	python3 scripts/evidence/pump-logging/pump_logging_profile.py --work $T/run --output $T/out --obs 1 --require-progress --versioned --transport tcp --sink blocked
+pump-test	1	python3 tests/test_pump_logging.py
+d4-kit-obs0	3	python3 scripts/evidence/pump-logging/pump_logging_d4_profile.py --work $T/run --output $T/out --obs 0
+d4-kit-obs1	3	python3 scripts/evidence/pump-logging/pump_logging_d4_profile.py --work $T/run --output $T/out --obs 1

@@ -1,0 +1,1 @@
+e2-peer-stop-loop-keep	3	python3 tests/live/e2_peer_stop_loop.py --runs 20 --port-base 19600 --keep; rc=$?; d=/home/erbmi1/efs-artifacts/taskEY-20261109/rdma-k42-e2/keep-$(basename $T); mkdir -p $d; (cd $T && find . -maxdepth 6 -type f -name "*.log" -size -50M -exec cp --parents {} $d/ \;); exit $rc

@@ -1,0 +1,2 @@
+k22-leader-admission	3	python3 tests/test_k22_leader_admission.py
+k22-snapshot-import-1gib	1	bash scripts/evidence/k22/k22_snapshot_import.sh $S; rc=$?; grep -rl "storage fenced" $T --include="efsd*.log"; exit $rc

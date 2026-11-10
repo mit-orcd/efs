@@ -1,0 +1,1 @@
+k22-ring-check	1	K22_SNAP_BYTES=0 K22_QUOTA=256M K22_BIG_RING=8 K22_STOP_DEADLINE=3000 python3 tests/test_k22_snapshot_import_ring.py; rc=$?; S=$(find $T -name samples.log | head -1); cp $S /home/erbmi1/efs-artifacts/taskEY-20261109/tcp-k22-ring/samples.log 2>/dev/null; exit $rc

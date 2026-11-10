@@ -824,7 +824,7 @@ class Qualify:
         self.torn_down = True
         g = GateRun(self, Gate('_teardown', None, '', ''), 1800)
         rc, reason = (0, 'kept by request') if self.args.keep_work else (self.control.owned_teardown(g) or (0, ''))
-        record = dict(g.record, commands=g.commands, end=now(), raw=g.raw,
+        record = dict(g.record, commands=g.commands, end=now(), raw=g.raw, destructive_steps=g.steps,
                       verdict=FAIL if rc else (NOTRUN if self.plan else PASS), reason=reason,
                       kept=bool(self.args.keep_work), seconds=round(time.monotonic() - g.start, 3))
         (g.dir / 'result.json').write_text(json.dumps(record) + '\n')
@@ -2823,8 +2823,13 @@ def write_summary(q, run, results, sums):
 # --------------------------------------------------------------------------
 # Helpers run on mount hosts (python3 SRC/scripts/qualify.py _NAME ...).
 
+PAYLOAD_PIECE = 32 << 20
+
+
 def payload(seed, name, size):
-    return random.Random(f'{seed}/{name}').randbytes(size)
+    # 32 MiB pieces: Python 3.9 randbytes(n) is getrandbits(8n), which overflows at 256 MiB.
+    r = random.Random(f'{seed}/{name}')
+    return b''.join(r.randbytes(min(PAYLOAD_PIECE, size - off)) for off in range(0, size, PAYLOAD_PIECE))
 
 
 def h_manifest_write(args):
