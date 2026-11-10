@@ -194,6 +194,8 @@
     "scripts/evidence/k05/k05_session_fence_gate.sh": 5,
     "scripts/evidence/k08/k08_two_client.sh": 4,
     "scripts/evidence/k103/read_probe_live.py": 5,
+    "scripts/evidence/k105/d4_loop.sh": 1,
+    "scripts/evidence/k105/load_loop.sh": 1,
     "scripts/evidence/k14/k14_atomic_cluster.sh": 23,
     "scripts/evidence/k16/k16_identity_cluster.sh": 10,
     "scripts/evidence/k22/k22_snapshot_import.sh": 6,
@@ -1729,6 +1731,8 @@
     "scripts/evidence/k05/k05_session_fence_gate.sh": "5f79153cba2812327a53514b44f3e65ee03fa78280d0717d773c90f45dc65218",
     "scripts/evidence/k08/k08_two_client.sh": "de308bf4b34f134107b64b05b7eecc682da23e3b2f30986f885874afcbcbc1af",
     "scripts/evidence/k103/read_probe_live.py": "e308a6182d814faf9c3eaa6317942cb6b1712642360cf04cc63a9fe5cfb8545b",
+    "scripts/evidence/k105/d4_loop.sh": "d2e16fb7485506fa27d85170ec458945f61cdd5f8d80779c8b1f9e16ad113bb8",
+    "scripts/evidence/k105/load_loop.sh": "0d1c8c8f8d1945f805da320a4d5bce9073075756d572ced7a0bdadf8d3def937",
     "scripts/evidence/k14/k14_atomic_cluster.sh": "327be11f721d8f01bd649977241aa62bb945882ae02999119272a8d8440d2913",
     "scripts/evidence/k16/k16_identity_cluster.sh": "7209540466df2c1d6f888ee93ca149c8921e6c46586608e4062bc1ea78ac2788",
     "scripts/evidence/k22/k22_snapshot_import.sh": "725ac7f487efa6f77e6093c560910283022140b3012c7a830a705539de8d2b87",
@@ -3051,5 +3055,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "3a86c2e98bb5124f7a1e3eba59f7db1adc82a343"
+  "source_commit": "6fcacb55bfe3f7b321663023fe72d3c56a3f868e"
 }
