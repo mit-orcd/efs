@@ -35,6 +35,7 @@ struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;ret
 int efs_rdma_available(void) {return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *c) {(void)c;return 0;}
 static int declare_rc;static int64_t declare_advance;
+int efs_net_remaining_ms(int cap){return deadline&&(uint64_t)monotonic_ms()>=deadline?0:cap;}
 int efs_conn_declare(struct efs_conn *c){(void)c;__atomic_fetch_add(&advance,declare_advance,__ATOMIC_RELAXED);return declare_rc;}
 int efs_rdma_transport(void) {return EFS_TRANSPORT_TCP;}
 void efs_conn_destroy(struct efs_conn *c) {assert(c==&connection);destroyed++;}
@@ -92,6 +93,10 @@ int main(void) {
  deadline=0;advance=0;
  assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]);
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS&&g_client.node_down_until_ms[0]>monotonic_ms()&&g_client.node_mute[0]);
+ /* A declaration cut at once (a reset, a refusal) counts within the budget but is not silence: no mute. */
+ g_client.node_down_until_ms[0]=0;g_client.node_fail_streak[0]=EFS_NODE_DOWN_FAILS-1;g_client.node_mute[0]=0;
+ declare_rc=EFS_ERR_NET;declare_advance=0;late=5;deadline=0;advance=0;
+ assert(!efs_client_conn_get(1)&&g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS&&!g_client.node_mute[0]);
  g_client.node_down_until_ms[0]=0;g_client.node_fail_streak[0]=EFS_NODE_DOWN_FAILS-1;g_client.node_mute[0]=0;declare_rc=0;declare_advance=0;late=3;
  deadline=monotonic_ms();efs_client_node_note_fail(1);
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);

@@ -6,6 +6,7 @@
 #include "efs/network.h"
 #include "efs/rdma.h"
 #include "efs/member_view.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -581,20 +582,26 @@ void efs_client_node_note_fail(efs_node_id_t node_id)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+enum { NODE_EX_FAILED = 0, NODE_EX_ANSWERED = 1, NODE_EX_SILENT = 2 };
+
 /* One real exchange with a peer: connect and have the protocol declaration
  * answered, the proof a checkout needs. A stopped process's kernel accepts
  * TCP and answers nothing, so a bare connect proves nothing. Bounded by the
  * caller's deadline and EFS_NODE_ADMISSION_MS. bg (the probe thread) also
- * registers the descriptor so shutdown can cut the wait short. A peer that
- * accepted and did not answer is noted mute until it answers. */
-static int node_exchange_ok(const char *host, uint16_t port, int idx, int bg)
+ * registers the descriptor so shutdown can cut the wait short. Returns
+ * NODE_EX_ANSWERED; NODE_EX_SILENT when TCP was accepted and the declaration
+ * stayed unanswered for the whole local bound (the only verdict that marks the
+ * peer mute: the caller's own deadline, a reset, a refusal or a local failure
+ * say nothing about the peer's silence); NODE_EX_FAILED otherwise. */
+static int node_exchange(const char *host, uint16_t port, int idx, int bg)
 {
     uint64_t previous = efs_client_rpc_deadline_ms();
     uint64_t end = (uint64_t)monotonic_ms() + EFS_NODE_ADMISSION_MS;
-    if (previous && previous < end)
+    int local_bound = !(previous && previous < end);
+    if (!local_bound)
         end = previous;
     efs_client_rpc_set_deadline_ms(end);
-    int ok = 0, connected = 0;
+    int ok = 0, silent = 0;
     int fd = efs_connect_tcp(host, port);
     if (fd >= 0) {
         efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
@@ -612,8 +619,8 @@ static int node_exchange_ok(const char *host, uint16_t port, int idx, int bg)
                 stopped = __atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST);
             }
             if (!stopped) {
-                connected = 1;
                 ok = efs_conn_declare(nc) == EFS_OK;
+                silent = !ok && local_bound && efs_net_remaining_ms(INT_MAX) == 0;
             }
             if (bg) {
                 pthread_mutex_lock(&g_client.conn_lock[idx]);
@@ -625,10 +632,12 @@ static int node_exchange_ok(const char *host, uint16_t port, int idx, int bg)
     }
     efs_client_rpc_set_deadline_ms(previous);
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    if (connected || fd < 0)
-        g_client.node_mute[idx] = connected && !ok;
+    if (ok)
+        g_client.node_mute[idx] = 0;
+    else if (silent)
+        g_client.node_mute[idx] = 1;
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
-    return ok;
+    return ok ? NODE_EX_ANSWERED : silent ? NODE_EX_SILENT : NODE_EX_FAILED;
 }
 
 /* A marked peer is probed here, by the caller, only when it was not last
@@ -655,7 +664,7 @@ int efs_client_node_reprobe(efs_node_id_t node_id)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
     if (!down)
         return 1;
-    if (mute || !node_exchange_ok(host, port, idx, 0))
+    if (mute || node_exchange(host, port, idx, 0) != NODE_EX_ANSWERED)
         return 0;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     g_client.node_down_until_ms[idx] = 0;
@@ -673,18 +682,20 @@ struct node_probe {
 static void *node_probe_run(void *arg)
 {
     struct node_probe *p = arg;
-    int ok = node_exchange_ok(p->host, p->port, p->idx, 1);
+    int verdict = node_exchange(p->host, p->port, p->idx, 1);
     pthread_mutex_lock(&g_client.conn_lock[p->idx]);
-    if (ok && g_client.node_down_until_ms[p->idx] > 0) {
+    if (verdict == NODE_EX_ANSWERED && g_client.node_down_until_ms[p->idx] > 0) {
         /* The declaration was answered: let the next checkout make a real
          * connection. */
         g_client.node_down_until_ms[p->idx] = 0;
         g_client.node_fail_streak[p->idx] = 0;
-    } else if (!ok && !__atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST) &&
+    } else if (verdict == NODE_EX_SILENT && !__atomic_load_n(&g_client.node_probe_stop, __ATOMIC_SEQ_CST) &&
                g_client.node_down_until_ms[p->idx] > 0) {
-        /* Accepts TCP, answers nothing (SIGSTOP, a hung host): still down.
-         * Without this the mark expires and the next four checkouts each
-         * wait out the declaration again. */
+        /* Accepts TCP, answers nothing for the whole bound (SIGSTOP, a hung
+         * host): still down. Without this the mark expires and the next four
+         * checkouts each wait out the declaration again. Any other failure
+         * (refused, a local one) is no evidence of silence and leaves the
+         * mark to expire. */
         g_client.node_down_until_ms[p->idx] = monotonic_ms() + EFS_NODE_DOWN_MS;
     }
     g_client.node_probe_inflight[p->idx] = 0;
@@ -844,7 +855,8 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 if (nc) {
                     int drc = efs_conn_declare(nc);
                     if (drc != EFS_OK) {
-                        silent = !caller_bound;
+                        /* the local bound ran out, not the caller's */
+                        silent = !caller_bound && efs_net_remaining_ms(INT_MAX) == 0;
                         static int warned;
                         if (__sync_fetch_and_add(&warned, 1) < 5)
                             fprintf(stderr, "efs-fuse: node %u refused or did not answer the "

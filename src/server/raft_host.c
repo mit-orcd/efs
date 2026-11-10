@@ -12864,7 +12864,7 @@ static void *host_recover_thread(void *arg)
         struct timespec ts;
 
         host_txn_recover_pass(h);
-        clock_gettime(CLOCK_REALTIME, &ts);
+        clock_gettime(CLOCK_MONOTONIC, &ts);
         ts.tv_nsec += (long)GC_LOOP_MS * 1000000L;
         ts.tv_sec += ts.tv_nsec / 1000000000L;
         ts.tv_nsec %= 1000000000L;
@@ -13944,7 +13944,14 @@ int server_raft_host_start(struct efsd_server *s)
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
     pthread_mutex_init(&h->rec_mu, NULL);
-    pthread_cond_init(&h->rec_cv, NULL);
+    {
+        /* monotonic: a wall-clock step must not move the recovery cadence */
+        pthread_condattr_t rec_attr;
+        pthread_condattr_init(&rec_attr);
+        pthread_condattr_setclock(&rec_attr, CLOCK_MONOTONIC);
+        pthread_cond_init(&h->rec_cv, &rec_attr);
+        pthread_condattr_destroy(&rec_attr);
+    }
     pthread_mutex_init(&h->fin_mu, NULL);
     pthread_cond_init(&h->fin_cv, NULL);
     h->fin = calloc(HOST_FIN_MAX, sizeof(*h->fin));

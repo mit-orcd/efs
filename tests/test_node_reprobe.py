@@ -30,6 +30,7 @@ int node_index_for_id(efs_node_id_t id){(void)id;return 0;}
 uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){(void)d;}
 int efs_set_recv_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
+int efs_net_remaining_ms(int cap){return cap;}
 int efs_set_send_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)server;return (struct efs_conn *)(intptr_t)fd;}
 void efs_conn_destroy(struct efs_conn *c){fake_close((int)(intptr_t)c);}
@@ -45,7 +46,7 @@ int main(void){
  pthread_mutex_lock(&g_client.conn_lock[0]);node_probe_maybe_start(0,10000);
  assert(g_client.node_probe_after_ms[0]==11000);
  node_probe_maybe_start(0,10001);pthread_mutex_unlock(&g_client.conn_lock[0]);
- wait_idle();assert(connects==1&&!closed&&g_client.node_down_until_ms[0]>=monotonic_ms()+EFS_NODE_DOWN_MS-1000&&g_client.node_fail_streak[0]==4);
+ wait_idle();assert(connects==1&&!closed&&g_client.node_down_until_ms[0]==50000&&g_client.node_fail_streak[0]==4); /* refused: no evidence of silence, the mark is left alone */
  pthread_mutex_lock(&g_client.conn_lock[0]);node_probe_maybe_start(0,10500);pthread_mutex_unlock(&g_client.conn_lock[0]);
  wait_idle();assert(connects==1);
  /* Listening again: the probe ends the cooldown and the failure streak. */

@@ -3,7 +3,7 @@
 
 A stopped process's kernel still accepts TCP, so the old reprobe (a bare connect)
 cleared the mark and every PUT placed on the halted member paid the declaration
-wait again. Production node_exchange_ok/efs_client_node_reprobe/node_probe_run,
+wait again. Production node_exchange/efs_client_node_reprobe/node_probe_run,
 with a peer that accepts and never answers; a caller never waits on a peer last seen mute. Also: shutdown must cut a running
 probe short and wait for it before the connection locks are destroyed."""
 from pathlib import Path
@@ -24,7 +24,7 @@ code=r'''
 #include <time.h>
 #include <unistd.h>
 struct efs_client g_client;
-enum{MUTE,ANSWER,BLOCK,REFUSE};static int mode,declares;
+enum{MUTE,ANSWER,BLOCK,REFUSE,CUT};static int mode,declares;static uint64_t caller_dl;
 #define DECLARES __atomic_load_n(&declares,__ATOMIC_SEQ_CST)
 static int peer[2];
 int efs_connect_tcp(const char *h,uint16_t p){assert(!strcmp(h,"10.0.0.2")&&p==1234);if(mode==REFUSE)return -1;assert(!socketpair(AF_UNIX,SOCK_STREAM,0,peer));return peer[0];}
@@ -32,9 +32,11 @@ int efs_set_recv_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 int efs_set_send_timeout(int fd,int ms){(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)server;return (struct efs_conn *)(intptr_t)(fd+1);}
 void efs_conn_destroy(struct efs_conn *c){close((int)(intptr_t)c-1);close(peer[1]);}
-/* MUTE: accepted, the wait ended unanswered; BLOCK: still waiting until the descriptor is shut down */
-int efs_conn_declare(struct efs_conn *c){__atomic_fetch_add(&declares,1,__ATOMIC_SEQ_CST);if(mode==ANSWER)return EFS_OK;if(mode==MUTE)return EFS_ERR_NET;char x;return recv((int)(intptr_t)c-1,&x,1,0)<=0?EFS_ERR_NET:EFS_OK;}
-uint64_t efs_client_rpc_deadline_ms(void){return 0;}
+/* MUTE: accepted, the whole bound ran out unanswered; CUT: accepted and cut at once (a reset), bound not reached;
+ * BLOCK: still waiting until the descriptor is shut down */
+int efs_net_remaining_ms(int cap){return mode==MUTE?0:cap;}
+int efs_conn_declare(struct efs_conn *c){__atomic_fetch_add(&declares,1,__ATOMIC_SEQ_CST);if(mode==ANSWER)return EFS_OK;if(mode==MUTE||mode==CUT)return EFS_ERR_NET;char x;return recv((int)(intptr_t)c-1,&x,1,0)<=0?EFS_ERR_NET:EFS_OK;}
+uint64_t efs_client_rpc_deadline_ms(void){return caller_dl;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){(void)d;}
 int node_index_for_id(efs_node_id_t id){(void)id;return 0;}
 #define EFS_NODE_PROBE_MS 1000
@@ -60,19 +62,30 @@ int main(void){
  assert(efs_client_node_reprobe(3)==0&&DECLARES==1&&g_client.node_probe_after_ms[0]!=0);
  wait_idle();assert(DECLARES==2);
  assert(efs_client_node_reprobe(3)==0&&DECLARES==2);            /* no second probe inside EFS_NODE_PROBE_MS */
- /* A peer that refuses (a restart in progress) is not mute: the caller's own exchange decides at once. */
- mode=REFUSE;probe_now();wait_idle();assert(!g_client.node_mute[0]&&DECLARES==2);
- mode=MUTE;down();                                              /* it stops answering after all: one wait, then mute */
- assert(efs_client_node_reprobe(3)==0&&DECLARES==3&&g_client.node_mute[0]&&g_client.node_down_until_ms[0]==mark);
+ /* A refusal (a restart in progress) is no silence: not mute, and it does not extend the mark; a stale mute is not cleared by it. */
+ mode=REFUSE;g_client.node_mute[0]=0;down();probe_now();wait_idle();
+ assert(!g_client.node_mute[0]&&DECLARES==2&&g_client.node_down_until_ms[0]==mark);
+ g_client.node_mute[0]=1;down();probe_now();wait_idle();
+ assert(g_client.node_mute[0]&&g_client.node_down_until_ms[0]==mark);
+ /* An answer cut short before the bound (a reset) is no silence either: no mute, no re-armed mark. */
+ mode=CUT;g_client.node_mute[0]=0;down();probe_now();wait_idle();
+ assert(DECLARES==3&&!g_client.node_mute[0]&&g_client.node_down_until_ms[0]==mark&&g_client.node_fail_streak[0]==4);
+ /* The caller's own short deadline (spare_reprobe's 250 ms) running out is not the member's silence. */
+ mode=MUTE;g_client.node_mute[0]=0;down();caller_dl=(uint64_t)monotonic_ms()+250;
+ assert(efs_client_node_reprobe(3)==0&&DECLARES==4&&!g_client.node_mute[0]);
+ caller_dl=0;
+ /* It stops answering after all: the caller waits the local bound once, then the peer is mute. */
+ g_client.node_mute[0]=0;down();
+ assert(efs_client_node_reprobe(3)==0&&DECLARES==5&&g_client.node_mute[0]&&g_client.node_down_until_ms[0]==mark);
  g_client.node_mute[0]=0;mode=ANSWER;down();                    /* it answers: the caller ends the mark */
- assert(efs_client_node_reprobe(3)==1&&DECLARES==4&&!g_client.node_down_until_ms[0]&&!g_client.node_fail_streak[0]&&!g_client.node_mute[0]);
+ assert(efs_client_node_reprobe(3)==1&&DECLARES==6&&!g_client.node_down_until_ms[0]&&!g_client.node_fail_streak[0]&&!g_client.node_mute[0]);
  /* The background probe ends the mark of a mute peer that answers again. */
  g_client.node_mute[0]=1;down();probe_now();wait_idle();
  assert(!g_client.node_down_until_ms[0]&&!g_client.node_fail_streak[0]&&!g_client.node_mute[0]);
  /* Shutdown cuts a blocked declaration short and waits for the probe before the locks go. */
  mode=BLOCK;down();probe_now();
- for(int i=0;i<5000&&DECLARES<6;i++)usleep(1000);
- assert(DECLARES==6);
+ for(int i=0;i<5000&&DECLARES<7;i++)usleep(1000);
+ assert(DECLARES==7);
  @STOP@
  assert(!g_client.node_probe_inflight[0]&&g_client.node_probe_fd[0]==-1);
  assert(g_client.node_down_until_ms[0]==mark&&g_client.node_fail_streak[0]==4); /* a cancelled probe is no verdict */
