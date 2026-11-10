@@ -1,15 +1,30 @@
 # K110 · the final fsync returns EIO after sequential SIGKILLs (Task FH, Nov 10 2026)
 
-**Verdict: FIXED on branch `claude/determined-mclean-7c3b6f` (barrier proof,
-user decision "Barrier proof" = option 2 below; D42 F23 amended). Not merged,
-not pushed; VERIFIED waits for the coordinator's merge gates.** Before the fix
-the final `fsync` failed in 14 of 14 private runs and was permanent (class B).
-After it, in 28 kill-mode runs with the final `fsync` taken once the failover
+**Verdict: FIXED on branch `claude/determined-mclean-7c3b6f` (barrier proof, user:
+"Build the fix", option 2; D42 F23 amended in "Text to apply at merge"). Not
+merged, not pushed; the live distinct-host H1 kill rerun is owed and VERIFIED
+waits for the coordinator's merge gates.** Before the fix the final `fsync`
+failed in 14 of 14 private runs and was permanent (class B). After it, in 28
+kill-mode runs on nuc with the final `fsync` taken once the failover
 controller has stopped and every restarted member has finished verified
-recovery, all four writers' final `fsync`, both post fsyncs and the integrity
-check passed in 28 of 28; 25 of the 28 runs PASS, and the other 3 fail only on
-a REPORT latency criterion that fails in 3 of 14 pre-fix runs too (see "Other
-kill-gate failures").
+recovery, every writer's final `fsync`, both post fsyncs and the integrity
+check passed in 28 of 28; 19 of the 28 runs PASS and the other 9 fail only on
+a REPORT latency criterion that also fails in 3 of 14 pre-fix runs on another
+host (see "Other kill-gate failures"). An earlier build of the same design
+(without the root identity in the record) passed 28 of 28 final fsyncs on
+node9900.
+
+Proof in three sentences. A fragment is acknowledged with the root's *open*
+barrier epoch, read under the lock that a barrier takes (and then increments)
+before it calls `syncfs`, after the fragment's write and close completed, so
+the barrier the acknowledgement names always begins after the write. That
+barrier's record is written after `syncfs` returned and `fdatasync`ed (and is
+reverted if that sync fails), so a record that names seq `N` proves barrier `N`
+finished and every fragment acknowledged at `N` or earlier is on stable
+storage. The successor offers that record only after a verified recovery that
+dropped no file the barrier could cover, for the same root layout, and the
+client counts a fragment durable only when verifier, root and position match;
+every other case stays lost.
 
 Two sentences for the K110 row. The final `fsync` failed because a stripe's
 fragments were acknowledged by member incarnations that were SIGKILLed before
@@ -125,15 +140,20 @@ power-loss qualification stays a separate scope decision.
 | reply without history, ack 0, boot above 65535 | `L` | `test_data_commit`, `test_store_durability` |
 
 **Bound.** The ring keeps the 7 newest predecessors per root. Each unclean
-restart pushes one; a fragment is `L` only until `fsync` or the next COMMIT, and
-`fsync` is the only caller. Seven unclean restarts of one member between a
-write and the `fsync` that covers it is far above the 4 to 7 kills of a whole
-cluster over 90 s in the kill gate (a member took at most 3), and above any
-period an application leaves data without `fsync` while members crash that
-often. An entry past the bound is not offered and the fragment stays `L`: a
-loss of availability, not of safety. The ring costs 112 bytes in the record and
-at most 168 bytes per root in a COMMIT reply, only for a member with unclean
-predecessors.
+restart of a member pushes one entry. A fragment needs its own incarnation to
+be among the 7 newest at the time of the `fsync`, so a write can be proven
+across up to 7 unclean restarts of the member that holds it, between the write
+and the `fsync` that covers it. That is above what the kill gate produces on
+the reference host (4 to 7 kills in total over 90 s, spread over three members)
+and above what an application should leave without an `fsync` while members
+crash that often; a longer exposure is what periodic `fsync` is for (the
+`--fsync-every 100` control). It was exceeded once on a slow host (22
+restarts per member in 13 minutes), where the `fsync` failed closed with 650
+fragments proven and 1,325 lost, as designed. An entry past the bound is not
+offered and the fragment stays `L`: a loss of availability, not of safety. A
+larger ring would only move that point; it was not raised. The ring costs 112
+bytes in the record and at most 168 bytes per root in a COMMIT reply, only for
+a member with unclean predecessors.
 
 **No compatibility.** The wire and record versions are new, old records and
 old replies are refused (a PUT reply of 10 bytes, a COMMIT reply without the
@@ -141,64 +161,66 @@ history fields); a freshly formatted cluster is assumed.
 
 ## Results after the fix
 
-Build: source `8082fc2d2` (no `src/` or `include/` change since; the harness
-option `--settle-before-fsync` and the test files are those of `f57c8fca3`),
-copied with `git archive`, built on node9900
-(Linux 5.14.0-687.39.1.el9_8, gcc 11.5.0) with `make -j8
-EFS_FUSE_PREFIX=/data1/efs/deps/libfuse efsd efs-fuse efs-mgmt`; binaries
-report `build=unknown`. Same environment as the diagnosis runs below (three
-loopback members, TCP, direct I/O, 4 writers, 8,000 records, leader kills about
-every 12 s, down 5 s, quota 8 G, private ports 38101 to 38103 and 38401 to
-38403, two series in parallel on a shared host).
+Hosts. All runs on `nuc` (Linux 6.12.0-211.67.1.el10_2, 8 CPUs, i5-1135G7,
+gcc 14.3.1, Python 3.12.15, system fuse3, user's other deployment untouched)
+were made on the source of `3e9057df5` (`src/` and `include/` equal to this
+branch's head), built with `make -j8 efsd efs-fuse efs-mgmt tests/faults/efsd`
+(binaries report `build=unknown`; SHA256 in the capture manifest). The earlier
+runs on `node9900` (the table's second block) used the first build of this
+design, `8082fc2d2`, before the root identity, the version refusal and the
+record-sync revert existed.
 
-| Series | Runs | Final `fsync` 0 for all four writers | Post fsyncs 0 | Integrity (8,000 of 8,000, three views identical) | Verdict PASS |
-| --- | --- | --- | --- | --- | --- |
-| Before the fix (diagnosis, `a`, `b`) | 14 | 0 of 14 | 0 of 14 | 14 of 14 | 0 of 14 |
-| After, final `fsync` concurrent with the failover (`fa`, `fb`) | 28 | 18 of 28 | 28 of 28 | 28 of 28 | 17 of 28 |
-| After, `--settle-before-fsync` (`sa`, `sb`) | 28 | **28 of 28** | **28 of 28** | **28 of 28** | 25 of 28 |
+nuc is far slower for this workload than node9900: a 4 KiB append takes 0.39 s
+at the median (the barrier's `syncfs` of a large shared `/home`), so the
+8,000-record default runs 13 minutes and the failover loop kills 22 times. The
+first such run (22 kills; node restarts 22, 22 and 19 times) failed its final
+`fsync` with 650 fragments proven and 1,325 lost: more than 7 restarts between
+a write and the `fsync` push the first incarnations out of the ring, which is
+the documented bound at work (not kept as a capture). The nuc series therefore
+use `--records 2000 --failover-window 45` (the controller stops after 45 s, 4
+kills per run, 8 MiB file) with `--settle-before-fsync`; the node9900 runs used
+8,000 records and the same kill pace for the whole write.
 
-- The fragments the barrier history proved: 21,598 (`fa`, `fb`) and 23,254
-  (`sa`, `sb`); fragments counted lost: 532 and 703 (acknowledged after their
-  incarnation's last barrier or not covered). In the settled series all 703
-  were marked degraded for rebuild (`K`) with the other two members durable, so
-  `fsync` returned 0 with a visible degraded mark, as K35 prescribes, and no
-  lost fragment was counted durable.
-- Verified recovery dropped no file in 55 of the 56 runs and one 0-byte file in
-  `sb-11` (a PUT file still in flight when the member was killed, modified
-  after the predecessor's last record; the proof counts of that run
-  (861 proven, 38 lost) are the same as its neighbours', so the ring stayed
-  valid; no log line states the ring verdict, which is a gap).
-- Why two series after the fix. In the unsettled `fa`/`fb` series 10 runs failed
-  `final_fsync_zero` with `EIO` on all or some writers while both post fsyncs
-  returned 0: the harness takes the final `fsync` while its failover controller
-  is still killing and restarting members, and an `fsync` that lands in the 5 s
-  down window or inside a restarted member's recovery fence (about 0.2 to 1 s,
-  K36) has two of its three members unavailable (stripes `PMD`, `DPM`, `MDP`:
-  one durable, one missing, one pending) and fails closed. Checked on `fa-5`
-  (last kill 4.6 s before the writers ended, the node restarting during the
-  fsync) and `fb-1` (the fsync at 08:20:12.77 inside node 1's recovery, which
-  verified at 08:20:12.888); the other transient runs were not timed
-  individually. That is class A (transient, correct by D42). The new
-  `append_failover.py --settle-before-fsync` makes every writer wait for its
-  final `fsync` until the controller has stopped and every restarted member
-  logged `recovery: verified`; the gate then tests what K110 is about (the
-  `fsync` after the kills), not an `fsync` taken during an outage.
-  Unchanged default: without the flag the harness behaves as before.
+| Series | Host | Runs | Final `fsync` 0 (all writers) | Post fsyncs 0 | Integrity (three views identical) | Verdict PASS |
+| --- | --- | --- | --- | --- | --- | --- |
+| Before the fix (diagnosis) | node9900 | 14 | 0 of 14 | 0 of 14 | 14 of 14 | 0 of 14 |
+| First build, final `fsync` concurrent with the failover | node9900 | 28 | 18 of 28 | 28 of 28 | 28 of 28 | 17 of 28 |
+| First build, `--settle-before-fsync` | node9900 | 28 | 28 of 28 | 28 of 28 | 28 of 28 | 25 of 28 |
+| **This build, `--settle-before-fsync`, 2000 records** | nuc | **28** | **28 of 28** | **28 of 28** | **28 of 28** | 19 of 28 |
+| This build, control `--fsync-every 100` | nuc | 3 | 3 of 3 | 3 of 3 | 3 of 3 | 2 of 3 |
+
+- nuc: `na-1..14`, `nb-1..14` and `nr-1` (the replacement of `nb-2`, whose mount
+  failed at start, 6 s, "cluster not formed": a harness start flake under two
+  parallel clusters, no events, no data). Fragments proven by the barrier
+  history: 2,298; counted lost: 50, every one marked degraded for rebuild with
+  the other two members durable (`fsync` returned 0 with a visible mark, K35);
+  verified recovery dropped no file in any run.
+- node9900 first build: 21,598 and 23,254 fragments proven, 532 and 703 lost
+  (the 703 marked); one 0-byte file dropped in `sb-11`; 10 of the 28
+  unsettled runs got a transient `EIO` when the `fsync` landed in a member's
+  outage or recovery fence (class A, D42 F22, K36: two of three members
+  unavailable; `PMD`, `DPM`, `MDP`; timed against the failover events for `fa-5`
+  and `fb-1` only). `--settle-before-fsync` makes the writers wait for the
+  controller to stop and every restarted member to log `recovery: verified`
+  before the final `fsync`; without the flag the harness behaves as before.
+- Control on nuc: `nc-1` failed `availability` because its first periodic
+  `fsync` (record 100) returned `EIO` on all four writers inside a kill window
+  (the same transient); its final and both post fsyncs returned 0. The control
+  passed 3 of 3 on node9900 before the fix, which does not distinguish the
+  fix; it shows periodic fsyncs avoid the loss without the barrier proof.
 - Whether COMMIT should wait out the recovery fence instead of answering `EIO`
-  (so the unsettled `fsync` also succeeds) is a product decision and is not
-  made here; K36 chose the `EIO` on purpose.
+  is a product decision, not made here; K36 chose the `EIO` on purpose.
 
 ### Other kill-gate failures (not K110)
 
-Five of the 56 runs (`fa-5`, `fa-8`, `sa-1`, `sa-11`, `sb-14`) fail a REPORT
-criterion of the same harness: a type-67 REPORT waited the 30 s receive bound
-(`report_recv_timeouts`, 4 runs) or took 4.8 s across one leader change
-(bound 3 s per change, `sa-1`). The pre-fix series has the same failures in 3 of
-14 runs (`b-9` recv timeout, `b-3` and `b-11` over the latency bound with 6.4 s),
-so the change did not introduce them; they belong to the leader-failover latency
-family tracked as K104 (Task FF). Data and `fsync` are exact in all five runs
-(integrity PASS, post fsyncs 0). They keep the kill gate from passing every run
-and need their own fix.
+Nine of the 28 nuc runs and 5 of the 56 node9900 runs fail a REPORT criterion
+of the same harness: a type-67 REPORT waited the 30 s receive bound
+(`report_recv_timeouts`) or took more than 3 s per leader change (4.8 to 7.6 s).
+The pre-fix series has the same failures in 3 of 14 runs, so the change did not
+introduce them; they belong to the leader-failover latency family tracked as
+K104 (Task FF). Data and `fsync` are exact in all of them (integrity PASS, post
+fsyncs 0). They keep the kill gate from passing every run and need their own
+fix.
 
 ### Tests
 
@@ -208,22 +230,33 @@ and need their own fix.
   `fsync` must return 0 with the client's line `restarted members: N fragments
   proven by their barrier history, 0 lost` (N at least 2) and no degraded mark.
   **Fails on the pre-fix tree** (`4a24916a1`, built on node9900): `OSError:
-  [Errno 5] Input/output error` at the `fsync`. **Passes on the fix**
-  (5.5 s and 7 s, node9900).
-- `tests/test_data_commit.c` (client fold: two restarted members covered by
-  their history; one restarted member whose fragment was acknowledged past the
-  barrier, on another root, without a position, by another incarnation, or
-  whose history is for another root: lost, the mark covers it),
-  `tests/test_store_durability.c` (ring across unclean boots, validation by a
-  verified recovery without a covered drop, forgetting after a covered drop,
-  a boot killed before its recovery finished, clean stop, the drop rule and the
-  position encoding),
-  and the arity updates in `test_put_retry_budget.py`,
+  [Errno 5] Input/output error` at the `fsync`. **Passes on the fix** (5.5 to
+  7.7 s on node9900, 6 to 6.4 s on nuc).
+- `tests/test_data_commit.c`, fast suite (4.6 s on nuc, budget 30 s): the
+  fate table of the client fold, `test_history_table`: each fragment of a stripe
+  is F (acknowledged by the answering incarnation), C (replaced, covered by the
+  history), N (replaced, acknowledged after its last barrier) or U (never
+  acknowledged); all 54 combinations the table accepts (a record needs two
+  acknowledged fragments), run **before** (no history in the replies, C behaves
+  as N) and **after**, assert the result (`OK` iff two are durable, one mark
+  exactly when the third is N), the marks and that failed stripes are retired
+  cleanly; plus a truncated and a padded COMMIT reply (the covered fragment on
+  that node stays unproven and is marked).
+- `tests/test_store_durability.c`, fast suite (1.9 s on nuc, budget 5 s): the
+  record (write, reread, ring across unclean boots, validation by verified
+  recovery, forgetting after a covered drop, a boot killed before recovery,
+  clean stop keeping the ring, the drop rule, ack positions) and
+  `test_barrier_history_fail_closed`: wiped store (no record, no ring), layout
+  change (root count or index), CRC failure on two fields, `EFSDUR02` and
+  `EFSDUR04` magic, short and long file, a record refused at attach (startup
+  refused), the 7-entry bound with the 8th to 10th oldest not offered, a root
+  in error or still fenced offering nothing, an open-window ack above the
+  durable seq, boot above 65535 giving no ack, and the record never naming a
+  barrier whose sync failed.
+- Arity and format updates in `test_put_retry_budget.py`,
   `test_put_reply_deadline.py`, `test_put_tcp_frame.py` and the live drivers.
-- `tests/test_k36_recovery.py` (its step 4 still asserts the fragments written
-  after the last barrier are lost) and `tests/test_k35_fsync_degraded.py` pass
-  on the fix (24 s and 129 s).
-- The full gate: see "Gate" below.
+- `tests/test_k36_recovery.py` (24 s) and `tests/test_k35_fsync_degraded.py`
+  (128 s on nuc, 129.6 s on node9900) are unchanged and pass.
 
 ## Diagnosis before the fix
 
@@ -552,14 +585,18 @@ FIXED on branch `claude/determined-mclean-7c3b6f` (Nov 10, Task FH, **blocks alp
 
 ## Reproduction
 
-Prerequisites: a Linux host with the fuse prefix, a tree built with
-`make EFS_FUSE_PREFIX=<prefix> efsd efs-fuse efs-mgmt tests/faults/efsd`
+Prerequisites: a Linux host with fuse3 (a private prefix via `EFS_FUSE_PREFIX`
+if the system one is not usable), a tree built with
+`make efsd efs-fuse efs-mgmt tests/faults/efsd`
 (the last for the unit and live tests), free ports 38101 to 38103, Python 3.
 From the tree root (`WORK` defaults to `/tmp/efs-k110`):
 
 ```bash
 WORK=/tmp/efs-k110 scripts/evidence/k110/run_series.sh 1 14 sa "$PWD" --settle-before-fsync
 ```
+
+On a slow host (nuc: 0.39 s per append) bound the run:
+`run_series.sh 1 14 na "$PWD" --settle-before-fsync --failover-window 45 --records 2000`.
 
 ```bash
 python3 scripts/evidence/k110/summarize_fix.py /tmp/efs-k110/out
@@ -582,64 +619,78 @@ delete the tree when done (`~/bin/edelete --force --delete`).
 
 ## Gate
 
-Run on node9900 from `git archive` of `f57c8fca3` (the code of `8082fc2d2`),
-three quiet checks 20 s apart first, other tasks' work not running:
+On nuc (8 CPUs, `git archive` of `b65a8365b`, no other work of mine running;
+nuc's own services idle):
 
+- `make -j8 test`: rc 0 (220 s, fast units).
 - `EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh` (the `make test-all`
-  gate): `TOTAL 595 FAIL 0 NOTRUN 4 STATUS COMPLETE (620s) HOSTLIMIT 4 BUILD
-  14s`. The four NOTRUN are host limits (no `EFS_CLUSTER_SCRIPTS`, no
-  valgrind, no RDMA hardware). The K110 test took 7.7 s in the pool
-  (budget 10 s), `test_k36_recovery.py` 22.2 s, `test_k35_fsync_degraded.py`
-  129.6 s, `test_data_commit` 4.6 s, `test_store_durability` 1.5 s.
-- `bash tests/sanitizer_check.sh tsan` (after adding the K110 test to both
-  lists): `VERDICT: PASS (32 run, 0 failed, 628s)`, including
-  `k110_barrier_history`.
+  gate): `TOTAL 597 FAIL 2 NOTRUN 12 STATUS FAIL (1321s) OVERBUDGET 55`. The
+  two failures are load-induced, not K110: `test_d4_progress.py` (one
+  `write+fsync 1 MiB` took 10.11 s against the 10 s bound at load 23 on 8 CPUs)
+  and `test_pump_logging.py` (34 writes against 50 at 0.9 writes/s, the nuc
+  barrier latency above). Three solo runs of each passed (115, 82 and 84 s; 90,
+  87 and 90 s). The NOTRUN are host limits (no RDMA device, no valgrind, no
+  cluster scripts). OVERBUDGET lists load-induced overruns on this slower host;
+  no budget was raised.
+- `bash tests/sanitizer_check.sh tsan`: `FAIL (32 run, 1 failed, 802s)`:
+  `k96_status_slots_live` took 258 s under load with a 35 s REPORT; three solo
+  TSan runs of it passed (22 to 25 s). Everything else passed, including
+  `k110_barrier_history`. On node9900 the lane passed 32 of 32 earlier (628 s).
 - `bash tests/sanitizer_check.sh asan`: `VERDICT: PASS (60 run, 0 failed,
-  370s)`, including `k110_barrier_history` (LeakSanitizer ran only where
-  ptrace allows it; the gate prints which).
+  438s)`, including `k110_barrier_history`.
 - `make docs-check` and `python3 scripts/check_doc_links.py` pass.
+
+The node9900 gate of the first build (`TOTAL 595 FAIL 0`, 620 s, TSan 32 of 32,
+ASan 60 of 60) stands for that build only.
 
 ## Not checked
 
 - RDMA (the PUT and COMMIT reply changes are in the RDMA path and the buffered
-  path too, built and exercised only through the TCP tests), distinct hosts and
-  the combined faults of Task EY's `combined-2k`; one host, loopback only.
+  path too, built and exercised only through TCP), distinct hosts and the
+  combined faults of Task EY's `combined-2k`; one host, loopback only. The live
+  distinct-host H1 kill rerun is owed.
 - `tests/live/rdma_async_commit.py` needs an RDMA device and was not run. It
-  asserts `EIO` for a node killed right after a write; with the barrier proof a
-  write older than the 200 ms barrier window now fsyncs 0 after the kill, so
-  its expectation (and the magic `EFSDUR03`, already updated) must be revisited
-  by whoever runs it.
+  asserts `EIO` for a node killed right after a write; a write older than the
+  200 ms barrier window now fsyncs 0 after the kill, so its expectation (the
+  magic `EFSDUR03` is already updated) must be revisited by whoever runs it.
 - Power loss (K23/W71 stay deferred): the proof is the same kind as a normal
   COMMIT, `syncfs` plus an fdatasynced record, and says nothing beyond it.
 - The wall-clock assumption of the validity rule (a restart does not step the
   clock back past file modification times) is not checked at run time.
-- No log line states whether a ring was kept or forgotten at a recovery
-  (inferred from the proof counts in `sb-11`).
-- The 10 transient final-fsync failures of the unsettled series were timed
-  against the failover events for `fa-5` and `fb-1` only.
-- Whether COMMIT should wait out the recovery fence instead of `EIO` was not
-  decided or built; the REPORT failures of the kill gate (K104 family) were not
-  investigated here.
-- A `fsync` from a freshly mounted client (empty table, returns 0 by design)
-  was not run.
-- The node was shared; run durations (74 to 138 s) vary with its load.
+- A fragment file removed by hand under a retained record (a partial wipe of a
+  store) is not detected by the history; a whole wiped store has no record.
+- No log line states whether a ring was kept or forgotten at a recovery.
+- The failed-record-sync revert is a best effort (a second failure can leave
+  the file naming the failed barrier); it has no fault-injection test beyond the
+  record round trip.
+- The ring bound (7) was exceeded once on nuc (22 restarts of a member), where
+  the `fsync` fails closed as designed; the capture was not kept.
+- The REPORT failures of the kill gate (K104 family) were not investigated; the
+  unsettled `fsync` during an outage or recovery fence stays `EIO` by design.
+- nuc's per-write latency (0.39 s) makes its timings unlike node9900's; its
+  load-induced gate failures were attributed by solo runs, not by changing a
+  bound.
 
 ## Raw captures
 
-Outside Git on node9900:
-`~erbmi1/efs-artifacts/taskFH-barrier-20261110/` (per series directory
-`series-unsettled-fa`, `-fb`, `series-settled-sa`, `-sb`: each run's `*.out`,
-`*.report.json`, `*.logs/` with `fuse-mnt.log` and `efsd-n*.log`; `tests/` with
-the test outputs, the pre-fix K110 test failure `base-k110.out`, build logs and
-the driver scripts; `gate/` with `summary.txt` and `timings.tsv`; `sanitizers/`;
-`host-and-binaries.txt`) with `SHA256SUMS` (532 files; SHA256 of the manifest
-`887d7d88cb5c447e26afdc8adecd29d0a7dabd67d8a746aa84f7dc11e6ed009d`). Binary
-SHA256 of the tested tree: `efsd`
-`f16934e90c697b29249a18685c071a13ce889800d2e3b8c173b16a530c9ecdc5`, `efs-fuse`
-`2c475bb73008a9453a513bc5693be4f8f8bd6ea8befa704b808451a4b63fe101`, `efs-mgmt`
-`a37cd448a95243702bf21aa3d8508804e34c5c46c958f2736e42afcd1cad9e09`; the pre-fix
-tree's `efsd` is `0e551f316ca4dc733b87a97de45c1b3e5e7fafb6950420ed554b88164e9a66aa`.
-The diagnosis captures remain in `~erbmi1/efs-artifacts/taskFH-20261110/`
-(manifest `c68cfb866781800af0fc64ac17646bd16527a62450c099059cf16b7217317020`).
-The run stores and every `/tmp/efs-taskFH*` tree were deleted after the logs were
-copied; the commands above recreate them.
+Outside Git on nuc: `~/efs-artifacts/taskFH-20261110/` (user `maik`; per series
+directory `series-settled-na`, `-nb`, `series-replacement`, `series-control`:
+each run's `*.out`, `*.report.json`, `*.logs/` with `fuse-mnt.log` and
+`efsd-n*.log`; `tests/` with the test outputs and the driver scripts `run1.sh`
+to `run4.sh` and logs; `gate/` with `summary.txt`, `timings.tsv`, the two
+failure logs; `sanitizers/`; `solo/` with the nine solo reruns;
+`host-and-binaries.txt`) with `SHA256SUMS` (319 files; SHA256 of the manifest
+`b232b7fca7e5c50d76422670aad9b01b70ec82b75c58f1557b774d3036b0ba63`). nuc
+binaries of the tested tree: `efsd`
+`908c9a2f37dc737da7a7a740c52c293ad639c674a0901f589260610b38e653e7`, `efs-fuse`
+`ec07217ccce8b155a24d8316a19cf9dd3f6e41a4a4205e3e5e96baff8e639a02`, `efs-mgmt`
+`8a93642f30b54c09918d9e1ed409dd57be48c1eaf1cb6f2f1faab4f9b4d149d1`.
+
+On node9900 (first build and diagnosis, runs made before the host was moved):
+`~erbmi1/efs-artifacts/taskFH-barrier-20261110/` (manifest SHA256
+`887d7d88cb5c447e26afdc8adecd29d0a7dabd67d8a746aa84f7dc11e6ed009d`, 532 files;
+`efsd` `f16934e90c697b29249a18685c071a13ce889800d2e3b8c173b16a530c9ecdc5`) and
+`~erbmi1/efs-artifacts/taskFH-20261110/` (the diagnosis; manifest
+`c68cfb866781800af0fc64ac17646bd16527a62450c099059cf16b7217317020`). All run
+stores and work trees (`/tmp/efs-taskFH*` on node9900, `~/efs-taskFH` on nuc)
+were deleted after the logs were copied; the commands above recreate them.

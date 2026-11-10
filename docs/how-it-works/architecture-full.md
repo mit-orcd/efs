@@ -1650,7 +1650,7 @@ One row per active effort; the linked page states the exact source, verdict, rem
 
 | Effort | Verdict | State page |
 | --- | --- | --- |
-| Alpha 1.0 Stage 1 acceptance | Batch F on candidate `9bb50fe79` (Nov 9): F1 0 FAIL on a third gate run, F2 to F5 PASS; 18 K rows VERIFIED on `9bb50fe79` ([batch F](../status/2026-11/batch-f-candidate-20261109.md)). Batch O on the same candidate (Nov 9–10, [Task EW](../status/2026-11/orcd-mini-batch-o-20261109.md)): O1 FAIL (K38), K32 reopened, K102 new; O5/O6/O8/O9 PASS, O3 one criterion not met, O4 NOTRUN; K8, K26 and K51 VERIFIED on it. K38 fix merged in wave 70 ([Task FB](../status/2026-11/k38-recurrence-20261110.md)); `9bb50fe79` is no longer the release candidate, batches F and O rerun on the fixed one; batches D and S in progress | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
+| Alpha 1.0 Stage 1 acceptance | Batch F on candidate `9bb50fe79` (Nov 9): F1 0 FAIL on a third gate run, F2 to F5 PASS; 18 K rows VERIFIED on `9bb50fe79` ([batch F](../status/2026-11/batch-f-candidate-20261109.md)). Batch O on the same candidate (Nov 9–10, [Task EW](../status/2026-11/orcd-mini-batch-o-20261109.md)): O1 FAIL (K38), K32 reopened, K102 new; O5/O6/O8/O9 PASS, O3 one criterion not met, O4 NOTRUN; K8, K26 and K51 VERIFIED on it. K38 fix merged in wave 70 ([Task FB](../status/2026-11/k38-recurrence-20261110.md)); K102 fix merged in wave 71 ([Task FC](../status/2026-11/k102-stuck-client-20261110.md)); `9bb50fe79` is no longer the release candidate, batches F and O rerun on the fixed one; batches D and S in progress | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
 | Alpha 1.0 known defects (section K) | OPEN; no release candidate or topology acceptance | [K register](../status/alpha-1.0-2plus1-checklist.md) |
 | W123 crash recovery | Not accepted; correctness gates passed, formal performance FAIL, v3 wait capture pending | [W123 current state](../status/w123-current.md) |
 | W171 less context per change | In progress; phase 3 splits of `efs_fuse.c` (Nov 4) and `meta_apply.c` (Nov 5) landed, measured reading sets not reduced; write-back ownership pilot (Task DM, Nov 6, merged in wave 60; its `ready` race fixed by Task DT, wave 61) cut lines needed 691 to 593 and stopped at the boundary; Task EB (merged in wave 64, Nov 8) repeated it on the open-reference table (640 to 543), added multi-tag test routes that refuse misspellings, and put the component guides and per-component nodes in the code graph; wave 65 (Nov 9) merged Task EC, which made the `.find` result cache private to `find_res.c` (542 to 428 lines needed) and fixed K101, Task ED, which checks guide counts in `make docs-check`, audited every catalogue tag and declared the `raft_host.c` prefix tags, Task DO, the `raft_host.c` ReadIndex entry map and before-measurement ([evidence](../status/2026-11/readindex-entry-map-20261108.md)), and Task EE, the review of the Nov 9 feedback into briefs EF to EI ([review](../status/2026-11/review-feedback-nov9-20261109.md)); wave 66 (Nov 9) merged Task EF, the graph's `tested_by` edges from `tests_for.py`'s resolver ([evidence](../status/2026-11/graph-selector-resolver-20261109.md)), Task EH, one current-status block per active page, Task EI, two changes made by blind readers, the unmount report and the GC watermark double count, read with 8 to 10 source files against the implementers' 3 to 4 ([evidence](../status/2026-11/blind-reader-20261109.md)), and Task EJ, the K54 fence test asserting what K54 forbids; wave 67 (Nov 9) merged Task EK (the k37 degraded-count `begin` keeps the latest apply's marks) and the eight small tasks EL to ES (`EFS_FUSE_PREFIX` alone drives the fuse3 build, the sequence binaries on the sanitizer lists, 40 budget rows refit down, the K101 pattern audit found no second case, stop files already cleaned by Task DI, every evidence script cited, two open.c splice tests migrated onto the interface test, host-limit NOTRUN rows marked in the gate summary); wave 68 (Nov 10) merged Task ET, the apply visibility contract between owners ([page](apply-visibility.md)), Task EU, contract-to-case maps in the owner guides checked statically, and Task EV, the reading-set method reporting understanding, validation and total apart with necessary cross-owner reading counted as success; the split still waits on the W123 recovery merge | [Structure plan](../status/2026-11/structure-plan-20261102.md), [Task ED](../status/2026-11/navigation-leftovers-20261108.md) |
@@ -1865,7 +1865,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D46)
+##### Decisions — taken and pending (register D1–D49)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -1882,6 +1882,24 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/2026-10/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D49 — K110: build the cross-incarnation durability proof (user, Nov 10)
+
+Asked "For K110, build the durable-proof fix or accept it as a documented alpha limit?", the user answered "Build the fix". K110 (batch D H1, diagnosed by Task FH; its page `2026-11/k110-fsync-after-sigkill-20261110.md` arrives with its branch): when the members holding a stripe each restart uncleanly between a write and its `fsync`, the client can never prove the stripe durable and every later `fsync` of the file fails until unmount, although every byte reads back exact. The fix is that page's option 2: each member keeps a bounded durable history of (incarnation, last barrier seq it made durable) per root, the PUT and COMMIT replies carry what the client needs, and the client counts a fragment acknowledged by an earlier incarnation as durable only when that history proves its barrier completed. This amends the sentence of D42 F23 and of the K36 page that such a fragment is never counted durable; the amended wording is applied when the fix merges. Everything else in D42 stands: no `fsync` returns 0 without two proven fragments per stripe, and power-loss scope is unchanged. Not chosen: documenting the case as an alpha limitation.
+
+### D48 — alpha 1.0 cluster sizes 3, 6 and 9; ior throughput must rise with the member count (user, Nov 10)
+
+The user's words: "for alpha 1.0 we can reduce to 3, 6 and 9 node cluster. i want to see that increasing the node count actually helps beyond just volume, i want to see io goes up also in all categories of ior". Coordinator's reading, to be corrected by the user if wrong:
+
+1. **Supersedes D46 item 2** (all 13 fcstor nodes): the large-cluster qualification of alpha 1.0 runs on clusters of **3, 6 and 9 distinct storage hosts** instead of one 13-node cluster. Batch N of the Stage 1 matrix (T1 to T3) runs its gates on the 6- and 9-member shapes; the 3-member shape is already covered by batch D.
+2. **New acceptance (T4):** the same ior workload, with the same client load, on 3, 6 and 9 members must show throughput that rises with the member count in every ior category: easy write, easy read, hard write and hard read. More members must buy I/O, not only capacity. A category that does not rise is a finding with its own K row, not a waived result.
+3. **Unchanged:** D46 item 1 (2+1 on 3, 4 and 5 hosts over TCP and RDMA, batch D) stands, since those cells have mostly run; D47 applies (any `/data1/NN`, cleaned up). Transports for T4: TCP and RDMA. Client hosts: the fcstor hosts that are not members of the cell.
+
+Not decided by the user and set by the coordinator as defaults: the client load is fixed across the three sizes and large enough that the 3-member cluster, not the clients, is the limit; "rises" means the median of at least three runs is higher at each step by more than the run-to-run spread.
+
+### D47 — test storage on the fcstor hosts: any `/data1/NN`, cleaned up (user, Nov 10)
+
+The user's words: "instead of /data1/01 other /data1/NN directories can be used, as long as you clean up". This widens D46 item 1's "test storage under `/data1/01`": a qualification run may put its test stores under any `/data1/NN` directory of a participating fcstor host, in an owned run directory, and removes everything it created there when it ends. The rest of D46 item 1 stands (verify ownership, leave other agents' clusters and stores alone, co-located daemons never stand in for failure domains). It removes the storage-directory question from D46 item 2 (all 13 fcstor nodes); that run's storage/client split and transports are still not set.
 
 ### D46 — Task Z decisions, item by item (user, Oct 28)
 
@@ -1942,22 +1960,6 @@ product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
 | F23: store after an unclean stop | **Verified recovery.** A crash must not disable a recoverable store for good. "Verified" means recovery establishes the required consistency of log, metadata, fragments and journal before the uncertainty fence clears; a restart, a sampled check or a forced sync is not enough. Two outcomes stay distinct: a recovered store may serve again; an earlier ambiguous write is not thereby proven, and its error never turns into success. Crash-recovery implementation and tests are in alpha; full power-loss qualification remains a separate scope decision. |
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Direct I/O only** (user, Oct 24; replaces the earlier "both, qualified"). Remove the `--direct-io`/`--no-direct-io` flag and the buffered path. Storage that cannot meet `O_DIRECT` requirements is refused with a clear error, never a silent fallback. Small and unaligned operations stay correct internally, and explicit durability barriers stay: `O_DIRECT` alone does not make a write durable. Qualify the retained path for reads, writes, packing, `fsync` and recovery. |
-
-**F23 amended Nov 10 (K110, user: "Barrier proof").** F23 said an earlier
-ambiguous write is not thereby proven. That stays true for a write the
-restarted member cannot show was made durable, and no longer for one it can:
-a fragment acknowledged by incarnation V at or before V's last *completed*
-durability barrier (`syncfs` of the root, then the fdatasynced durability
-record) is durable once the successor's verified recovery (K36) has dropped no
-file that barrier covers. The successor reports its predecessors' last
-barriers in its COMMIT reply (up to 7 per root, newest first), and the client
-counts such a fragment durable instead of lost. A fragment acknowledged after
-that barrier, one on a root whose history recovery could not validate, and
-any reply without a history stay lost, and `fsync` stays `EIO` when the stripe
-needs them. The cross-incarnation rule fails closed everywhere else. Scope:
-the same process-kill and OS-crash assumptions as the asynchronous
-acknowledgement; full power-loss qualification stays a separate scope decision.
-Design and evidence: [K110](../status/2026-11/k110-fsync-after-sigkill-20261110.md).
 
 A6 read-path selectors ([table](../status/2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
 
@@ -11245,30 +11247,36 @@ COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
 a degraded mark, or `EIO`) unless the barrier history below covers it, and a
 crash before the tail finishes is caught by the next recovery's inventory.
 
-**Barrier history (K110, D42 F23 as amended).** Every PUT reply carries an
-*ack* after the verifier: the storage root's index in the top byte and, in the
-low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
-bits, sequence 40). The epoch is read after the fragment is stored, so it is
-never earlier than the epoch the fragment joined. The root's durability record
-(`.efs-durable-epoch`, v3) names the last barrier that completed (`syncfs`,
-then the fdatasynced record) and, since a new boot rewrites it, a ring of up to
-seven predecessors: for each earlier incarnation (its verifier) the position of
-its last completed barrier. A boot that follows an unclean stop adds the
-predecessor it found and keeps the predecessor's own ring only if that ring was
-validated. A ring is validated when verified recovery finished without
-dropping any file whose modification time is not after the predecessor's last
-record (such a file may be one a barrier covered); recovery then rewrites the
-record with the verdict before it clears the fence, and forgets the ring if it
-dropped such a file. A COMMIT reply (`efs_msg_data_commit_reply`) lists the
-validated entries as `{verifier, position, root}` after its header. The client
-(`data_commit.c`) records each fragment's verifier and ack; when a restarted
-member answers with another verifier, the fragment is durable if an entry has
-that verifier, that root and a position at or after the ack, and lost
-otherwise. Boot counters of one root never decrease and an incarnation can
-only have been followed by a clean stop, a kill or a crash, so comparing the
-positions numerically is sound. A boot counter above 65535 or a sequence above
-2^40 gives no ack (fail closed). Assumption: the wall clock does not step back
-across a restart by more than the file times it compares.
+**Barrier history (K110, D42 F23 as amended).** Every PUT reply (18 bytes) carries
+an *ack* after the verifier: the storage root's index in the top byte and, in
+the low 56 bits, the root's open barrier epoch (`efs_put_pos`: boot counter 16
+bits, sequence 40). It is read under the root's lock after the fragment is
+stored, and a barrier increments the open epoch under that lock before its
+`syncfs`, so the barrier the ack names has not started when the write is
+complete. The root's durability record (`<root>/.efs-durable-epoch`, 200
+bytes, magic `EFSDUR03`, CRC-32 over the first 192 bytes, any other version or
+a failed CRC refuses startup) names the last barrier that completed (`syncfs`,
+then the fdatasynced record; a failed record sync rewrites the previous
+durable seq), the root count and index, and a ring of up to seven
+predecessors: for each earlier incarnation (its verifier) the position of its
+last completed barrier. A boot that follows an unclean stop (or another
+verifier) adds the predecessor it found, and keeps the predecessor's own ring
+only if that ring was validated and the root count and index are unchanged.
+A ring is validated when verified recovery finished without dropping any file
+whose modification time is not after the predecessor's last record (such a
+file may be one a barrier covered); recovery then rewrites the record with the
+verdict before it clears the fence, and forgets the ring if it dropped such a
+file. A COMMIT reply (`efs_msg_data_commit_reply`, a length that is not header
+plus 24 bytes per entry is refused) lists the validated entries as
+`{verifier, position, root}` after its header; a root still fenced or in a
+barrier error adds none. The client (`data_commit.c`) records each fragment's
+verifier and ack; when a restarted member answers with another verifier, the
+fragment is durable if an entry has that verifier, that root and a position at
+or after the ack, and lost otherwise. Boot counters of one root never
+decrease, so comparing the positions numerically is sound. A boot counter
+above 65535 or a sequence above 2^40 gives no ack (fail closed). Assumption:
+the wall clock does not step back across a restart by more than the file times
+it compares.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment
@@ -12621,9 +12629,14 @@ experiment whose benefit must be measured against these ceilings.
 
 #### October 7 benchmark review
 
-Raw I/O workers wait on private release gates after a shared readiness barrier.
-This avoids a shared-mutex release convoy at QD256. Results retain the idle-worker
-failure gate and report `max_start_us`, the largest release-to-work delay.
+Raw I/O workers wait on one write-held rwlock after a shared readiness barrier,
+and a single unlock releases them all, without a shared-mutex release convoy at
+QD256 (Task FB, Nov 9: the private per-worker release gates used before then made
+the main thread take a CPU slice per wakeup). The timed window closes `--time`
+after the last worker starts, so `wall_s` includes the start ramp and every
+worker completes at least one operation; slow scheduling shows in `wall_s` and
+`max_start_us`, the largest release-to-work delay, instead of as idle workers.
+`idle_workers` now counts only workers whose first operation failed.
 Initially empty windows report `allocation=allocate_then_overwrite`, with
 `allocation_ops` and `overwrite_ops`; most long buffered runs reuse warm pages.
 Their throughput is page-cache acceptance, not a sustained physical-media ceiling.
