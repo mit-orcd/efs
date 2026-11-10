@@ -119,12 +119,14 @@ tracked in A8, not an invitation to restore alternate product behaviors.
 | `EFS_TRANSPORT=auto\|tcp\|rdma` | both | in | Transport choice; default `auto` (logs the transport used); `rdma` refuses to start without a usable device |
 | `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` | both | in | RDMA device and RoCE GID selection |
 | `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT` | both | removed | Refused at startup (D42, D43): `.efs` follows `efs-mgmt commands-policy`; expiry follows `efs-mgmt expiry-policy NODE:PORT cluster` (the refusal names it); NFS re-export is not in alpha |
-| `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
-| `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
-| `EFS_PACK_*`, `EFS_REBUILD_PER_PASS` | server | out | Internal tunables; D37 allows no setting that disables the packer |
+| `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_READ_BYTES`, `EFS_DCACHE_BYTES`, `EFS_NUMA_NODE` | client | in (A8) | Client memory sizing and NUMA placement; bounded, defaults are the qualified values ([A8](../status/2026-11/a8-tunables-20261110.md)) |
+| `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_READ_MAP_TTL_MS`, `EFS_RESOLVE_MS`, `EFS_CLIENT_VIEW_POLL_MS`, `EFS_REPORT_MAX_RECORDS`, `EFS_REPORT_MAX_BYTES`, `EFS_REPORT_ADMIT_MS` | client | removed (A8) | Refused at startup; built-in values |
+| `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_EXPORT_MAX_MS`, `EFS_QUERY_REFRESH_MS` | server | in | Query-cache sizing and refresh interval (a large namespace may need them; the refresh interval is justified operator configuration under A8) |
+| `EFS_PACK_*`, `EFS_REBUILD_PER_PASS`, `EFS_DIR_SPREAD_MIN`, `EFS_PUT_SYNC_MS`, `EFS_REPORT_RECEIPT_JOIN_MS` | server | removed (A8) | Refused at startup; built in, or `EFS_FAULT_*` hooks in test builds (the packer waits, the directory spread); D37 allows no setting that disables the packer |
 | `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_KV_BLOOM`, `EFS_RAFT_BATCH_NOOP`, `EFS_RAFT_BATCH_OVERLAP`, `EFS_UNMOUNT_REVOKE`, `EFS_RDMA_FIRST` | both | removed | Refused at startup (D42); one built-in behavior each. `EFS_RDMA_FIRST` is now `EFS_RDMA_TRACE=1` (diagnostics only) |
 | `EFS_READ_VERIFY` | client | removed | The client re-hash is built in (D42 GET-path audit); a set value stops efs-fuse |
-| `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS` | server | out, pending A8 | Numeric tunables |
+| `EFS_RAFT_APPLIED_INTERVAL_MS`, `--writers` | server | in (A8) | Checkpoint cadence (10..1000 ms) and durable I/O workers (0..64) |
+| `EFS_GC_BACKLOG_IDLE_MS` | server | removed (A8) | Refused at startup; 20 ms built in |
 | `EFS_FAULT_GC_DISABLE` | server | out | Test builds only (`EFS_FAULTS=1`); was `EFS_GC_DISABLE` |
 | `*_DBG`, `*_TRACE`, `*_PROF`, `*_OBS`, `EFS_LOG_TS`, `EFS_PERF_*`, `EFS_STRACE_*` | both | out | Observability and profiling |
 | `EFS_FAULT_*` | both | out | Test builds only; a normal build names them as ignored at startup (W149) |
@@ -148,7 +150,7 @@ has no write form.
 # daemon settings; observability (34) and fault/test hooks (62) are not listed (127.0.0.1:17432)
 build                  efsd v… (branch …, built … on …)   -      built-in     build
 …
-EFS_PACK_MIN_AGE_MS    12345   60000   environment   numeric tunable
+EFS_RAFT_APPLIED_INTERVAL_MS   50   100   environment   numeric tunable
 --writers              2       8       command line  numeric tunable
 commands-policy        mask=3 version=0   mask=3 version=0   policy   policy
 ```

@@ -79,9 +79,9 @@ if not fuse_ok():
 work = Path(tempfile.mkdtemp(prefix='efs-b6-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items()
        if not k.startswith('EFS_FAULT_') and not k.startswith('EFS_TEST_')}
-# EFS_PACK_FAIL_BACKOFF_MS: the packer's 30 s pause per failed or degraded
+# EFS_FAULT_PACK_FAIL_BACKOFF_MS: the packer's 30 s pause per failed or degraded
 # upload would make each member-unavailable step wait it out per segment.
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200', EFS_PACK_FAIL_BACKOFF_MS='2000')
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200', EFS_FAULT_PACK_FAIL_BACKOFF_MS='2000')
 env.pop('EFS_GC_DISABLE', None)
 LARGE = 300000
 INFLIGHT = 2 * 1024 * 1024 + 5   # 17 chunks, in flight when the fault starts

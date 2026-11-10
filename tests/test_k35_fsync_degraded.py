@@ -28,9 +28,9 @@ Four, then five members (additions through K33):
     interleaving that broke this is forced: node 3 is first marked "away"
     on the client (a write while it is stopped fails its fragment hard and
     is placed around on node 4, no mark), returns, and node 4 stops while
-    that mark is live (the product's 10 s window: efs-fuse is a normal
-    build, so EFS_FAULT_AWAY_MARK_MS does not exist there and this case
-    runs timed; node 4 stops a few seconds after node 3's return). The
+    that mark is live (the built-in 10 s window, no override since A8, so
+    this case runs timed; node 4 stops a few seconds after node 3's
+    return). The
     client must then place around node 4 onto node 3, the away member, rather than
     acknowledge on two fragments (it did, until the fix: 2 of 10 gate
     runs, whenever node 4 joined and stopped within 10 s of node 3's last
@@ -60,7 +60,7 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k35-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200')
 SMALL = (1, 512, 4096, 16384)
 LARGE = 300000
 files = {}

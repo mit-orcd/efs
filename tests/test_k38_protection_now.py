@@ -61,11 +61,11 @@ flags = work / 'flags'
 flags.mkdir()
 hold = flags / 'sample-hold'
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-# EFS_PACK_FAIL_BACKOFF_MS: the packer pauses a group 30 s after a degraded
+# EFS_FAULT_PACK_FAIL_BACKOFF_MS: the packer pauses a group 30 s after a degraded
 # write (as test_k37_segment_rebuild.py, test_b6_unavailable.py). Under gate
 # load step 2's batch splits over two passes; the first is written degraded
 # and the rest waited the whole pause (52.5 s runs, Task DP).
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200', EFS_PACK_FAIL_BACKOFF_MS='2000',
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200', EFS_FAULT_PACK_FAIL_BACKOFF_MS='2000',
            EFS_FAULT_REBUILD_SAMPLE_HOLD=str(hold), EFS_FAULT_SEGMENT_PUT_REFUSE=str(flags),
            EFS_FAULT_SEGMENT_PUT_STALE=str(flags))
 SMALL = (1, 300, 4096, 9000, 16384)

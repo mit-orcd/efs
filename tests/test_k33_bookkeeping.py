@@ -43,7 +43,7 @@ if not fuse_ok():
 work = Path(tempfile.mkdtemp(prefix='efs-k33b-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_MEMBER_EXIT')}
 env.pop('EFS_FAULT_GC_DISABLE', None)
-env['EFS_PACK_MIN_AGE_MS'] = '3600000'  # packing would move the small files mid-check
+env['EFS_FAULT_PACK_MIN_AGE_MS'] = '3600000'  # packing would move the small files mid-check
 GiB = 1 << 30
 notes = []
 

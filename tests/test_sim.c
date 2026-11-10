@@ -1315,7 +1315,7 @@ static void test_auto_spread(void)
     int i;
     const char *hashed;
 
-    CHECK(setenv("EFS_DIR_SPREAD_MIN", "3", 1) == 0, "setenv");
+    CHECK(setenv("EFS_FAULT_DIR_SPREAD_MIN", "3", 1) == 0, "setenv");
     s = mk(140);
     CHECK(s, "mk");
     CHECK(efs_sim_mkdir(s, 0, EFS_ROOT_INO, "d", &d) == EFS_OK && d, "d");
@@ -1349,7 +1349,7 @@ static void test_auto_spread(void)
           "peer hashed");
     CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
-    unsetenv("EFS_DIR_SPREAD_MIN");
+    unsetenv("EFS_FAULT_DIR_SPREAD_MIN");
 }
 
 /* Rename over an empty HASHED dest dir (never-used, then emptied with

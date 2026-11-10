@@ -24,7 +24,7 @@ SIZE=300000
 UNMOUNT_BOUND_S=30.0   # half the product stop bound; a held unit took all of it
 work=Path(tempfile.mkdtemp(prefix='efs-k90-',dir=os.environ.get('TMPDIR')))
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
 c=Cluster(work,'k90',[1,2,3],env)
 
 

@@ -118,8 +118,8 @@ The LOCAL inode row carries `nents`, a count of immediate children
 decrement it). Crossing `nents > EFS_DIR_SPREAD_MIN` commits `SPLITTING` on
 that same parent-row PUT — one Raft entry, no extra round. After spread the
 count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
-a distributed counter (the spec rejected that). Runtime override:
-`EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
+a distributed counter (the spec rejected that). Test builds only:
+`EFS_FAULT_DIR_SPREAD_MIN` (`EFS_FAULTS`, A8). Pressure-triggered spread is specified; the
 bound is not a number in the spec and is not invented here. Source review
 found size-based admission and migration of already-SPLITTING directories,
 but no pressure-based automatic trigger ([W81](../../backlog/work-items.md#w81)). Draining

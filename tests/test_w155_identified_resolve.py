@@ -35,14 +35,14 @@ def fn(prefix, nth=1):
 client = ''.join([
     fn('static int rpc_writer_retry_pause(', 2), fn('static void rpc_retry_peer('),
     fn('static int rpc_type_mutates('), fn('static int rpc_identified('),
-    fn('static const char *rpc_req_ident('), fn('static uint64_t rpc_resolve_ms('),
+    fn('static const char *rpc_req_ident('), fn('static uint64_t rpc_resolve_ms(').replace('return 8000;', 'return %d;' % int(os.environ.get('W155_RESOLVE_MS', '8000'))),
     fn('static int rpc_send_recv_shard_once('), fn('static int rpc_resolve_identified('),
     fn('static int rpc_send_recv_shard('), fn('static int rpc_send_recv_dual_once(', 2),
     fn('static int rpc_send_recv_dual(', 2)])
 
 code = r'''
 #include "efs/protocol.h"
-static void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
+static __attribute__((unused)) void efs_setting_u64(const char *n, unsigned long long v) { (void)n; (void)v; }
 #include "efs/opid.h"
 #include "efs/meta_cmd.h"
 #include "metadata_read_route.h"
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='efs-w155-ident-') as d:
                          str(p), str(root / 'src/sim/opid.c'), '-pthread',
                          '-o', str(p.with_suffix(''))], check=True)
     out = subprocess.run([str(p.with_suffix(''))], check=True, timeout=30, capture_output=True,
-                         text=True, env=dict(os.environ, EFS_RESOLVE_MS=os.environ.get('W155_RESOLVE_MS', '8000')))
+                         text=True)
     log = out.stderr
     assert re.search(r'inode-rpc: retry type=45 attempt=0 why=recv rc=-?\d+ nid=1 id=13550000/3/\d+', log), log
     assert re.search(r'inode-rpc: resolve type=45 id=13550000/3/\d+ rc=-13 lost=1: reply lost', log), log

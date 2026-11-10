@@ -444,8 +444,8 @@ static uint32_t pull_group_end(uint32_t start, uint32_t end)
     return next > end ? end : (uint32_t)next;
 }
 
-/* Read-mapping freshness (EFS_READ_MAP_TTL_MS, default 200, 0 = refresh on
- * every read, max 10000). A read refreshes its chunks' mappings because a
+/* Read-mapping freshness: 200 ms, built in (A8; was EFS_READ_MAP_TTL_MS,
+ * never set by a test or launch). A read refreshes its chunks' mappings because a
  * peer's span can change a chunk without moving its base generation. A
  * mapping pulled successfully within the last TTL ms is trusted: reads skip
  * the GETCHUNKS round trip, and another client's publication can stay
@@ -463,7 +463,7 @@ static uint32_t pull_group_end(uint32_t start, uint32_t end)
 static struct { efs_ino_t ino; uint32_t ci; uint64_t us; } map_fresh[MAP_FRESH_SLOTS];
 static pthread_mutex_t map_fresh_mu[MAP_FRESH_STRIPES];
 static pthread_once_t map_fresh_once = PTHREAD_ONCE_INIT;
-static uint64_t map_fresh_ttl; /* microseconds */
+static const uint64_t map_fresh_ttl = 200000; /* microseconds */
 #define MAP_OPEN_SLOTS 4096u
 static uint64_t map_open_us[MAP_OPEN_SLOTS];
 
@@ -471,10 +471,6 @@ static void map_fresh_init(void)
 {
     for (uint32_t i = 0; i < MAP_FRESH_STRIPES; i++)
         pthread_mutex_init(&map_fresh_mu[i], NULL);
-    const char *e = getenv("EFS_READ_MAP_TTL_MS");
-    unsigned long v = e && *e ? strtoul(e, NULL, 10) : 200;
-    map_fresh_ttl = (v > 10000 ? 10000 : (uint64_t)v) * 1000;
-    efs_setting_u64("EFS_READ_MAP_TTL_MS", map_fresh_ttl / 1000);
 }
 
 /* Microseconds: an open and the pull that follows it usually fall in the
@@ -496,8 +492,6 @@ static uint32_t map_fresh_slot(efs_ino_t ino, uint32_t ci)
 static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t us)
 {
     pthread_once(&map_fresh_once, map_fresh_init);
-    if (!map_fresh_ttl)
-        return;
     for (uint32_t ci = ci0; ci < ci1; ci++) {
         uint32_t s = map_fresh_slot(ino, ci);
         pthread_mutex_t *mu = &map_fresh_mu[s & (MAP_FRESH_STRIPES - 1)];
@@ -523,7 +517,7 @@ void efs_client_map_opened(efs_ino_t ino)
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 {
     pthread_once(&map_fresh_once, map_fresh_init);
-    if (!map_fresh_ttl || ci0 >= ci1)
+    if (ci0 >= ci1)
         return 0;
     uint64_t now = map_fresh_now_us();
     /* Strictly after the open: a pull in the same tick may predate it. */

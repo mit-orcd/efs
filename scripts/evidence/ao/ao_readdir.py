@@ -76,7 +76,7 @@ def run(a):
     a.work.mkdir(parents=True,exist_ok=False);a.output.mkdir(parents=True,exist_ok=False)
     env={key:val for key,val in os.environ.items() if not key.startswith('EFS_')}
     env.update(EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1',EFS_BATCH_OBS='1',
-               EFS_PACK_MIN_AGE_MS='1000',EFS_PACK_INTERVAL_MS='200',
+               EFS_FAULT_PACK_MIN_AGE_MS='1000',EFS_FAULT_PACK_INTERVAL_MS='200',
                EFS_QUERY_REFRESH_MS='2000',EFS_FAULT_MEMTABLE_BYTES=str(256*1024),LC_ALL='C')
     assert not foreign_work(a.work.parent), ('another agent is using the host',foreign_work(a.work.parent))
     c=k.Cluster(a.work,'cluster',(1,2,3),env)

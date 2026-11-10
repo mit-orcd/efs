@@ -169,11 +169,12 @@ static double pct_us(uint64_t *v, int n, double p)
     return (double)v[pct_index(n, p)] / 1000.0;
 }
 
+/* The bench's own EFS_RDMA_BUFS (default 64) sets the library test hook;
+ * efsd and efs-fuse refuse that name since A8. */
 static void pin_rdma_bufs(void)
 {
     const char *e = getenv("EFS_RDMA_BUFS");
-    if (!e || e[0] == '\0')
-        setenv("EFS_RDMA_BUFS", "64", 1);
+    efs_rdma_test_nrecv = e && e[0] ? atoi(e) : 64;
 }
 
 static void pin_server_env(void)

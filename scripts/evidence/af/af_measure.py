@@ -25,8 +25,8 @@ a.out.mkdir(parents=True,exist_ok=False)
 scratch=ROOT.parent/'tmp';scratch.mkdir(exist_ok=True)
 work=Path(tempfile.mkdtemp(prefix='af-',dir=scratch))
 env={k:v for k,v in os.environ.items() if not k.startswith(('EFS_FAULT_','EFS_TEST_'))}
-env.update(EFS_TRANSPORT=a.transport,EFS_RAFT_OBS='1',EFS_PACK_MIN_AGE_MS='1000',
-           EFS_PACK_INTERVAL_MS='200',EFS_QUERY_REFRESH_MS='2000',EFS_FAULT_MEMTABLE_BYTES='262144')
+env.update(EFS_TRANSPORT=a.transport,EFS_RAFT_OBS='1',EFS_FAULT_PACK_MIN_AGE_MS='1000',
+           EFS_FAULT_PACK_INTERVAL_MS='200',EFS_QUERY_REFRESH_MS='2000',EFS_FAULT_MEMTABLE_BYTES='262144')
 env.pop('LD_PRELOAD',None);env.pop('EFS_GC_DISABLE',None)
 c=Cluster(work,'cluster',[1,2,3],env,hosts={i:a.address for i in [1,2,3]});mount=None;threads=[];stop=threading.Event();errors=[]
 counts=[0]*4;late=[0]*4;versions={};names=[];stat_us=[];status_us={i:[] for i in [1,2,3]}

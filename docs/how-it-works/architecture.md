@@ -298,8 +298,7 @@ this list, before it ships.
   client, read-your-writes hold via the dcache. This resembles NFS
   close-to-open consistency (publication at `flush`, visibility on the
   next open/read elsewhere). Reads on an already-open description may retain
-  a chunk mapping for `EFS_READ_MAP_TTL_MS` (default 200 ms, zero disables
-  this cache); a new open invalidates mapping freshness. This is only
+  a chunk mapping for 200 ms (built in); a new open invalidates mapping freshness. This is only
   close-to-open consistency: client-side buffering does
   not by itself imply weak coherence — lock- or lease-based PFSs recall
   buffered data to make it visible, and EFS has no such recall. It is a

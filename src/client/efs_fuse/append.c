@@ -339,9 +339,7 @@ static int append_identity_begin(efs_ino_t ino, struct efs_opid_req *q, int *hel
  * within its own bound, session fencing or the last-close drain remains the
  * backstop; the identity is still released (its later ACK forbids any new
  * allocation under it). */
-#ifndef EFS_APPEND_ABANDON_MS
 #define EFS_APPEND_ABANDON_MS 10000u
-#endif
 static void append_abandon_identity(efs_ino_t ino, uint64_t len,
                                     const struct efs_opid_req *q)
 {

@@ -3,8 +3,8 @@
 
 Three real ./efsd daemons on loopback (private stores under TMPDIR, free
 ports, discovery off), the product build:
-1. Node 1 starts with EFS_PACK_MIN_AGE_MS and EFS_RAFT_APPLIED_INTERVAL_MS
-   in the environment and --writers on the command line: the listing gives
+1. Node 1 starts with EFS_RAFT_APPLIED_INTERVAL_MS in the environment
+   and --writers on the command line: the listing gives
    those values with provenance `environment` / `command line`; every other
    tunable and deployment row is `built-in` or `automatic`; node 2, started
    with neither, lists the defaults. Rows are sorted by kind then name; the
@@ -56,7 +56,7 @@ def policies(c, i):
 c = Cluster(work, 'x', [1, 2, 3], env)
 mnt = None
 try:
-    c.start(1, extra_env={'EFS_PACK_MIN_AGE_MS': '12345', 'EFS_RAFT_APPLIED_INTERVAL_MS': '50'})
+    c.start(1, extra_env={'EFS_RAFT_APPLIED_INTERVAL_MS': '50'})
     c.start(2, join=1)
     c.start(3, join=1)
     for i in (1, 2, 3):
@@ -66,9 +66,10 @@ try:
     rc, out = mgmt(env, 'settings', c.ep(1))
     assert rc == 0, out
     header, rows = listing(out)
-    assert 'observability (35)' in header and 'fault/test hooks (62)' in header, header
-    want = {'EFS_PACK_MIN_AGE_MS': ('12345', '60000', 'environment', 'numeric tunable'),
-            'EFS_RAFT_APPLIED_INTERVAL_MS': ('50', '100', 'environment', 'numeric tunable'),
+    counts = dict(re.findall(r'#define (EFS_SETTINGS_\w+) (\d+)', (root / 'include/efs/settings.h').read_text()))
+    assert ('observability (%s)' % counts['EFS_SETTINGS_OBSERVABILITY'] in header and
+            'fault/test hooks (%s)' % counts['EFS_SETTINGS_FAULT_HOOKS'] in header), (header, counts)
+    want = {'EFS_RAFT_APPLIED_INTERVAL_MS': ('50', '100', 'environment', 'numeric tunable'),
             '--writers': ('2', '8', 'command line', 'numeric tunable')}
     for k, v in want.items():
         assert rows.get(k) == v, (k, rows.get(k), out)
@@ -76,14 +77,14 @@ try:
         if k not in want:
             assert v[2] in ('built-in', 'automatic', 'policy'), (k, v, out)
     for k in ('EFS_TRANSPORT', 'EFS_RDMA_DEV', 'EFS_QUERY_DISK_TOTAL_MIB', 'transport', 'build',
-              'direct-io', 'durability-window', 'commands-policy', 'expiry-policy', 'EFS_PACK_INTERVAL_MS'):
+              'direct-io', 'durability-window', 'commands-policy', 'expiry-policy'):
         assert k in rows, (k, out)
     assert not any(k.startswith(('EFS_DCACHE', 'EFS_REPORT_ADMIT')) for k in rows), 'client rows in the daemon'
     assert rows['transport'][0].startswith('tcp') or rows['transport'][0].startswith('rdma'), rows['transport']
     assert rows['build'][0].startswith('efsd'), rows['build']
     _, other = listing(mgmt(env, 'settings', c.ep(2))[1])
-    assert other['EFS_PACK_MIN_AGE_MS'][:3] == ('60000', '60000', 'built-in'), other['EFS_PACK_MIN_AGE_MS']
-    assert other['EFS_RAFT_APPLIED_INTERVAL_MS'][2] == 'built-in', other['EFS_RAFT_APPLIED_INTERVAL_MS']
+    assert other['EFS_RAFT_APPLIED_INTERVAL_MS'][:3] == ('100', '100', 'built-in'), other['EFS_RAFT_APPLIED_INTERVAL_MS']
+    assert not any(k.startswith('EFS_PACK') for k in other), 'A8: the packer waits are not product settings'
     print('settings: environment, command line and built-in provenance on a loopback cluster PASS')
 
     # 2. The policy rows follow the cluster policies.
@@ -128,7 +129,7 @@ try:
         assert rows['EFS_DCACHE_HARD_BYTES'] == ('134217728', '268435456', 'environment', 'numeric tunable'), rows
         assert rows['EFS_DCACHE_DRAIN_BYTES'][2] == 'built-in', rows
         assert rows['direct-io'][0] == 'on' and rows['build'][0].startswith('efs-fuse'), rows
-        assert rows['transport'][0] and not any(k == 'EFS_PACK_MIN_AGE_MS' for k in rows), rows
+        assert rows['transport'][0] and not any(k == 'EFS_RAFT_APPLIED_INTERVAL_MS' for k in rows), rows
         rc, out = mgmt(env, 'settings', '--mount', str(work / 'nothing'))
         assert rc != 0, out
         subprocess.run(['fusermount3', '-u', str(mnt)], capture_output=True)

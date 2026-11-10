@@ -39,21 +39,16 @@
  * space pressure, the larger of two signals, each 0 below its start and 1
  * at its full point: unpacked bytes per node (each unpacked small file
  * holds one EFS_FRAGMENT_SIZE fragment on each node; the group's candidate
- * index is counted every PK_COUNT_NS) from EFS_PACK_UNPACKED_GIB to twice
- * that, and the highest member quota usage from EFS_PACK_SPACE_START_PCT
- * to EFS_PACK_SPACE_FULL_PCT. The busy rate is floor + (idle - floor) *
- * pressure.
+ * index is counted every PK_COUNT_NS) from 64 GiB to twice that, and the
+ * highest member quota usage from 50 % to 80 %. The busy rate is floor +
+ * (idle - floor) * pressure.
  *
- * Tunables (environment, read at start): EFS_PACK_MIN_AGE_MS (default
- * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8),
- * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (50),
- * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_UNPACKED_GIB (64),
- * EFS_PACK_SPACE_START_PCT (50), EFS_PACK_SPACE_FULL_PCT (80),
- * EFS_PACK_BACKFILL_SHARDS (64 inode
- * shards scanned per pass until the group's backfill is done). None of
- * them turns the packer off:
- * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
- * tests). */
+ * Built in (A8, D46 item 7): 8 segments per pass, 5000 files/s idle, 50
+ * files/s busy above 100 commits/s, 64 inode shards scanned per backfill
+ * pass, 256 segments per idle compaction batch. The remaining waits
+ * (minimum age 60000 ms, pass interval 1000 ms, failure backoff 30000 ms,
+ * compaction idle 60 s, daily window at 03:00 UTC) are read at start only
+ * by EFS_FAULTS builds, which the daemon tests use. */
 #include "efs/settings.h"
 #include "server_internal.h"
 #include "efs/placement.h"
@@ -75,7 +70,7 @@
 #include <unistd.h>
 
 #define PK_SCAN_MAX 4096u
-#define PK_FAIL_BACKOFF_NS pk.fail_backoff_ns /* after a failed admission or upload: EFS_PACK_FAIL_BACKOFF_MS */
+#define PK_FAIL_BACKOFF_NS pk.fail_backoff_ns /* after a failed admission or upload */
 /* A fragment PUT refused with a transient authority code is sent again,
  * PK_PUT_RETRY_US apart, until PK_PUT_RETRY_NS after the first round (one
  * deadline for the segment's fragments, the client's per-fragment bound)
@@ -123,6 +118,7 @@ static uint64_t pk_now_ns(void)
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
+#if EFS_FAULTS
 static uint64_t env_u64(const char *name, uint64_t def, uint64_t min)
 {
     const char *v = getenv(name);
@@ -130,9 +126,9 @@ static uint64_t env_u64(const char *name, uint64_t def, uint64_t min)
     char *end;
     unsigned long long x = v && *v ? strtoull(v, &end, 10) : 0;
     if (v && *v && !*end) r = x < min ? min : (uint64_t)x;
-    efs_setting_u64(name, r);
     return r;
 }
+#endif
 static void wr64(uint8_t *p, uint64_t v) { for (int i = 7; i >= 0; i--) { p[i] = (uint8_t)v; v >>= 8; } }
 static uint64_t rd64(const uint8_t *p) { uint64_t v = 0; for (int i = 0; i < 8; i++) v = (v << 8) | p[i]; return v; }
 #define STAT_ADD(f, n) __atomic_fetch_add(&pk.st.f, (n), __ATOMIC_RELAXED)
@@ -1623,27 +1619,37 @@ int server_packer_start(struct efsd_server *s)
 {
     if (!s) return -1;
     pk.s = s;
-    pk.min_age_ns = env_u64("EFS_PACK_MIN_AGE_MS", 60000, 0) * 1000000ull;
-    pk.interval_ms = env_u64("EFS_PACK_INTERVAL_MS", 1000, 1);
-    pk.fail_backoff_ns = env_u64("EFS_PACK_FAIL_BACKOFF_MS", 30000, 0) * 1000000ull;
-    pk.segments_per_pass = (uint32_t)env_u64("EFS_PACK_SEGMENTS_PER_PASS", 8, 1);
-    pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
-    pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 50, 1);
-    pk.busy_commits = (double)env_u64("EFS_PACK_BUSY_COMMITS_PER_S", 100, 1);
-    pk.unpacked_start = env_u64("EFS_PACK_UNPACKED_GIB", 64, 1) << 30;
-    pk.space_start = (double)env_u64("EFS_PACK_SPACE_START_PCT", 50, 0) / 100.0;
-    pk.space_full = (double)env_u64("EFS_PACK_SPACE_FULL_PCT", 80, 0) / 100.0;
-    pk.compact_idle_ns = env_u64("EFS_PACK_COMPACT_IDLE_S", 60, 1) * 1000000000ull;
+    uint64_t min_age_ms = 60000, backoff_ms = 30000, idle_s = 60, daily_min = 180;
+    pk.interval_ms = 1000;
+#if EFS_FAULTS
+    /* A8: daemon tests shorten the packer's waits; product builds keep the
+     * values above. */
+    min_age_ms = env_u64("EFS_FAULT_PACK_MIN_AGE_MS", min_age_ms, 0);
+    pk.interval_ms = env_u64("EFS_FAULT_PACK_INTERVAL_MS", pk.interval_ms, 1);
+    backoff_ms = env_u64("EFS_FAULT_PACK_FAIL_BACKOFF_MS", backoff_ms, 0);
+    idle_s = env_u64("EFS_FAULT_PACK_COMPACT_IDLE_S", idle_s, 1);
+    daily_min = env_u64("EFS_FAULT_PACK_COMPACT_DAILY_START_MIN", daily_min, 0) % 1440;
+#endif
+    pk.min_age_ns = min_age_ms * 1000000ull;
+    pk.fail_backoff_ns = backoff_ms * 1000000ull;
+    pk.segments_per_pass = 8;
+    pk.idle_rate = 5000;
+    pk.busy_rate = 50;
+    pk.busy_commits = 100;
+    pk.unpacked_start = 64ull << 30;
+    pk.space_start = 0.50;
+    pk.space_full = 0.80;
+    pk.compact_idle_ns = idle_s * 1000000000ull;
     /* An output segment is at most 128 KiB (often only ~15 files of
      * ~8 KiB): 8 per idle minute left thousands of holed segments after an
      * hour of churn (closure C5, 2026-10-21). 256 per batch, capped at
      * 10 s of work per batch. */
-    pk.compact_idle_segs = (uint32_t)env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 256, 1);
+    pk.compact_idle_segs = 256;
     pk.compact_batch_budget_ns = 10000ull * 1000000ull;
-    pk.compact_daily_start = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_START_MIN", 180, 0) % 1440;
+    pk.compact_daily_start = (uint32_t)daily_min;
     pk.compact_daily_min = 120;
     pk.compact_cold_ns = 86400ull * 1000000000ull;
-    pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
+    pk.backfill_shards = 64;
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;
     efs_telemetry_log(0, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "

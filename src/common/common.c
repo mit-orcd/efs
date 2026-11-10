@@ -152,6 +152,38 @@ static const struct { const char *name, *why; } removed_env[] = {
       "at runtime with efs-mgmt expiry-policy NODE:PORT cluster set on|off VERSION" },
     { "EFS_FUSE_EXPORT", "D42): NFS re-export of a mount is not supported" },
     { "EFS_RDMA_FIRST", "D42): renamed EFS_RDMA_TRACE=1, diagnostics only" },
+    /* A8 (D46 item 7): numeric tunables no test or launch sets. */
+    { "EFS_PUT_AWAY_MARK_MS", "A8): a member that failed a PUT hard is a spare of last resort for 10000 ms" },
+    { "EFS_READ_MAP_TTL_MS", "A8): a pulled chunk mapping is trusted for 200 ms" },
+    { "EFS_RESOLVE_MS", "A8): a request whose reply was lost resolves for at most 8000 ms" },
+    { "EFS_GC_BACKLOG_IDLE_MS", "A8): a GC pass that made progress reruns after 20 ms" },
+    { "EFS_PUT_SYNC_MS", "A8): the PUT sync window is 200 ms" },
+    { "EFS_REBUILD_PER_PASS", "A8): a rebuild pass takes at most 256 degraded stripes per group" },
+    { "EFS_PACK_SEGMENTS_PER_PASS", "A8): the packer writes at most 8 segments per pass" },
+    { "EFS_PACK_FILES_PER_S", "A8): the idle pack rate is 5000 files/s" },
+    { "EFS_PACK_BUSY_FILES_PER_S", "A8): the busy pack rate is 50 files/s" },
+    { "EFS_PACK_BUSY_COMMITS_PER_S", "A8): the cluster is busy above 100 commits/s" },
+    { "EFS_PACK_UNPACKED_GIB", "A8): space pressure starts at 64 GiB unpacked per node" },
+    { "EFS_PACK_SPACE_START_PCT", "A8): space pressure starts at 50 % quota use" },
+    { "EFS_PACK_SPACE_FULL_PCT", "A8): space pressure is full at 80 % quota use" },
+    { "EFS_PACK_COMPACT_IDLE_SEGS", "A8): an idle compaction batch takes 256 segments" },
+    { "EFS_PACK_BACKFILL_SHARDS", "A8): a backfill pass scans 64 inode shards" },
+    /* A8: test-only waits, EFS_FAULT_* in EFS_FAULTS builds. */
+    { "EFS_PACK_MIN_AGE_MS", "A8): test hook; EFS_FAULT_PACK_MIN_AGE_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_INTERVAL_MS", "A8): test hook; EFS_FAULT_PACK_INTERVAL_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_FAIL_BACKOFF_MS", "A8): test hook; EFS_FAULT_PACK_FAIL_BACKOFF_MS in EFS_FAULTS builds" },
+    { "EFS_PACK_COMPACT_IDLE_S", "A8): test hook; EFS_FAULT_PACK_COMPACT_IDLE_S in EFS_FAULTS builds" },
+    { "EFS_PACK_COMPACT_DAILY_START_MIN", "A8): test hook; EFS_FAULT_PACK_COMPACT_DAILY_START_MIN "
+      "in EFS_FAULTS builds" },
+    { "EFS_DIR_SPREAD_MIN", "A8): test hook; EFS_FAULT_DIR_SPREAD_MIN in EFS_FAULTS builds" },
+    /* A8: set only by unit tests, which now set the variable directly. */
+    { "EFS_REPORT_MAX_RECORDS", "A8): a REPORT holds at most 8192 records" },
+    { "EFS_REPORT_MAX_BYTES", "A8): a REPORT holds at most 16 MiB" },
+    { "EFS_REPORT_ADMIT_MS", "A8): REPORT admission waits at most 8000 ms" },
+    { "EFS_REPORT_RECEIPT_JOIN_MS", "A8): a REPORT receipt join waits at most 5000 ms" },
+    { "EFS_CLIENT_VIEW_POLL_MS", "A8): the client polls the membership view every 1000 ms" },
+    { "EFS_CLIENT_CONNS_PER_NODE", "A8): the client pools 64 connections per server" },
+    { "EFS_RDMA_BUFS", "A8): each RDMA queue pair posts 6 receive buffers" },
 };
 
 /* D42: EFS_RDMA_TRACE=1 prints RDMA and connection diagnostics on stderr.

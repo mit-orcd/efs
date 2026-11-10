@@ -26,7 +26,7 @@ import k33_daemons as k
 def run(a):
     a.work.mkdir(parents=True,exist_ok=False);a.output.mkdir(parents=True,exist_ok=False)
     env={key:val for key,val in os.environ.items() if not key.startswith('EFS_FAULT_')}
-    env.update(EFS_TRANSPORT=a.transport,EFS_DIR_SPREAD_MIN='64')
+    env.update(EFS_TRANSPORT=a.transport,EFS_FAULT_DIR_SPREAD_MIN='64')
     signal.signal(signal.SIGTERM,lambda *_:sys.exit(143)) # unwind through the finally below, as SIGINT does
     c=k.Cluster(a.work,'cluster',(1,2,3,4),env,hosts={i:a.bind for i in (1,2,3,4)})
     if a.base_port:

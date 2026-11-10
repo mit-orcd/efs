@@ -16,7 +16,7 @@ file again. Leases were not involved: the lag counts only lease-free,
 quiet candidates.
 
 Three efsd and one efs-fuse on loopback (free ports, stores under TMPDIR),
-EFS_PACK_MIN_AGE_MS=MIN_AGE_S. FILES small files are written, then
+EFS_FAULT_PACK_MIN_AGE_MS=MIN_AGE_S. FILES small files are written, then
 rewritten in place every ROUND_S (inside the minimum age, so they never
 become quiet) until a round has run wholly in a later epoch than an
 earlier round: each file then has two candidate entries when it becomes
@@ -45,7 +45,7 @@ ROUND_S = 2
 BOUND_S = 20.0 * SLOW
 work = Path(tempfile.mkdtemp(prefix='efs-pdc-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS=str(MIN_AGE_S * 1000), EFS_PACK_INTERVAL_MS='200')
+env.update(EFS_FAULT_PACK_MIN_AGE_MS=str(MIN_AGE_S * 1000), EFS_FAULT_PACK_INTERVAL_MS='200')
 t0 = time.time()
 
 

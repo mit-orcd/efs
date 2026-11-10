@@ -68,10 +68,10 @@ if not fuse_ok():
 work = Path(tempfile.mkdtemp(prefix='efs-k36-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
 segment_rebuild_hold = work / 'segment-rebuild-hold'
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200',
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200',
            EFS_FAULT_SEGMENT_REBUILD_HOLD=str(segment_rebuild_hold),
-           EFS_PACK_COMPACT_IDLE_S='1000000',
-           EFS_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 +
+           EFS_FAULT_PACK_COMPACT_IDLE_S='1000000',
+           EFS_FAULT_PACK_COMPACT_DAILY_START_MIN=str((time.gmtime().tm_hour * 60 +
                                                time.gmtime().tm_min + 720) % 1440))
 SIZES = (1024 * 1024 + 3, 300000, 2 * 1024 * 1024 + 11, 70001)
 files = {}

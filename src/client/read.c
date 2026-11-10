@@ -2229,7 +2229,7 @@ static __thread int t_seq_run;
 /* End of the mapping refresh for a read of chunks [ci0, ci1). A sequential
  * reader also refreshes the chunks it will read next (up to one GETCHUNKS,
  * within the file), so its following requests find their mappings fresh
- * (EFS_READ_MAP_TTL_MS) instead of paying a round trip each: with mappings
+ * (200 ms, ops.c) instead of paying a round trip each: with mappings
  * already local, layout prefetch does not pull them, and each 512 KiB FUSE
  * request refreshed its own 4 chunks (2 GETCHUNKS per MiB, Oct 15 Intel). */
 static uint32_t refresh_end(uint32_t ci0, uint32_t ci1, int sequential,
@@ -2514,7 +2514,7 @@ static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *bu
             /* A peer span does not move the base generation. A local
              * row with ndelta==0 is not proof the map is complete:
              * re-pull before painting, unless this client pulled the
-             * mapping within EFS_READ_MAP_TTL_MS. */
+             * mapping within the 200 ms freshness window. */
             jobs[i].have_ce = got && fresh;
         }
         pthread_mutex_unlock(&g_client.idx_mu);
