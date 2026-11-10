@@ -13,6 +13,12 @@ unavailable: the run's own verification read every live file exact after the dra
 loaded runs on devel plus a log-only diagnostic and in 80 loaded runs with the fix, so the fix is not shown by a before
 and after loop. Proposed K105: FIXED on the branch, blocks alpha: no (wording at the end).**
 
+**Second sighting (Nov 10, wave 73 TSan lane on amd, tree `596d6118d`, `read_errors: 1`): it fits the same cause.** Both
+remote reads of the candidate's fragments (nodes 3 and 1) answered a one-byte `GET_CHUNK_REPLY` with status 1,
+NOT_FOUND, 41 ms after n2's GC reap stage ended and inside a 96 ms TSan-slowed metadata scan of the packer. The status
+is "absent or a transient I/O or allocation failure on that member", so unlike the first sighting (local `rc=-3`) it
+does not by itself prove an absent file; the section "Second sighting" below has the timeline and what stays open.
+
 Task FK, Nov 10 2026, node9900 (private trees and loopback ports only). Linked row: K105 (both tables of the
 [alpha checklist](../alpha-1.0-2plus1-checklist.md)); gate item: the wave 71 merge gate's `tests/test_d4_progress.py`
 (D4 bounded progress).
@@ -98,13 +104,19 @@ commit `900b22b90` printed `candidate-state ... alive_rc=` for the same moment.
   the `EFS_MSG_GET_CHUNK` case) answers `EFS_GET_CHUNK_NOT_FOUND` (1, `include/efs/protocol.h:820`) with a one-byte body
   whenever `efs_store_get` fails for any reason other than integrity (format, identity or checksum fail with status 3).
   So node 2 had no readable fragment 1 for that generation, exactly as node 1 had no fragment 0.
-- **What makes a member's store read return NOT_FOUND** (`nvme_get`, `src/server/store_nvme.c`, then `read_fragment_verified`
-  and `read_fragment_impl`, `src/server/store.c`): only `read_file_bytes` failing with `ENOENT` on the fragment path
-  (tried first at the cached storage root, then at every root). There is no fence check on a read (the dead-inode fence in
-  `reclaim.c` refuses PUTs, not GETs), no sync window and no generation in the path. A file that exists but holds another
-  generation, a wrong identity or a bad hash gives `EFS_ERR_FRAG_IDENTITY` or `EFS_ERR_CHECKSUM`, and a short file gives
-  `EFS_ERR_CHECKSUM`; the handler reports those as INTEGRITY (status 3) and the local path returns them as `rc`, never -3.
-  `rc=-3` with status 1 therefore means the fragment file was absent on both members at that instant.
+- **What makes a member's store read return `EFS_ERR_NOT_FOUND`** (`nvme_get`, `src/server/store_nvme.c`, then
+  `read_fragment_verified` and `read_fragment_impl`, `src/server/store.c`): `read_file_bytes` (`store.c:1394`) failing with
+  `ENOENT` on the fragment path (tried first at the cached storage root, then at every root). There is no fence check on a
+  read (the dead-inode fence in `reclaim.c` refuses PUTs, not GETs), no sync window and no generation in the path. A file
+  that exists but holds another generation, a wrong identity or a bad hash gives `EFS_ERR_FRAG_IDENTITY` or
+  `EFS_ERR_CHECKSUM`, and a short file gives `EFS_ERR_CHECKSUM`; the handler reports those as INTEGRITY (status 3) and the
+  local path returns them as `rc`, never -3. So a **local** `rc=-3` means the fragment file was absent (first sighting).
+- **A remote `status=1` is weaker than that.** The handler's last branch (`handler.c`, after the INTEGRITY test) answers
+  NOT_FOUND for every other store result, so it also covers `EFS_ERR_IO` (an `open` failing other than with `ENOENT`, or a
+  failed `pread`) and `EFS_ERR_NOMEM` (`posix_memalign`). The wire status cannot tell an absent file from a transient
+  I/O or allocation failure on the member; `ex == NULL` and the test fault answer `EFS_GET_CHUNK_ERROR` (2) instead.
+  Nothing on the member logs the difference. The first sighting's local `rc=-3` is what proves a real `ENOENT`; the second
+  sighting has only remote replies (below).
 - After a failed read (`:1451`, "a file that cannot be read stays a candidate"): `pk_read_failure` logs `candidate-read`
   (its `generation=` is the *base* generation, 0 for a freshly written file whose bytes are in the delta), `read_errors`
   is incremented once, the file's buffer is freed, and the candidate key stays in the index, so the next pass reads its
@@ -301,6 +313,11 @@ begins `285f98960203`): `runs-diag.tsv`, `runs-fixa.tsv`, `runs-fixb.tsv`, `load
 
 - Whether ino 224191 was unlinked: no log or store survives; case C is inferred from the fixture's counts, the single
   non-repeating error and the fully verified end state.
+- Whether ino 1735713 (second sighting) was unlinked: no log or store was kept either. Its two `status=1` replies cannot
+  tell an absent fragment from a transient I/O or allocation failure on the member (the handler's last branch); the
+  argument for absence is the shared timing with the GC reap and the same-millisecond answer of two members. The handler
+  could answer a distinct status for a failed open or read, so that a retained log tells the two apart; that is a
+  protocol change outside this row and is not made here.
 - No before and after loop: 0 failures in 40 loaded runs of the unchanged packer behaviour, so the unit test and the code
   path argument carry the fix. The gate that failed ran `make test-all` at 8 jobs (heavier than the `make test` load here).
 - Only the packer's candidate read (`pk_group`) is changed. The same race can count a `segment-read` failure in
@@ -314,8 +331,10 @@ begins `285f98960203`): `runs-diag.tsv`, `runs-fixa.tsv`, `runs-fixb.tsv`, `load
 
 Full table row, status column: `FIXED on branch claude/wizardly-lehmann-3525bb (Task FK, Nov 10), blocks alpha: no: a
 candidate unlinked or republished between the packer pass's metadata read and its fragment reads has its fragments
-reclaimed, and the packer counted the NOT_FOUND reads as a read error; case C by inference (the run's verification read
-every live file exact, the error did not repeat, 1,735 of 35,974 files were unlinked unpacked), not reproduced in 120
+reclaimed, and the packer counted the NOT_FOUND reads as a read error; seen twice (wave 71 gate on node9900, wave 73
+TSan lane on amd); case C by inference (both runs' verification read every live file exact, the error did not repeat,
+1,735 of 35,974 and 1,023 of 8,263 files were unlinked; the second sighting's remote status 1 also covers a transient
+I/O failure), not reproduced in 120
 loaded runs, fix not shown by a before and after loop; after the fix a gone candidate logs candidate-gone and is not
 counted, a live unchanged one still fails D4; reopen with blocks alpha: yes if candidate-read appears without
 candidate-gone (a live file unreadable) (page: `2026-11/k105-packer-read-error-20261110.md`, linked from the checklist rows)`.
