@@ -30,7 +30,7 @@ QUOTA = 4 << 20
 FRAGMENT = 65536
 work = Path(tempfile.mkdtemp(prefix='efs-fe-room-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
 c = Cluster(work, 'room', [1, 2, 3], env)
 
 

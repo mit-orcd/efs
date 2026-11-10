@@ -2488,7 +2488,7 @@
     "tests/test_attribute_authority_errno.py": "783101c858c2ebbc5e318ccd44f148aeccb5a380a647ddb76ed6eb43b6d29e94",
     "tests/test_b6_full_oracle.py": "4c0fb54931e828d056678802f706097a51cee1aad4f74ecbc0cca24a2da2d648",
     "tests/test_b6_log_accounting.py": "905c39091930e784841da5028e3dc4fd4e60a105090da40c25378d43c9fd69d3",
-    "tests/test_b6_room_claimant.py": "509d60e62b8c9fc2be877ed282e77968baa05fe74890c50bfdf200f0f6f030cc",
+    "tests/test_b6_room_claimant.py": "37a3580ed7f6071ddc8bd32066472adfdf192e530604f3c0f252cab244c3f09d",
     "tests/test_b6_unavailable.py": "8d25f6340b3625ce84ff131148ce2913bc3a8dd28cb7d9356e32f71eb7b432cb",
     "tests/test_b_checks_driver.py": "236166dcaef5dc0a9f5e771f4dbf29d40463d8ff89a0ccdaa9bc886064e87d1e",
     "tests/test_b_geometry.c": "7cba398dece45479a667e20b7a0a248bf1e2f742d2d3a989212ed54b68f9caa3",
@@ -3049,5 +3049,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "b8262202d2d5fe1d15a331bd651ee4fd82db6123"
+  "source_commit": "429bff2d4a25bacb39246ce7bd425f40a30baf22"
 }
