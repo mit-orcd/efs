@@ -131,7 +131,7 @@ Only the stop loop and the final message of `stop.sh` changed; `git diff` shows 
 | 5 | `stop.sh` lines 9 to 11: no `$BASE/src` (run from the Mac) re-execs itself over `ssh "$HOST"`; the exit status is the remote script's | as listed | unchanged; the remote status may now be 3 or 4 |
 | 6 | `--list-mounts` on the host: print the configured mounts that are FUSE-mounted, exit 0 | as listed | unchanged |
 | 7 | `intel`: unless `--daemons-only`, `client.sh stop` each present configured mount; `ERROR: mount retained: T` (stderr), exit 1; with `--clients-only`, exit 0 here | as listed | unchanged |
-| 8 | other clusters: print `unmounting T`, `client.sh stop T || true`; a mount still present gets `WARNING: clean unmount of T refused ...` (stderr) and `client.sh stop --force-discard T || true`; still mounted: `ERROR: still mounted: ...`, exit 1 (this branch ignores the two flags, as before) | as listed | unchanged |
+| 8 | other clusters: print `unmounting T`, `client.sh stop T \|\| true`; a mount still present gets `WARNING: clean unmount of T refused ...` (stderr) and `client.sh stop --force-discard T \|\| true`; still mounted: `ERROR: still mounted: ...`, exit 1 (this branch ignores the two flags, as before) | as listed | unchanged |
 | 9 | Ownership pre-check: any `$LOGS/efsd-n*.pid` that is not a configured local node prints `ERROR: unconfigured daemon record retained: ...; inspect its ownership before cleanup`, exit 1, before any daemon is signalled | as listed | unchanged |
 | 10 | Stop loop: for each configured local node in order, `server_processes.py stop-file $LOGS/efsd-nN.pid <store>`; its own lines go to stdout (`Stopping owned efsd PID ...`, `efsd PID N stopped, orderly` or `forced` or `not an orderly stop`; `ERROR: ...` on stderr) | first non-zero `stop-file` exit aborts the script (`set -e`): later daemons are not signalled | **changed:** the loop goes on; each non-zero node is recorded as `nN(rc R)` |
 | 11 | Exit code | 0 when every node returned 0 (also for an absent pid file or a retained stale identity, which `stop-file` reports as 0); otherwise the first non-zero `stop-file` code (1, 3 or 4) | **changed:** 0 when every node returned 0; otherwise 3 if any node returned 3, else the latest non-zero code (see the review below) |
@@ -163,7 +163,7 @@ Findings (nothing changed; the coordinator decides):
 
 ## Callers and consumers
 
-Searched `~/git/devops`, `~/git/cluster` and the efs repo for `stop.sh` and for the text `efs stopped`. The text `efs stopped` occurs only in `stop.sh` itself (line 96 and the comment at line 8). No file reads the exact success line.
+Searched `~/git/devops`, `~/git/cluster` and the efs repo for `stop.sh` and for the text `efs stopped`. The text `efs stopped` occurs only in `stop.sh` itself (line 96 and the comment at line 8). No file reads the exact success line. A second search for names built at run time (`${...}.sh`, `basename "$0"`, and the `portal.sh` dashboard) found only each sibling script re-executing itself over ssh, nothing that launches `stop.sh` indirectly.
 
 | File and line | Use | Depends on the exact success line | Exit code under `set -e` |
 |---|---|---|---|
@@ -185,7 +185,7 @@ Required follow-ups: none. No caller reads the old success line, and every calle
 
 ## Test results
 
-All runs are on this Mac (macOS 25.6, Python 3.9, bash 3.2); no remote host and none of the stopped Tart VMs (efs1 to efs3) were used.
+All runs are on this Mac (Darwin 25.6.0, Python 3.9, bash 3.2); no remote host and none of the stopped Tart VMs (efs1 to efs3) were used.
 
 | Check | Before (devops `8bc872e`) | After (`f2a1fc5`) |
 |---|---|---|
@@ -195,7 +195,7 @@ All runs are on this Mac (macOS 25.6, Python 3.9, bash 3.2); no remote host and 
 | `python3 nuc-efs/test_efs_identity.py` | not run (does not touch `stop.sh`) | PASS |
 | `python3 nuc-efs/test_gc_driver.py` | not run (does not touch `stop.sh`) | PASS |
 
-Because the ownership fixture cannot run here, its flow was exercised on macOS with a scratch stand-in for `scripts/server_processes.py` (not committed: `record` does nothing, `stop-file` checks the executable name `efsd` and the storage argument, sends SIGTERM and classifies the exit record the way the real helper does) and the guard removed from a copy of the test. This checks the test's logic, the C fake and `stop.sh`; it does not check the real helper.
+Because the ownership fixture cannot run here, its flow was exercised on macOS with `scripts/evidence/k01/stop_sh_fixture_macos.sh`, which removes the Linux guard from a temporary copy of the test and uses the stand-in `scripts/evidence/k01/server_processes_macos_stub.py` as the helper. The stand-in checks the executable name `efsd` and the storage argument, sends SIGTERM, and reports orderly (rc 0) only when the exit record names that PID with `outcome=orderly`, else outcome unknown (rc 4). It does not check the barrier lines, the identity stamp or the forced record. This checks the test's logic, the C fake and `stop.sh`; it does not check the real helper.
 
 | Test | `stop.sh` | Result |
 |---|---|---|
@@ -212,6 +212,12 @@ git -C ~/git/devops show devel:nuc-efs/stop.sh > /tmp/stop.old.sh
 git -C ~/git/devops show k01b-stop-nonorderly:nuc-efs/stop.sh > /tmp/stop.new.sh
 scripts/evidence/k01/stop_sh_exit_codes.sh /tmp/stop.old.sh   # table rows 10 to 12, before
 scripts/evidence/k01/stop_sh_exit_codes.sh /tmp/stop.new.sh   # after
+git -C ~/git/devops show devel:nuc-efs/test_daemon_ownership.py > /tmp/test.head.py
+git -C ~/git/devops show k01b-stop-nonorderly:nuc-efs/test_daemon_ownership.py > /tmp/test.new.py
+sed 's/efs stopped"/efs stopped (orderly)"/' /tmp/stop.old.sh > /tmp/stop.old-line.sh
+for c in "test.head.py stop.old.sh" "test.head.py stop.new.sh" "test.new.py stop.old.sh" \
+         "test.new.py stop.old-line.sh" "test.new.py stop.new.sh"; do
+  set -- $c; scripts/evidence/k01/stop_sh_fixture_macos.sh /tmp/$1 /tmp/$2; done   # the five rows of the table above
 cd ~/git/devops-k01b && for t in test_start_mode test_efs_identity test_gc_driver; do python3 nuc-efs/$t.py; done; bash -n nuc-efs/stop.sh
 ```
 
