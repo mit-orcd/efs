@@ -371,6 +371,7 @@ test-stop-control:
 	python3 tests/test_stop_dirty_drain.py
 	python3 tests/test_k90_unmount_enospc.py
 	python3 tests/test_k102_removed_inode_flush.py
+	python3 tests/test_b6_room_claimant.py
 	python3 tests/test_fixture_interrupt.py
 
 test-wb-runtime:

@@ -68,7 +68,7 @@ import errno, json, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from b6_full_oracle import judge  # noqa: E402
-from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, give_up_held, mgmt, payload  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -377,7 +377,14 @@ def room_scenario(r):
     """K53 admission check with a known cause: unlink one 128 KiB file on the
     full node 3, let the ledger settle, then exactly one more 128 KiB file
     fits and the next is ENOSPC, with the ledger never above its quota."""
-    a = r.a
+    # K90: the fill's last refused write left its chunk dirty in mnt-a. That
+    # chunk is PUT again as soon as room appears, ahead of any new write, so
+    # it would take the fragment this scenario frees (a gate on fstor007 lost
+    # room-0 to it). Give it up first: the unmount is the state proof.
+    old = r.a
+    r.out['room_held'] = give_up_held(old)
+    r.mounts.remove(old)
+    r.a = a = r.mount('mnt-a-room')
     used0 = mark(r, 'room: before unlink')
     os.unlink(a.path / 'fill-0-0')
     r.acked.pop('fill-0-0')
@@ -544,6 +551,7 @@ def run_mode(mode):
         # Steps 3 and 4 (a mount, its session revoke, fsyncs) can settle
         # capacity too: top up so the writers meet a full, still node 3.
         room_scenario(r)
+        a = r.a   # the scenario remounted: its refused chunk is given up
         fill_node3(r, 'topup')
     if mode == 'slow':
         r.set_fault(f'slow:{SLOW_MS} ' + DATA_OPS)
