@@ -253,6 +253,7 @@ test-report-pressure:
 	python3 tests/test_conn_checkout_budget.py
 	python3 tests/test_node_reprobe.py
 	python3 tests/test_node_probe_exchange.py
+	python3 tests/test_node_waiter_cut.py
 	python3 tests/test_pack_budget.py
 	python3 tests/test_pack_compact_schedule.py
 	python3 tests/test_pack_base_reads.py

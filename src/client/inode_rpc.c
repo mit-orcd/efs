@@ -975,6 +975,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
+        efs_client_conn_await_reply(nid, conn);
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
 #if EFS_FAULTS
         if (!rc) rc=rpc_fault_create_reply(type,req,req_len,rtype,payload,plen);
