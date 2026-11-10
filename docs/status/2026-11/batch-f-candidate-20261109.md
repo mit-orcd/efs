@@ -59,8 +59,11 @@ No sanitizer entry printed NOTRUN or SKIP (grep over every `*.out`).
 
 ## Follow-ups (not done here)
 
-- **Attribution of `test_pump_logging.py`'s write floor under the 8-job pool** (run 1: 48 of 50 writes, no errors): its own attribution task, proposed by the coordinator.
-- **Attribution of the three run-3 OVERBUDGET rows** (`test_member_limit.py` 19.2 s of 15, `test_query_delta` with `EFS_QUERY_DELTA_DIRS=1` 5.6 s of 5, `test_raft_ack_window.py` 16.9 s of 15): Task EN lowered these budgets from measurements; they are signals to attribute, never to raise.
+- **Attribution of `test_pump_logging.py`'s write floor under the 8-job pool** (run 1: 48 of 50 writes, no errors): running as Task FD, branch `claude/priceless-grothendieck-da826c`.
+- **Attribution of the three run-3 OVERBUDGET rows**, signals to attribute, never budgets to raise. Against Task EN's wave 67 refit ([budget refit](budget-refit-20261109.md)):
+  - `python3 tests/test_member_limit.py`: 19.2 s of 15. EN kept it at 15 (not lowered; max 13.7 s over 14 gates, fit 20 above the budget).
+  - `EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta`: 5.6 s of 5. EN lowered it from 35 to 5 (max 2.2 s), so run 3 is 2.5 times EN's slowest measurement.
+  - `python3 tests/test_raft_ack_window.py`: 16.9 s of 15. EN kept it at 15 (not lowered; max 10.4 s, fit equal to the budget).
 - **Batch F reruns on the fixed (final) candidate**; the served rows verify there.
 - `tests/live/gc_reclamation.py` `files()`: tolerate a directory removed between listing and scan (the state it waits for), and `tests/test_bench_cli.py` many-workers case (256 workers in a 1 s window under the 8-job pool): both on branch `claude/blissful-chaum-051bdb` (separate session, its own gate and wave; not merged here).
 - F5 used gcc 11.5 where the K2 definition names `CC=clang`; fstor007 has no clang.
