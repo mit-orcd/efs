@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `b8484d2981452585675db24fc70e2a88aa273695`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 18,693 nodes, 78,155 directed typed edges, 590 communities.
+Source base: `d15d984c66bbc426d1010020dbf1ade66acd0aff`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 18,928 nodes, 79,676 directed typed edges, 605 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,38 +19,38 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 27664
+- `calls`: 27866
 - `case_of`: 118
-- `contains`: 27630
+- `contains`: 27921
 - `contract`: 44
-- `defines`: 1987
+- `defines`: 2006
 - `documents_finding`: 8
 - `exercises`: 7
-- `guided_by`: 178
+- `guided_by`: 179
 - `implemented_by`: 138
-- `imports`: 8222
-- `imports_from`: 1017
-- `indirect_call`: 752
+- `imports`: 8315
+- `imports_from`: 1028
+- `indirect_call`: 750
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 3584
-- `method`: 645
-- `rationale_for`: 1433
-- `references`: 2222
-- `references_path`: 1266
+- `mentions_symbol`: 4417
+- `method`: 677
+- `rationale_for`: 1458
+- `references`: 2226
+- `references_path`: 1272
 - `regression_for`: 8
-- `tested_by`: 1107
-- `uses`: 98
+- `tested_by`: 1110
+- `uses`: 101
 
 ## Extraction warnings
 
-- warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 331, 851 symbol(s) extracted)
+- warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)
 - warning: 76 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+71 more)
 
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1812}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1835}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
