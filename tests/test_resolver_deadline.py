@@ -106,6 +106,7 @@ void efs_conn_bind_gen(struct efs_conn *c,uint64_t *g) {(void)c;(void)g;assert(0
 void efs_conn_note_ok(struct efs_conn *c) {(void)c;assert(0);}
 #define EFS_NODE_DOWN_FAILS 4
 #define EFS_NODE_DOWN_MS 30000
+#define EFS_NODE_ADMISSION_MS 5000
 '''
 code=code.replace('#include <assert.h>','#include "client_internal.h"\n#include "efs/rdma.h"\n#include <assert.h>',1)
 code=code.replace('int main(void)',stubs+checkout+'\nint main(void)',1)
