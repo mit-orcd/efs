@@ -30,7 +30,7 @@ Symptom → file → tests (`python3 scripts/tests_for.py client/efs_fuse.<file>
 | POSIX locks, flock, `FUSE_INIT`, readiness pipe | `plock_init.c` | `plock_init.h` | `g_fuse_ready_wr` | none routed; the flock release test is under `.release` |
 | LOOKUP, SETATTR, deep-callback sampling | `lookup.c` | `lookup.h` | — | `.lookup` (1) |
 | The `ll_*_run` operation bodies (xattr, opendir, read/readdir dispatch) | `ll_run.c` | `ll_run.h` | — | `.ll_run` (2) |
-| `efs_fuse_destroy`, the mutation-gated `ll_*` wrappers, the operation table, option parsing, startup, `main` | `main.c` | — | `g_mountpoint` and the stop-control state (`static`) | `.main` (10) |
+| `efs_fuse_destroy`, the mutation-gated `ll_*` wrappers, the operation table, option parsing, startup, `main` | `main.c` | — | `g_mountpoint` and the stop-control state (`static`) | `.main` (11) |
 
 Six catalogue rows span files and keep the bare `client/efs_fuse` tag
 (`opendir_authority_errno`, `fallocate_errno`, `inode_lock_stripes`,
@@ -86,7 +86,7 @@ compile).
 
 ## Tests
 
-- `python3 scripts/tests_for.py client/efs_fuse` lists all 54 rows; the dotted
+- `python3 scripts/tests_for.py client/efs_fuse` lists all 55 rows; the dotted
   forms above select one file's rows (add `--run` after `make all`).
 - Contract → case maps (Task EU): one row per operation or invariant the
   owner's header states, the case that proves it and the command that runs
