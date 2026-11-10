@@ -266,9 +266,12 @@
     "scripts/evidence/orcd/orcd_verify_existing.py": 3,
     "scripts/evidence/pump-logging/ab_hold_matrix.sh": 1,
     "scripts/evidence/pump-logging/pump_logging_d4_profile.py": 9,
+    "scripts/evidence/pump-logging/pump_logging_floor_runs.py": 2,
+    "scripts/evidence/pump-logging/pump_logging_fsync_breakdown.sh": 1,
     "scripts/evidence/pump-logging/pump_logging_fullfs.sh": 1,
     "scripts/evidence/pump-logging/pump_logging_measure.py": 3,
     "scripts/evidence/pump-logging/pump_logging_profile.py": 13,
+    "scripts/evidence/pump-logging/pump_logging_slots.py": 2,
     "scripts/evidence/rdma/qualify_rdma.py": 4,
     "scripts/evidence/task-di/tmp_hygiene.sh": 2,
     "scripts/evidence/task-i/task_i_alloc_probe.c": 7,
@@ -1777,9 +1780,12 @@
     "scripts/evidence/orcd/orcd_verify_existing.py": "d3452f57c62e3d72505345ce959248efb563bf167cb2311dd4b184fe2f5551c8",
     "scripts/evidence/pump-logging/ab_hold_matrix.sh": "374ea79ce47ccda78a7900ed8b0628213e2fb9b5637eb7b1837579eea3477013",
     "scripts/evidence/pump-logging/pump_logging_d4_profile.py": "62e9793643417df01f33a05acc64be9c04c1aa04052efbc3ee3df8070599cea2",
+    "scripts/evidence/pump-logging/pump_logging_floor_runs.py": "25559ba7c5925bf7f9d14ff75d9a4a6309f8379299778bbccd5c86fdb1df4b55",
+    "scripts/evidence/pump-logging/pump_logging_fsync_breakdown.sh": "0401b9f618ac264e0c93dc90a3e6e9b347700ecb610c3652c4b083595b529508",
     "scripts/evidence/pump-logging/pump_logging_fullfs.sh": "241e2182102e96a178b0a0c79620bdea3f107d23c48efbaf1824c1931dd7fda6",
     "scripts/evidence/pump-logging/pump_logging_measure.py": "a7a6b9ec1e640da301a440dec20b2b779fbcf721a0787bab8a433d3ee6e29886",
     "scripts/evidence/pump-logging/pump_logging_profile.py": "6e45e5f65bd71595e9df988e6ec3b5387cc6e801098e19d0a3f82d4d8b8988ee",
+    "scripts/evidence/pump-logging/pump_logging_slots.py": "10e4fb29d00e794b31415700acccbe974756ed6d3a820409a63f87502b4ccf73",
     "scripts/evidence/rdma/qualify_rdma.py": "9e0d464cb90e8cf200e907a4c909608eb19186ec578ad5517996ff27a98bdf62",
     "scripts/evidence/task-di/tmp_hygiene.sh": "0c09e0ce80388b661dbde59df9f42461cdf712a5ffe636cd5bad018411159f2f",
     "scripts/evidence/task-i/task_i_alloc_probe.c": "0652220360368676d604c530cabb0364c96c173d47a41d2018e991a77eb437a1",
@@ -2743,7 +2749,7 @@
     "tests/test_pull_absent_drop.py": "0b0ee3f39fb20a753e095efeca0bf28db4305ccf8370be11d38e64ead8aa95fa",
     "tests/test_pull_deadline.py": "e1e3118294166f8d6dd55b9093c17acb35d055b41b4d9acc6f9560000b01f309",
     "tests/test_pull_group_boundary.py": "c0a8098c2aca130516feeae21f5938750b9991f265a678682f33bf86f8d2406e",
-    "tests/test_pump_logging.py": "a227024dd4bff067789026e18595ebab6f1fc5738b6356cb12d1bf72928907fb",
+    "tests/test_pump_logging.py": "ecf975139e36727ade8d8d2280bf9939e9012b398a376c961a56ee58e4c69437",
     "tests/test_put_drain.py": "ae45012539164dccdde0d73f4d74ba20499ef283a23012a0e5c227067fa92bfd",
     "tests/test_put_identity.py": "ce01448b0a34a11fc21a6023d40c30d51c2b4589d171738d3d850583ae9b6fca",
     "tests/test_put_orphan.c": "cfa611963af6209917ae9f9448238c60638d35d03f706838b81f859b2ca0c184",
@@ -2999,10 +3005,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1793
+    "calls": 1795
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "ebc0882b771c0c233c4769cb83381bdbd98c2b6f"
+  "source_commit": "547f75e8691d55c51915e2f0c11c2ad225df3eed"
 }
