@@ -259,6 +259,21 @@ def writer_main(index, path, count, fsync_every, q, progress_dir=None):
                final_fsync_seconds=fsync_s, final_fsync_errno=fsync_rc,
                write_latency_s=pct, errors=errors[:50], error_count=len(errors)))
 
+def post_fsync(path, label):
+    """Observation only (--post-fsync): one fsync of the shared file, not part of the verdict."""
+    fd, b = os.open(path, os.O_WRONLY), time.time()
+    try:
+        os.fsync(fd)
+        rc = 0
+    except OSError as e:
+        rc = e.errno
+    finally:
+        os.close(fd)
+    r = dict(label=label, t=b, errno=rc, seconds=round(time.time() - b, 3))
+    print('post-recovery fsync', json.dumps(r), flush=True)
+    return r
+
+
 class Cluster:
     def __init__(self, a):
         self.a, self.root, self.rel = a, Path(a.root), Path(a.rel)
@@ -469,6 +484,9 @@ def main():
     p.add_argument('--client-trace', action='store_true')
     p.add_argument('--client-label', default='', help="export label argument for older clients (e.g. 'default')")
     p.add_argument('--label', default='')
+    p.add_argument('--post-fsync', action='store_true',
+                   help='observation only (K110): fsync the shared file once after the last failover '
+                        'and once after the warm reads; recorded, not part of the verdict')
     p.add_argument('--lose-reserve-every', type=int, default=0,
                    help='W64: drop every Nth granted reserve reply on the writer mount (EFS_FAULTS=1 build)')
     p.add_argument('--lose-reserve-max', type=int, default=4)
@@ -554,6 +572,8 @@ def main():
         stop_evt.set()
         if ft:
             ft.join(timeout=600)
+        if a.post_fsync:  # K110 capture: does an fsync succeed once the failovers are over?
+            report['post_recovery_fsync'] = [post_fsync(path, 'after-failover')]
         wall = time.monotonic() - t0
         results.sort(key=lambda r: r['writer'])
         acked = {r['writer']: r['acked'] for r in results}
@@ -631,6 +651,8 @@ def main():
                 peer_writers_ok=peer_ok, ok=ok_l)
         ok_w, report['checks']['warm_primary'] = verify(path, acked, failed, holes, holes_max)
         ok_p, report['checks']['warm_peer'] = verify(peer / path.name, acked, failed, holes, holes_max)
+        if a.post_fsync:
+            report['post_recovery_fsync'].append(post_fsync(path, 'after-warm-reads'))
         # Cold: drain clients, stop every daemon, restart, fresh mount.
         c.stop_all()
         time.sleep(2)
