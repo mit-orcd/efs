@@ -169,7 +169,7 @@ and arguments select cases: with none every case runs, otherwise a case runs
 when some argument is a substring of its name, in the file's order
 (`./tests/test_meta_apply test_publish` runs `test_publish` and
 `test_publish_stale_then_retry`). An argument that matches no case exits 2,
-so a misspelling is not a silent pass.
+so a misspelling is not a silent pass. `test_wb_interface`, `test_open_interface` and `test_find_res_interface` take the same arguments.
 
 Every `test-long` command has a row in `tests/budgets.tsv` (W160): the
 seconds it may take at `EFS_TEST_JOBS=8` on an 8-CPU host, the pool slots

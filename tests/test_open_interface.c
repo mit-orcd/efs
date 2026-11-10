@@ -25,6 +25,8 @@
 #include "commands/source.h"
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static __thread uint64_t t_deadline;
@@ -623,7 +625,51 @@ static void *counter(void *arg)
     return NULL;
 }
 
-int main(void)
+/* Case filter: no argument runs every case; an argument runs the cases whose
+ * name contains it; --list prints the names; an argument that matches no case
+ * exits 2, so a misspelling is not a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
+{
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+static void test_no_row(void)
 {
     int leased = -1, publishing = -1;
 
@@ -635,6 +681,11 @@ int main(void)
     efs_open_append_burst_published(7, EFS_OK, 1000);
     assert(release_pending(7) == EFS_OK && !efs_open_close_unadmitted(7));
     assert(!efs_client_ino_is_open(7));
+}
+
+static void test_two_opens(void)
+{
+    int leased = -1;
 
     /* Two opens, one HOLD; the second close is the last and proves CLOSE. */
     assert(efs_open_acquire_fileid(42, 99) == EFS_OK && opens == 1);
@@ -644,7 +695,10 @@ int main(void)
     assert(last_close(42) && efs_client_ino_is_open(42) && efs_open_retained() == 1);
     assert(release_pending(42) == EFS_OK && closes == 1);
     assert(!efs_client_ino_is_open(42) && !efs_open_retained());
+}
 
+static void test_retained_close(void)
+{
     /* A CLOSE edge that fails leaves the row retained: open to the evictor
      * and GETATTR, counted by efs_open_retained, refused to a reopen with
      * the edge's error, drained by the retry pass once the edge answers. */
@@ -660,6 +714,11 @@ int main(void)
     assert(efs_open_retry_pass(stats_now_ms() + 1000) == EFS_OK);
     assert(!efs_client_ino_is_open(42) && !efs_open_retained());
     assert(efs_open_acquire_fileid(42, 99) == EFS_OK && last_close(42) && release_pending(42) == EFS_OK);
+}
+
+static void test_append_burst(void)
+{
+    int publishing = -1;
 
     /* Append bookkeeping on a real row: 32 writes or one second publish
      * (append_burst_clock: the age restarts when the publication is done,
@@ -679,7 +738,10 @@ int main(void)
     assert(efs_open_append_burst_note(42, 6401) == 1); /* a failed drain publishes again */
     efs_open_append_burst_published(42, EFS_OK, 6500);
     assert(last_close(42) && release_pending(42) == EFS_OK && !efs_client_ino_is_open(42));
+}
 
+static void test_retained_rows(void)
+{
     /* 3,000 retained rows across colliding buckets, drained by the pass. */
     close_rc = EFS_ERR_BUSY;
     for (efs_ino_t i = 1; i <= 3000; i++) {
@@ -692,21 +754,16 @@ int main(void)
     while (efs_open_retained() && passes++ < 10)
         assert(efs_open_retry_pass(stats_now_ms() + 1000) != EFS_ERR_NET);
     assert(!efs_open_retained() && passes <= 2 && !efs_client_ino_is_open(4096));
+}
 
-    open_lease_shared_and_failed_hold();
-    open_lease_edge_serialization();
-    open_lease_hashed_rows();
-    open_busy_admission();
-    open_busy_verdicts();
-    open_busy_deadline();
-    open_retry_lock_budget();
-    fuse_lease_retention_close_verdicts();
+static void test_fuse_lease_retention_retry_order(void)
+{
     fuse_lease_retention_retry_order(0);
     fuse_lease_retention_retry_order(1);
-    fuse_lease_retention_retry_turns();
-    fuse_lease_retention_retry_thread();
-    fuse_lease_retention_adoption();
-    fuse_lease_retention_combined();
+}
+
+static void test_concurrent_churn(void)
+{
     reset_stub();
 
     /* Four openers and closers on distinct inodes, one counter beside them. */
@@ -718,6 +775,34 @@ int main(void)
     for (unsigned i = 0; i < 5; i++)
         pthread_join(t[i], NULL);
     assert(!efs_open_retained() && opens == before + 8000);
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_no_row);
+    RUN(test_two_opens);
+    RUN(test_retained_close);
+    RUN(test_append_burst);
+    RUN(test_retained_rows);
+    RUN(open_lease_shared_and_failed_hold);
+    RUN(open_lease_edge_serialization);
+    RUN(open_lease_hashed_rows);
+    RUN(open_busy_admission);
+    RUN(open_busy_verdicts);
+    RUN(open_busy_deadline);
+    RUN(open_retry_lock_budget);
+    RUN(fuse_lease_retention_close_verdicts);
+    RUN(test_fuse_lease_retention_retry_order);
+    RUN(fuse_lease_retention_retry_turns);
+    RUN(fuse_lease_retention_retry_thread);
+    RUN(fuse_lease_retention_adoption);
+    RUN(fuse_lease_retention_combined);
+    RUN(test_concurrent_churn);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     puts("open interface: no row, two opens, retained CLOSE and the retry pass, append burst, 3000 retained rows, open_lease, open_busy, open_retry_lock_budget, fuse_lease_retention cases, concurrent churn PASS");
     return 0;
 }

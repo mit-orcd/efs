@@ -23,6 +23,9 @@
 #include <assert.h>
 #include <errno.h>
 #include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static __thread uint64_t t_deadline;
 static pthread_mutex_t gate_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -169,20 +172,70 @@ static void open_gate(int rc)
     pthread_mutex_unlock(&gate_mu);
 }
 
-int main(void)
+/* Case filter: no argument runs every case; an argument runs the cases whose
+ * name contains it; --list prints the names; an argument that matches no case
+ * exits 2, so a misspelling is not a silent pass. */
+static int g_argc, g_list;
+static char **g_argv;
+static char *g_used;
+
+static void run_init(int argc, char **argv)
+{
+    g_argc = argc;
+    g_argv = argv;
+    g_list = argc == 2 && !strcmp(argv[1], "--list");
+    g_used = calloc((size_t)argc, 1);
+    if (!g_used)
+        abort();
+}
+
+static int run_case(const char *name)
+{
+    int hit = g_argc == 1;
+
+    if (g_list) {
+        puts(name);
+        return 0;
+    }
+    for (int i = 1; i < g_argc; i++)
+        if (strstr(name, g_argv[i]))
+            hit = g_used[i] = 1;
+    return hit;
+}
+#define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
+
+static int run_unmatched(void)
+{
+    int bad = 0;
+
+    for (int i = 1; i < g_argc && !g_list; i++)
+        if (!g_used[i]) {
+            fprintf(stderr, "%s: no case matches '%s' (see --list)\n", g_argv[0], g_argv[i]);
+            bad = 1;
+        }
+    return bad;
+}
+
+static void test_unstarted(void)
 {
     /* Unstarted pool: nothing pending, drains succeed, stop is a no-op. */
     assert(efs_wb_pending(0) == 0 && efs_wb_pending(7) == 0);
     assert(efs_wb_sync() == EFS_OK && efs_wb_sync_ino(7) == EFS_OK);
     efs_wb_stop();
+}
 
+static void test_start_stop_restart(void)
+{
     /* Start on first enqueue, stop, restart. */
     assert(write_one(1) == EFS_OK && put_calls == 1);
     assert(efs_wb_pending(0) == 0 && efs_wb_pending(1) == 0);
     efs_wb_stop();
     assert(efs_wb_pending(0) == 0 && efs_wb_sync() == EFS_OK);
     assert(write_one(1) == EFS_OK && put_calls == 2);
+}
 
+static void test_sticky_error(void)
+{
     /* Sticky error: set by ino 42, kept by ino 7's drain, returned once. */
     fail_ino = 42;
     assert(write_one(42) == EFS_ERR_IO);
@@ -192,7 +245,10 @@ int main(void)
     assert(write_one(42) == EFS_ERR_IO);
     assert(efs_wb_sync() == EFS_ERR_IO && efs_wb_sync() == EFS_OK);
     fail_ino = 0;
+}
 
+static void test_deadline_drains(void)
+{
     /* Pending and drains bounded by the caller's deadline. */
     pthread_t t;
     struct writer w;
@@ -215,7 +271,10 @@ int main(void)
     t_deadline = stats_now_ms() + 20; /* the error survived the BUSY drains */
     assert(efs_wb_sync_ino(5) == EFS_ERR_IO);
     t_deadline = 0;
+}
 
+static void test_drain_across_stop(void)
+{
     /* A drain waiting when the workers are stopped: the in-flight PUT ends,
      * the stop joins after it, the drain returns its error, the pool is
      * unstarted again. */
@@ -237,7 +296,10 @@ int main(void)
     assert(write_one(1) == EFS_OK);
     assert(efs_wb_sync() == (sync_rc == EFS_OK ? EFS_ERR_IO : EFS_OK));
     efs_wb_stop();
+}
 
+static void test_failed_start(void)
+{
     /* Task DT: the second worker start fails; the first is joined, the
      * writer gets NOMEM with its buffer released, and a writer racing the
      * undo gets IO (pool stopping) or starts a fresh pool, never a pool
@@ -253,7 +315,10 @@ int main(void)
     assert(efs_wb_pending(0) == 0 && efs_wb_sync() == EFS_OK);
     assert(write_one(1) == EFS_OK);
     efs_wb_stop();
+}
 
+static void test_drains_race_stop(void)
+{
     /* Task DT: drains and pending race start/stop cycles and a second
      * stopper; an enqueue racing a stop gets IO, otherwise its PUT rc. */
     pthread_t readers[4], stopper;
@@ -272,8 +337,28 @@ int main(void)
     assert(!pthread_join(stopper, NULL));
     efs_wb_stop();
     assert(efs_wb_pending(0) == 0 && efs_wb_sync() == EFS_OK);
+}
 
+static void test_memo_balance(void)
+{
     assert(memo_begin == put_calls && memo_end == put_calls);
+}
+
+int main(int argc, char **argv)
+{
+    run_init(argc, argv);
+    RUN(test_unstarted);
+    RUN(test_start_stop_restart);
+    RUN(test_sticky_error);
+    RUN(test_deadline_drains);
+    RUN(test_drain_across_stop);
+    RUN(test_failed_start);
+    RUN(test_drains_race_stop);
+    RUN(test_memo_balance);
+    if (g_list)
+        return 0;
+    if (run_unmatched())
+        return 2;
     puts("wb interface: unstarted, start/stop/restart, sticky error, deadline drains, drain across stop, failed start, drains racing stop PASS");
     return 0;
 }
