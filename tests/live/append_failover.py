@@ -201,7 +201,7 @@ def availability(accounting, results):
             sum(r['error_count'] for r in results) == accounting['failed_writes'])
 
 
-def writer_main(index, path, count, fsync_every, q, progress_dir=None):
+def writer_main(index, path, count, fsync_every, q, progress_dir=None, settle=None):
     acked, failed, lat, errors = [], [], [], []
     fd = os.open(path, os.O_WRONLY | os.O_APPEND)
     t0 = checkpoint = time.monotonic()
@@ -238,6 +238,9 @@ def writer_main(index, path, count, fsync_every, q, progress_dir=None):
                 errors.append(f'mid fsync seq={seq} errno={e.errno} s={time.monotonic()-b:.3f}')
     writes = time.monotonic() - t0
     note('final-fsync',count)
+    if settle:  # (ready, go): the controller stops and the cluster is healthy before the final fsync
+        settle[0].release()
+        settle[1].wait()
     b = time.monotonic()
     fsync_rc = 0
     try:
@@ -487,6 +490,11 @@ def main():
     p.add_argument('--post-fsync', action='store_true',
                    help='observation only (K110): fsync the shared file once after the last failover '
                         'and once after the warm reads; recorded, not part of the verdict')
+    p.add_argument('--settle-before-fsync', action='store_true',
+                   help='K110: every writer waits for its final fsync until the failover controller has '
+                        'stopped and every restarted member finished verified recovery. Without it the '
+                        'final fsync may land in a member outage or recovery fence, where EIO is the '
+                        'deliberate answer (fail closed), not a lost fragment')
     p.add_argument('--lose-reserve-every', type=int, default=0,
                    help='W64: drop every Nth granted reserve reply on the writer mount (EFS_FAULTS=1 build)')
     p.add_argument('--lose-reserve-max', type=int, default=4)
@@ -531,8 +539,10 @@ def main():
         q = mp.Queue()
         nw = a.writers + a.peer_writers
         per = a.records // nw
+        settle = (mp.Semaphore(0), mp.Event()) if a.settle_before_fsync else None
         ws = [mp.Process(target=writer_main,
-                         args=(w, str(path if w < a.writers else peer / path.name), per, a.fsync_every, q, str(root)))
+                         args=(w, str(path if w < a.writers else peer / path.name), per, a.fsync_every, q, str(root),
+                               settle))
               for w in range(nw)]
         events = []
         import threading
@@ -551,6 +561,30 @@ def main():
         if a.failover != 'none':
             ft = threading.Thread(target=checked_failover, daemon=True)
             ft.start()
+        def settle_cluster():
+            try:
+                for _ in range(nw):
+                    while not settle[0].acquire(timeout=5):
+                        if any(w.exitcode not in (None, 0) for w in ws):
+                            return
+                stop_evt.set()
+                if ft:
+                    ft.join(timeout=600)
+                starts = {i: sum(1 for e in events if e.get('killed') == i) for i in (1, 2, 3)}  # a first start logs no recovery
+                for _ in range(240):
+                    done = {i: grep_count(root / 'logs' / f'efsd-n{i}.log', r'recovery: verified in')[0]
+                            for i in (1, 2, 3)}
+                    if all(done[i] >= starts[i] for i in done) and all(c.leader_node(g) for g in (0, 2)):
+                        break
+                    time.sleep(.5)
+                else:
+                    failover_errors.append(f'cluster not settled: verified={done} starts={starts}')
+                    return
+                print('settled before the final fsync', json.dumps(dict(verified=done, starts=starts)), flush=True)
+            finally:  # never leave a writer waiting
+                settle[1].set()
+        if settle:
+            threading.Thread(target=settle_cluster, daemon=True).start()
         results = []
         while len(results) < nw:
             try:

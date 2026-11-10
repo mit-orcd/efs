@@ -89,6 +89,22 @@ product" (A7 compiled expiry out behind `EFS_BUILD_EXPIRY`). Binding:
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Direct I/O only** (user, Oct 24; replaces the earlier "both, qualified"). Remove the `--direct-io`/`--no-direct-io` flag and the buffered path. Storage that cannot meet `O_DIRECT` requirements is refused with a clear error, never a silent fallback. Small and unaligned operations stay correct internally, and explicit durability barriers stay: `O_DIRECT` alone does not make a write durable. Qualify the retained path for reads, writes, packing, `fsync` and recovery. |
 
+**F23 amended Nov 10 (K110, user: "Barrier proof").** F23 said an earlier
+ambiguous write is not thereby proven. That stays true for a write the
+restarted member cannot show was made durable, and no longer for one it can:
+a fragment acknowledged by incarnation V at or before V's last *completed*
+durability barrier (`syncfs` of the root, then the fdatasynced durability
+record) is durable once the successor's verified recovery (K36) has dropped no
+file that barrier covers. The successor reports its predecessors' last
+barriers in its COMMIT reply (up to 7 per root, newest first), and the client
+counts such a fragment durable instead of lost. A fragment acknowledged after
+that barrier, one on a root whose history recovery could not validate, and
+any reply without a history stay lost, and `fsync` stays `EIO` when the stripe
+needs them. The cross-incarnation rule fails closed everywhere else. Scope:
+the same process-kill and OS-crash assumptions as the asynchronous
+acknowledgement; full power-loss qualification stays a separate scope decision.
+Design and evidence: [K110](2026-11/k110-fsync-after-sigkill-20261110.md).
+
 A6 read-path selectors ([table](2026-10/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
 
 - `EFS_READ_PREFETCH`: **16 chunks built in**; remove the variable.

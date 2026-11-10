@@ -1281,6 +1281,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_k36_recovery.py
+	python3 tests/test_k110_barrier_history.py
 	python3 tests/test_expiry_policy_live.py
 	python3 tests/test_settings_listing.py
 	python3 tests/posix/posix_expiry.py --private

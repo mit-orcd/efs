@@ -33,7 +33,9 @@ acknowledged on two fragments, the W154 mark in the publication's batch):
    unrelated down node is never asked. A fragment is **durable** when a
    COMMIT sent after its acknowledgement succeeds with the same verifier;
    with another verifier it is **lost** (incarnation mismatch: never resent,
-   never forgotten). A refusal (failed barrier, uncertain recovery, F23/K36)
+   never forgotten) unless the node's COMMIT reply carries a barrier history
+   that covers the fragment's root and position (K110, D42 F23 as amended
+   Nov 10). A refusal (failed barrier, uncertain recovery, F23/K36)
    or no reply proves nothing.
 3. **Proof per stripe.** Three durable, or two durable and the third
    `MISSING`: proven. Two durable and the third unproven or lost: the client
@@ -153,8 +155,9 @@ python3 tests/test_k35_fsync_degraded.py
   across hosts, and over RDMA.
 - **Unclean stop (F23):** stripes with a fragment on a recovery-uncertain
   store are marked degraded and never rebuilt there until K36 lands; a
-  stripe that needs two such fragments fails EIO for good. Not exercised by
-  a daemon test here.
+  stripe that needs two such fragments fails EIO for good, except where the
+  restarted member's barrier history covers the fragment (K110, D42 F23 as
+  amended Nov 10). Not exercised by a daemon test here.
 - **Lost records stay:** a stripe whose fragments were lost on two
   re-incarnated members is EIO for that file for the life of the mount
   (sticky by design); its record is not retired.
