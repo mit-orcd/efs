@@ -13,26 +13,45 @@ members still fail closed. **The multi-host check (Task EZ's S2 method with clea
 unmounts during the stall) is still owed.** The K109 row stays the
 coordinator's to rule.
 
+**Second round (review of `889ea7e7d`).** Five findings were fixed; each is in the
+section named: (1) a worker parked at daemon stop used a pooled connection the stop had
+already destroyed: workers now use their own connections and the stop wakes and drains them
+first ("Fence workers and the daemon stop"); (2) the late-refusal argument and a test that
+pins it ("A refusal is seen only if it arrives before a majority sealed"); (3) exact call
+counts are checked again and the inline fallback has its own pass ("Tests"); (4) the guide,
+`operations.md` and release note L29 now say what the code does ("Documents"); (5) the
+budget row follows the rule, the wrapper has no timeout of its own and the driver polls no
+clock ("Budget and waits").
+
 ## Source and build
 
-* Base: devel `cff8eb424`. Branch `claude/sad-brahmagupta-5d44a8`, code commit
-  `935c39e36` plus test commit `a8001b6f8` (the unit harness waits for its workers
-  after TSan found a race in the harness; no product source differs). The live
-  runs used the tree of `935c39e36`; the page and ledger commits that follow
-  change no source.
+* Base: devel `cff8eb424`. Branch `claude/sad-brahmagupta-5d44a8`. Round 1: code
+  commit `935c39e36` plus test commit `a8001b6f8` (the unit harness waits for its
+  workers after TSan found a race in the harness; no product source differs). The
+  20-run before/after table, the `SIGSTOP`, split-leader and two-stalled rows below
+  ran on the round 1 tree (`935c39e36`). Round 2: code commit `02618815e`
+  (worker connections, stop drain, tests, documents), then `1ab6d0180` (registry placement),
+  `8d88c13e3` (comments, budget text, the client-visible rc in the documents), `06bb0e396` and
+  `12c515461` (`settings.md`, `settings.h` for the new fault variable); the round 2 checks in
+  "Verification on xorinox" ran on `12c515461`, and the page, ledger and graph commits that
+  follow change no source.
   Binaries `efsd`, `tests/faults/efsd`, `efs-fuse`, `efs-mgmt`, `efs-bench` from
   `make all tests/faults/efsd` on the host; build id `unknown` (no `.git` there).
   The "before" runs used the unmodified `git archive cff8eb424` tree built the
   same way.
 * Changes: `src/server/raft_host.c` (`host_storage_fence_members` and its
-  helpers; `host_inode_rpc_peer` split into `host_inode_rpc_addr` plus the
-  address lookup; `server_raft_host_storage_session_fence` answers BUSY, not
-  INVAL, while the host is not running), `src/common/session_revoke.c`
-  (comment), `tests/test_storage_fence_members.py`,
-  `tests/test_readdir_reply_boundary.py` (extracts both halves of the split
-  function), new `tests/live/k109_stalled_member_unmount.py` and
-  `tests/test_k109_stalled_member_unmount.py`, `Makefile`, `tests/budgets.tsv`,
-  `tests/sanitizer_check.sh` (both new tests join the gate).
+  helpers, the worker connection registry `host_fence_rpc` / `host_fence_drain`,
+  the drain call at the top of `server_raft_host_stop`;
+  `server_raft_host_storage_session_fence` answers BUSY, not INVAL, while the host
+  is not running, and in fault builds parks on `EFS_FAULT_FENCE_PARK`),
+  `src/server/peer_pool.c` and `server_internal.h` (`server_peer_conn_new_armed`:
+  the same private connection, with a hook that publishes the socket during the
+  handshake), `src/common/session_revoke.c` (comment),
+  `tests/test_storage_fence_members.py`, new `tests/live/k109_stalled_member_unmount.py`
+  and `tests/test_k109_stalled_member_unmount.py`, `Makefile`, `tests/budgets.tsv`,
+  `tests/sanitizer_check.sh` (both new tests join the gate), and the three documents
+  named under "Documents". `host_inode_rpc_peer` is as on devel (round 1 split it;
+  round 2 reverted that, so `tests/test_readdir_reply_boundary.py` is unchanged).
 
 ## The fence path and its reply codes
 
@@ -82,12 +101,41 @@ majority is still needed), and below a majority it is returned. Unknown codes
 default to "not sealed" for the same reason; only the three refusals fail early.
 
 **A refusal is seen only if it arrives before a majority sealed.** The call
-returns as soon as the majority is in, so a STALE that arrives after two seals is
-not seen. That is acceptable: the client's next step, FINISH, is epoch-bound and
-rejects a session that moved on, and sealing an older floor is harmless (a
-certificate only moves up). The unit table makes the order deterministic (it
-holds the sealing members back until the refusal is recorded); the product does
-not promise it.
+returns as soon as the majority is in (`raft_host.c:15454`, the wait loop leaves on
+`refused`, on `sealed * 2 > count` or when no answer is pending), so a STALE, INVAL or
+PROTO that arrives after the majority sealed is recorded and logged by its worker but
+changes nothing. Why that is safe, with the lines that carry it:
+
+1. *The majority is what the rule needs, and a refusal cannot lower it.* Only an `rc 0`
+   reply that names this UUID and floor counts as sealed (`host_fence_class`,
+   `raft_host.c:15375`; a mismatching reply is PROTO, not sealed). A late refusal is
+   a member that did not seal; the count of members that did is unchanged by it.
+2. *Stopping at the first refusal is an early exit, not the guard.* STALE (the member
+   read another epoch or a state other than ACTIVE or FENCING) says the session moved
+   on. That is also what the leader checks, itself, before it asks any member: the
+   authority read at `raft_host.c:15819-15821` fails the call with STALE when the epoch is
+   below 2, when the state is not FENCING (or ACTIVE, for FINISH), or when the epoch in
+   the command differs from the authority's. INVAL (floor below 2, `check_only` above 1,
+   zero UUID, wrong length) describes the request, which the leader built from that same
+   authority read, or a member without a storage path (that member did not seal and
+   the majority did). PROTO is one member's unusable reply.
+3. *FINISH is epoch-bound and repeats the fence.* After the storage-fence call the client
+   sends FINISH. The leader runs `host_storage_fence_members` again with `check_only=1`
+   (a second majority has to prove the certificate already holds the floor), re-reads the
+   authority (`raft_host.c:15819`), freezes the verified epoch in the command
+   (`storage_finish_cmd`), and the applied command is `efs_session_finish_fence_epoch`
+   (`raft_host.c:2942`, `src/meta/session.c:338`), which returns STALE when the session's
+   epoch is not the one the fence verified (`session.c:308`). A session that moved on after
+   the majority sealed therefore cannot be finished at the old epoch, and a late STALE is
+   re-derived there.
+4. *Sealing is monotonic.* A certificate only moves up, so a late seal at an older floor is
+   harmless (see the stalled-member argument below).
+
+The unit table pins both sides: its refusal rows hold the sealing members back until the
+refusal is recorded (the call then must fail), and its `late` rows hold the refusing member
+back until the call returned (the call must return OK, the refusal must still be unanswered at
+return, and must arrive and be logged afterwards). The product does not promise which of the
+two orders a real cluster shows.
 
 ## Defect and fix
 
@@ -105,9 +153,10 @@ The fix (`src/server/raft_host.c`):
 
 * every member is asked at once; a remote answer is awaited by a detached worker
   that owns a copy of the endpoint and shares only a refcounted round, so the
-  call can return, and the host can stop, while a slow member's worker is still
-  waiting (`host_inode_rpc_addr` touches no host state). If a thread cannot be
-  created the member is asked inline, as before;
+  call can return while a slow member's worker is still waiting. The worker asks
+  over its own connection (`host_fence_rpc`), not the shared pool, and the daemon
+  stop wakes and joins it (next section). If a thread cannot be created the member
+  is asked inline, as before; this node's own member is always asked inline;
 * the call returns when a majority sealed, when a refusal arrived, or when every
   member has answered; it never waits for the rest, and no new timeout, sleep
   or bound was added or changed (the 15 s barrier is untouched);
@@ -122,15 +171,53 @@ The fix (`src/server/raft_host.c`):
   a refusal.
 
 Callers: `host_storage_fence_members` has one caller (`server_raft_host_submit`,
-STORAGE_FENCE and FINISH). `host_inode_rpc_peer` keeps its signature and its
-other callers; `server_raft_host_storage_session_fence` is called by the daemon
+STORAGE_FENCE and FINISH). `server_raft_host_storage_session_fence` is called by the daemon
 handler (`EFS_MSG_STORAGE_SESSION_FENCE`) and by the fence itself for this node.
+`server_peer_conn_new` keeps its behaviour (it now calls `server_peer_conn_new_armed`
+with no hook); `peer_connect` has no other change.
+
+## Fence workers and the daemon stop
+
+Round 1 let a worker ask over `server_peer_conn_get` (the shared pool). The review found
+that a worker parked in `efs_conn_recv_msg` when the daemon stops uses a connection the
+pool shutdown (`server_peer_pool_shutdown`, `peer_pool.c`, phase `peer-pool` after
+`raft-host`) already destroyed, and that its `server_peer_conn_drop` then destroys it again.
+**Reproduced under ASan on the round 1 code** (below): `heap-use-after-free` in
+`efs_conn_recv_msg` called from `host_fence_worker`, freed by `server_peer_pool_shutdown`.
+
+The fix:
+
+* `host_fence_rpc` opens a private connection (`server_peer_conn_new_armed`, the same
+  connect, declare and RDMA upgrade as the pool's) and never touches the pool, so the pool
+  shutdown cannot free what a worker holds. The connection is destroyed by the worker.
+* Every worker lists its socket from the connect to the end of the exchange (the `arm`
+  hook runs after `connect`, before the declare, and `disarm` before any close; both and
+  the drain run under one mutex, so a listed socket is open). A worker also counts itself
+  active for the whole exchange.
+* `host_fence_drain`, the first call of `server_raft_host_stop` (before the host's own
+  teardown, and so before the `peer-pool` phase), refuses new exchanges, calls
+  `shutdown(fd)` on every listed socket and waits for the active count to reach 0. A TCP
+  wait (declare, send or receive) returns at once; the worker records "transport
+  unavailable" and exits. It logs `storage-fence: stop woke N worker(s) waiting on a
+  member`. `server_raft_host_stop` clears the flag at its end (`host_fence_resume`), so a host started again asks members again.
+* No timeout, sleep or bound is added; the wait is on a condition variable.
+
+Limits, stated plainly: (a) the socket is not listed during `connect()` itself, so a member
+that does not answer SYN holds the drain for the connect's own bound; (b) an RDMA
+connection waits on its completion queue, not on the socket, so `shutdown(fd)` does not
+wake it and the drain waits for that exchange's own 30 s receive bound (the RDMA stop was
+not run here); (c) a fence the stopping node itself issues during the drain is refused
+(`transport unavailable`, counted as unreached), which is what a stopping node should do.
+The first design (list only the established connection) was tried on xorinox and was
+wrong: with the member frozen the worker waits in the declare handshake, the drain waited
+the 30 s bound for it and the stop hit its 50 s deadline (`outcome=forced` in the node log);
+listing the socket from the connect fixed it.
 
 Safety for a member that is alive but stalled (K54's argument was written for a
 member that is down): the epoch is committed in the session shard log without
 that member, and a storage admission needs a fresh lane-leader STATUS proof; a
 lagging storage member delegates the whole session and ticket read to the lane
-leader instead of using its own frozen KV (`raft_host.c:15805`), so it cannot
+leader instead of using its own frozen KV (`raft_host.c:15882`), so it cannot
 admit a revoked epoch from stale state. **Not run:** a hand-built old-epoch PUT
 against the stalled member after a revoke (K54's control, with stall instead of
 kill). It is listed under "Not verified".
@@ -168,44 +255,134 @@ majority` 11 times.
 The leaders-split run was added because the soak says "leaders"; the harness'
 default puts both on node 1. The `SIGSTOP` variants stop node 3 after the
 client's writes and `SIGCONT` it after the unmount, except the last run, where
-node 1 is stopped cleanly with a worker still parked on the stopped node 3:
-exit 0 in 30.1 s after the fix and 45.5 s before it (both include waits on the
-stopped member elsewhere in shutdown; the 30 s is not attributed to the fence
-worker, which no stop path joins).
+node 1 is stopped cleanly with workers still waiting on the stopped node 3:
+exit 0 in 30.1 s on the round 1 tree and 45.5 s on devel. In round 2 the same
+run (`--sigstop --runs 1`, node 1's exit record parked so the process outlives
+its teardown by 5 s) took 35.2 s: `elapsed_ms=30173` in the `shutdown:` line, of
+which the drain is not a part (it woke 2 workers in 0.2 s after the stop began).
+The rest is a wait on the frozen member elsewhere in the raft-host phase; it is
+older than this task (45.5 s on devel), and was not attributed or changed here.
+The `--park` run (below) has no frozen process and stops in 177 ms.
 
 ## Tests
 
-| Test | Result on devel `cff8eb424` | Result on the fix |
+| Test | Before | After |
 | --- | --- | --- |
-| `tests/test_storage_fence_members.py` (fast, 33 rows by two modes: sealed, unreached, did-not-seal, refusal; 3, 4 and 5 members; five slow-member cases that must return without the slow answer; refusal while a slow member is pending; roster change, duplicate identity, short roster) | the nine did-not-seal rows with a majority sealed fail (`got -15 want 0`, `-13`, `-1`, `-3`); the adapter then hung (a deadlock of the gated refusal rows against the old serial code, not investigated), so the later rows were not run on devel | PASS; also under the TSan and ASan runs of the sanitizer gate (below) |
-| `tests/test_k109_stalled_member_unmount.py` (live, `make test-long`, 65 s alone) | FAIL: 3 of 3 phase-1 unmounts fail after 15 s (`rc=-6` once, `-15` twice), the two-stalled case fails closed (the assertion reads `FAIL 1/4`) | PASS 4/4: three unmounts `ms` 40 to 45, one refused |
-| `tests/test_k54_member_down_fence.py`, `tests/test_k54_member2_unmount.py` (unchanged) | not run here | PASS, 25.6 s and 9.4 s; the log assertion `reached 2 of 4 members, no majority` still holds |
+| `tests/test_storage_fence_members.py` (fast; 33 rows by two modes, each run with a thread per remote member and again with thread creation failing; slow-member, late-refusal, refusal-vs-slow, roster-change, duplicate-identity and short-roster cases) | on devel `cff8eb424`: the nine did-not-seal rows with a majority sealed fail (`got -15 want 0`, `-13`, `-1`, `-3`); the adapter then hung, so later rows did not run on devel | PASS; plain x3 on xorinox, and in the TSan and ASan lanes |
+| `tests/test_k109_stalled_member_unmount.py` (live; two clusters, below) | devel: 3 of 3 phase-1 unmounts fail after 15 s (`FAIL 1/4`); round 1 code under ASan: `FAIL`, heap-use-after-free in the stop (below) | PASS 4/4 then PASS 2/2; in the ASan lane PASS |
+| `tests/test_k54_member_down_fence.py`, `tests/test_k54_member2_unmount.py` (unchanged) | not run here | round 1: PASS, 25.6 s and 9.4 s; the log assertion `reached 2 of 4 members, no majority` holds. Round 2 changed the worker's connection, so these were rerun as part of `tests_for server/raft_host` (below) |
 
-Table-driven check and live test are in `tests/budgets.tsv` (`test`, 30 s ceiling,
-and `test-long`, 120 s, slot 1: provisional, measured 65 s alone; the gate
-measurement is owed). `tests/test_k54_member_down_fence.py` is unchanged; its
-log assertion `reached 2 of 4 members, no majority` still holds because a failed
-call waits for every answer before it logs.
+**Counts.** Every call asks each member once, and this node's own check runs once, whatever
+the answers, so the unit table checks `calls == n` and `local_calls == 1` for every row
+after the late workers settle. At return the count is exact where the call has to wait for
+everyone: rows with no majority and no refusal (`done == n`), and every row of the inline pass
+(`spawned == 0`, `done == n`). It cannot be exact at return for a row that returns on a majority
+or on a refusal, because the workers still answering are the point of the design: the call is
+required not to wait for them. The slow and late rows assert the opposite at return (not
+all answered, `done < n` for the late rows) and the exact count afterwards. `local_calls == 1` is
+checked at return for every row. Mutations run against the table: the local member not asked
+(`local_calls==1` fails), the inline fallback not asking (the inline pass fails at its first row: `got -13 want 0`), and the wait loop
+changed to wait for every member (the late and slow rows never finish, killed by hand: the table has
+no timeout and none was added).
+
+**Inline fallback.** The pass with `efsd_pthread_create` failing runs every table row without
+workers: the result must equal the threaded result, no worker is spawned and every member has
+answered at return. The inline path waits for each member in turn (which is why the guide says
+the stop can wait on a slow member in that case).
+
+**Live test, two clusters.** (1) The L0-stall cluster of round 1: three clean unmounts with
+node 3 stalled, then node 2 stalled and one refused unmount. (2) `--park --runs 1`: node 3 is a
+fault build with `EFS_FAULT_FENCE_PARK=1` (a storage-fence request is never answered; the node
+answers everything else) and node 1 has `EFS_FAULT_SHUTDOWN_RECORD_PARK=write`. One clean unmount
+(its two fence rounds leave two workers connected to node 3 and waiting), then `SIGTERM` to
+node 1; the test waits for node 1's `shutdown: outcome=orderly rc=0` line (all phases done, the
+pool destroyed; the parked record keeps the process alive for up to 5 s) and only then kills
+node 3. A worker the stop did not drain wakes on that kill and uses the freed connection.
+It also requires node 1 to exit 0 and to log `stop woke N worker(s)`. The hook,
+`EFS_FAULT_FENCE_PARK` in `server_raft_host_storage_session_fence`, is a `for(;;)sleep(60)` park
+under `#if EFS_FAULTS`, like `EFS_FAULT_SHUTDOWN_PARK`; it is product source but compiled only into
+fault builds, inactive without the variable, and documented in `settings.md`. It is the one
+`sleep` this round added to source and it is a test fault, not a wait on anything.
+
+**The test fails without the fix.** Same driver and wrapper on the round 1 code (HEAD
+`889ea7e7d` plus the fault hook), ASan lane (`EFS_SAN_ONLY=k109_stalled_member bash
+tests/sanitizer_check.sh asan`): `FAIL`, `ERROR: AddressSanitizer: heap-use-after-free` in
+`efs_conn_recv_msg` (`protocol.c:485`) called from `host_inode_rpc_addr` ← `host_fence_worker`,
+freed by `efs_conn_destroy` ← `server_peer_pool_shutdown` ← `sd_peers`, allocated by
+`peer_conn_get` in the same worker. On the round 2 code the same lane: PASS in 72 s.
+
+## Budget and waits
+
+`tests/budgets.tsv`: the unit test stays in `test` (30 s ceiling; measured in `make test`
+below). The live wrapper is in `test-long` at **95 s**, slot 1: three solo runs on xorinox took
+72, 73 and 73 s; the rule (1.25 x the slowest of three solo runs, rounded up to 5 s) gives
+91.25 s, so 95 s. Round 1's row said 120 s (a provisional figure, not the rule); the first
+review's 85 s was computed on the 65 s of round 1, before the second cluster (about 10 s) was
+added. The 8-job gate measurement of the row is still owed.
+
+The wrapper no longer passes `timeout=900` to `subprocess.run`: a second limit besides the
+row's budget, which the gate enforces. The drivers wait on log lines (`Cluster.wait_log`, the
+harness' own 50 ms poll that fails at once if a daemon died) and the one fixed `time.sleep(2)` of
+the first round (the L0-fill poll) is replaced by waiting for the node's own
+`kv-bound: apply deferred` line, followed by the `raft-status` check that the stall holds.
+The only remaining clock waits are the harness' poll loops and the 5 s the fault build
+holds the exit record open (`EFS_SHUTDOWN_REPORT_MS`, product code, test-only variable).
+
+## Documents
+
+Corrected to what the code does (all three): the function returns the first non-sealing
+member's code in member order, else BUSY when nobody answered. In the preserved two-stalled run
+the leaders log members 2 and 3 answering `-15` (11 and 33 lines) and the call returned NOT_PRIMARY;
+the client repeats the fence for 15 s on BUSY and NOT_PRIMARY only and then reports the call
+its deadline cut, which is the `rc=-6` (NET) of that run (`ms=15005`). So the client-visible `-6` is
+the deadline, not a member's code; IO and NOT_FOUND end the barrier at once with their own code (`efs_session_storage_barrier`, `session_revoke.c:46`); "the
+stop does not wait for the slow member" is true for a remote member once a majority sealed, not
+for the member on the node that runs the fence (asked inline) and not for any member when that
+node cannot start a thread. The guide also states K54's residual window next to the claim that a
+returning member refuses the revoked epoch: a live member the leader cannot reach, with an upload
+that passed its status check before BEGIN, can still store that fragment after the revoke returned;
+it cannot be settled and stays an unsettled ticket for the D31 orphan ledger, whose collection of
+it stays blocked until that member holds the sealed epoch
+([K54 page](../2026-10/k54-member-down-unmount-20261030.md)).
 
 ## Verification on xorinox
 
-All on the final tree (sources byte-identical to the commits; checked by sha256 of every
-changed file), TMPDIR under `~/efs-taskFO/tmp`.
+**Round 2, on the final tree.** `git archive 12c515461` extracted under `~/efs-taskFO/new`
+(the page, ledger and graph commits after it change no source), `make all tests/faults/efsd`,
+TMPDIR under `~/efs-taskFO/tmp`, build id `unknown`. Logs in
+`~maik/efs-artifacts/taskFO-round2-20261110/`.
 
 | Check | Result |
 | --- | --- |
-| `make test` | rc 0 (2 m 55 s) |
-| `python3 scripts/tests_for.py common/session_revoke --run` | rc 0 (7 tests, 1 m 35 s) |
-| `python3 scripts/tests_for.py server/raft_host --run` | rc 0 (145 tests, 10 m 28 s) |
-| `bash tests/sanitizer_check.sh tsan` (tree built with `-fsanitize=thread`, no extra `-march`) | VERDICT FAIL, 33 run, 2 failed, 849 s. `k96_status_slots_live`: 51 TSan reports, the K107 failure, not this task's and not touched. `storage_fence_members`: a race in the harness of this task's new unit test (a late worker's log against the next row's reset), found by this run and fixed in `a8001b6f8`. Rerun of the two new entries on the same TSan tree with the fixed harness: `storage_fence_members` and `k109_stalled_member` PASS (63 s; the live test runs the fixed daemon under TSan with detached workers) |
-| `bash tests/sanitizer_check.sh asan` (tree built by the script with `-march=x86-64-v3`) | VERDICT PASS, 59 run, 0 failed, 385 s. Both new entries were added to the ASan list after this run; a separate ASan run of just those two: PASS (the live test 101 s) |
-| unit test repeated | 40 plain, 10 TSan and 5 ASan builds of `test_storage_fence_members.py` after the fix: 0 failures |
-| `python3 scripts/check_doc_links.py`, `python3 docs/gen-architecture-full.py`, `make docs-check` | 0 dangling links; architecture pages regenerate with no tracked change; rc 0 |
-| `python3 tests/test_code_graph.py` after `sh scripts/rebuild-code-graph.sh` | PASS (parser warnings as before this change) |
+| `make test` | rc 0 (`make-test-2-final.log`). The first run stopped at `test_env_inventory` (the new fault variable had no `settings.md` row) and, after that was fixed, at `gen_settings --check` (the fault-hook count in `settings.h`); both fixed in `06bb0e396` and `12c515461`, the whole target then ran again from the start |
+| `tests/test_storage_fence_members.py` x5 plain | 5 of 5 PASS (the unit test is part of `make test`) |
+| `python3 tests/test_k109_stalled_member_unmount.py` | PASS: `PASS 4/4`, then `PASS 2/2` (the `--park` cluster: unmount clean in 0.3 s, `ms=57`, node 1 stopped with 2 workers waiting, exit 0 in 5.2 s including the 5 s the parked exit record holds the process, 0.2 s of teardown) |
+| `python3 scripts/tests_for.py common/session_revoke --run` | rc 0 (7 tests; includes both K54 tests and the K109 wrapper) |
+| `python3 scripts/tests_for.py server/raft_host --run` | rc 0 (145 tests). A first attempt failed at `test_query_page_barriers` because the new file-scope registry sat inside the region that test extracts; moved in `1ab6d0180` |
+| `bash tests/sanitizer_check.sh asan` | VERDICT PASS, 61 run, 0 failed, 438 s; `storage_fence_members` and `k109_stalled_member` PASS |
+| `bash tests/sanitizer_check.sh tsan` | VERDICT FAIL, 33 run, 1 failed, 724 s: `k37_segment_rebuild` (`refused files once node 3 is back: packer moved 0 of 4`, the packer intermittent already recorded in `sequence-binaries-sanitizers-20261109.md`; no fence code is on its path); rerun alone on the same TSan tree: PASS twice (53 s, 56 s). `storage_fence_members` and `k109_stalled_member` PASS; `k96_status_slots_live` PASS in this run (K107 is not touched here) |
+| `python3 scripts/check_doc_links.py`, `python3 docs/gen-architecture-full.py`, `make docs-check`, `python3 tests/test_env_inventory.py`, `python3 tests/test_make_test_recipe.py` | 0 dangling links; architecture pages regenerate with no tracked change; docs-check and the inventory and budget-recipe tests PASS (on the Mac worktree; the xorinox tree has no `.git`, so `docs-check` cannot run there) |
+| `python3 tests/test_code_graph.py` after `sh scripts/rebuild-code-graph.sh` | PASS (18,693 nodes; parser warnings as before this change) |
+| Old code, same test, ASan lane | FAIL: heap-use-after-free, see "Tests" |
+
+Solo timings of the wrapper (72, 73, 73 s), the first ASan pass of the new tree (72 s) and
+the old-code ASan failure were taken on the round 2 tree before the three small commits that
+followed (registry placement, comments, documents, `settings.h`): `02618815e`, which has the same
+product behaviour; the final-tree runs above repeat the wrapper, the sanitizer lanes and the
+component tests.
+
+**Round 1** (tree `935c39e36`/`a8001b6f8`): `make test` rc 0 (2 m 55 s); `tests_for
+common/session_revoke` rc 0 (7 tests, 1 m 35 s); `tests_for server/raft_host` rc 0 (145 tests,
+10 m 28 s); TSan VERDICT FAIL 33 run 2 failed in 849 s: `k96_status_slots_live` (51 TSan reports,
+K107, not this task's) and a race in the harness of the new unit test (a late worker's log against
+the next row's reset; fixed in `a8001b6f8`, the two new entries then PASS under TSan in 63 s);
+ASan VERDICT PASS, 59 run, 385 s (the new entries joined the ASan list after it and passed in
+a separate run, the live test 101 s); unit test 40 plain, 10 TSan and 5 ASan builds, 0 failures;
+docs checks and graph test as above.
 
 The 20-run "after" table row ran on a build made before the success log line was
 restored and the comments reworded (no logic differs); the other "after" rows
-and the live test ran on the final build.
+and the live test ran on the final build of round 1.
 
 ## Not verified
 
@@ -219,10 +396,19 @@ and the live test ran on the final build.
   fsync that fails on armed members) was not run. With a fault on every member
   nothing seals and the call fails as before; with the fault on fewer than a
   majority the revoke now succeeds with those members unsealed (K54's rule).
-* Detached workers that outlive a stopped host: they hold no host state; the
-  peer pool and the telemetry sink they use are process globals. A parked worker
-  is bounded by the pool wait (5 s) plus the 30 s receive bound. Checked by the
-  `SIGSTOP` stop above (exit 0) and by TSan on the unit table only.
+* The stop drain is checked for TCP with a member that never answers a fence (`--park`) and,
+  frozen with `SIGSTOP`, for a worker waiting in the declare handshake. Not run: the RDMA stop
+  (the drain waits for the exchange's own 30 s bound there, by reading of the code), and a stop
+  while a worker is in `connect()` to an address that does not answer SYN (the connect's own
+  bound). A worker's last steps after the drain returns (its answer recorded into its own
+  refcounted round, one telemetry line, safe once the sink is unbound) can still run; they use no
+  host state.
+* Cost of the private connections. A pooled connection is capped (32 data connections per peer)
+  and honours the pool's down-cooldown; the worker's connection has neither. A fence round
+  against a member that never answers now leaves a thread and a socket for up to the 30 s receive
+  bound, and a member that is black-holed costs a full connect per round (on RDMA also the
+  upgrade). Fence rounds are two per unmount, so this is small, but it was not measured at
+  production unmount rates or against a down member.
 * Gate timing of the new live test under 8-job contention.
 
 ## Reproduction and artifacts
@@ -234,8 +420,10 @@ export TMPDIR=$HOME/efs-taskFO/tmp                               # work only und
 python3 tests/live/k109_stalled_member_unmount.py --runs 20 --report-only --port-base 18900
 python3 tests/live/k109_stalled_member_unmount.py --runs 5 --sigstop --port-base 18920
 python3 tests/live/k109_stalled_member_unmount.py --runs 5 --split --client-node 2 --port-base 18940
+python3 tests/live/k109_stalled_member_unmount.py --park --runs 1 --port-base 18960
 python3 tests/test_k109_stalled_member_unmount.py
 python3 tests/test_storage_fence_members.py
+EFS_SAN_ONLY=k109_stalled_member bash tests/sanitizer_check.sh asan      # the stop with workers waiting, under ASan
 ```
 
 Expected: every line `clean=1` with `ms=` under 5000 for the one-stalled
@@ -243,7 +431,12 @@ variants; `FAIL`/`clean=0` at about 15 s on a tree before `935c39e36`.
 Cleanup: the driver removes its work directory on PASS; remove `~/efs-taskFO`
 with `~/bin/edelete --force --delete`.
 
-Raw output (logs of every run above, the nodes' and clients' text logs of the
-before and after runs, the devel unit adapter and its output, `make test` and the
-sanitizer logs) is in `~maik/efs-artifacts/taskFO-20261110/` on xorinox,
-`SHA256SUMS` beside it; sha256 of the `SHA256SUMS` file: `d842ed44e66d99994f630d63a292e0e9485a278316d5c23b2cb38a2b78ba6592`.
+Round 1 raw output (logs of every run in the reproduction table, the nodes' and clients' text
+logs of the before and after runs, the devel unit adapter and its output, `make test` and the
+sanitizer logs) is in `~maik/efs-artifacts/taskFO-20261110/` on xorinox, `SHA256SUMS` beside it;
+sha256 of the `SHA256SUMS` file: `d842ed44e66d99994f630d63a292e0e9485a278316d5c23b2cb38a2b78ba6592`.
+Round 2 raw output (`make test`, unit repeats, wrapper, `tests_for`, TSan and ASan lanes, the
+TSan rerun, the old-code ASan failure `asan-k109-round1-code-FAIL.log` with the full report, the
+solo timings) is in `~maik/efs-artifacts/taskFO-round2-20261110/`, `SHA256SUMS` beside it (27
+files); sha256 of that `SHA256SUMS`:
+`baa0638d096d9d9a20cbdad56c29bf9afa00a7f4242eb462a02632afb295da8c`.
