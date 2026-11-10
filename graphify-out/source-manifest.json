@@ -2600,7 +2600,7 @@
     "tests/test_inode_writer_view_budget.py": "82dc76f45bcd210ef8ca38946e5112ae68e6c65f8b6033fc945df03002aee57e",
     "tests/test_iostats_snapshot.c": "c52013c66292f4ce30e272f8a057d3cc88d2a1042a18bece5de50d3cf0d803c2",
     "tests/test_k102_removed_inode_flush.py": "f24d38e3e35ad9d43befe7774a06b3f0e222075142df1c62f240877217e2b628",
-    "tests/test_k110_barrier_history.py": "cc5bc57a22693c939de74e553cd7215d298b3c7fc6c840815774eb15af4482f7",
+    "tests/test_k110_barrier_history.py": "31147dced3347159f31fb196716f7272274d7baf9ca453cef2c148faa9d49301",
     "tests/test_k22_leader_admission.py": "c162c0ec3f57b017888a96a719d7289c5dc957639fb311c02ed1da3e8883cd2e",
     "tests/test_k22_snapshot_import.py": "64ed6a02eb1fccdfd29ca1522d77fd4803acd0dc7dab5c31835ec30312462d09",
     "tests/test_k32_entry_count.py": "7040c5aa313662dc71d3e1ca60b5462863279dc210053036c943b5872b18439b",
@@ -3031,5 +3031,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "b65a8365bb8bafe7f914478642f8919cd8972883"
+  "source_commit": "2e11d5e5c3fcf4e63d2835e4d620ae69bd77bb93"
 }

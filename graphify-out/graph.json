@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "b65a8365bb8bafe7f914478642f8919cd8972883"
+      "source_commit": "2e11d5e5c3fcf4e63d2835e4d620ae69bd77bb93"
     }
   },
   "links": [
@@ -149777,7 +149777,7 @@
       "source": "efs:file:tests/test_k110_barrier_history.py",
       "source_file": "tests/test_k110_barrier_history.py",
       "source_location": "L1",
-      "target": "tests_test_k110_barrier_history_rationale_36"
+      "target": "tests_test_k110_barrier_history_rationale_39"
     },
     {
       "confidence": "EXTRACTED",
@@ -149786,7 +149786,7 @@
       "source": "efs:file:tests/test_k110_barrier_history.py",
       "source_file": "tests/test_k110_barrier_history.py",
       "source_location": "L1",
-      "target": "tests_test_k110_barrier_history_rationale_44"
+      "target": "tests_test_k110_barrier_history_rationale_47"
     },
     {
       "confidence": "EXTRACTED",
@@ -722899,7 +722899,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:os",
       "weight": 1.0
     },
@@ -722911,7 +722911,7 @@
       "relation": "imports_from",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L19",
+      "source_location": "L22",
       "target": "efs:import-boundary:pathlib",
       "weight": 1.0
     },
@@ -722923,7 +722923,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:re",
       "weight": 1.0
     },
@@ -722935,7 +722935,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:signal",
       "weight": 1.0
     },
@@ -722947,7 +722947,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:sys",
       "weight": 1.0
     },
@@ -722959,7 +722959,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:tempfile",
       "weight": 1.0
     },
@@ -722971,7 +722971,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L18",
+      "source_location": "L21",
       "target": "efs:import-boundary:time",
       "weight": 1.0
     },
@@ -722983,7 +722983,7 @@
       "relation": "imports_from",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons",
       "weight": 1.0
     },
@@ -722995,7 +722995,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons_cluster",
       "weight": 1.0
     },
@@ -723007,7 +723007,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons_fuse_ok",
       "weight": 1.0
     },
@@ -723019,7 +723019,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons_mgmt",
       "weight": 1.0
     },
@@ -723031,7 +723031,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons_mount",
       "weight": 1.0
     },
@@ -723043,7 +723043,7 @@
       "relation": "imports",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L21",
+      "source_location": "L24",
       "target": "tests_k33_daemons_payload",
       "weight": 1.0
     },
@@ -723054,7 +723054,7 @@
       "relation": "contains",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L35",
+      "source_location": "L38",
       "target": "tests_test_k110_barrier_history_synced",
       "weight": 1.0
     },
@@ -723065,7 +723065,7 @@
       "relation": "contains",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L58",
+      "source_location": "L61",
       "target": "tests_test_k110_barrier_history_up",
       "weight": 1.0
     },
@@ -723076,7 +723076,7 @@
       "relation": "contains",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L54",
+      "source_location": "L57",
       "target": "tests_test_k110_barrier_history_verified",
       "weight": 1.0
     },
@@ -723087,7 +723087,7 @@
       "relation": "contains",
       "source": "tests_test_k110_barrier_history",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L43",
+      "source_location": "L46",
       "target": "tests_test_k110_barrier_history_wait_barrier",
       "weight": 1.0
     },
@@ -723107,9 +723107,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "tests_test_k110_barrier_history_rationale_36",
+      "source": "tests_test_k110_barrier_history_rationale_39",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L36",
+      "source_location": "L39",
       "target": "tests_test_k110_barrier_history_synced",
       "weight": 1.0
     },
@@ -723118,9 +723118,9 @@
       "confidence": "EXTRACTED",
       "evidence_method": "graphify-ast",
       "relation": "rationale_for",
-      "source": "tests_test_k110_barrier_history_rationale_44",
+      "source": "tests_test_k110_barrier_history_rationale_47",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L44",
+      "source_location": "L47",
       "target": "tests_test_k110_barrier_history_wait_barrier",
       "weight": 1.0
     },
@@ -723132,7 +723132,7 @@
       "relation": "calls",
       "source": "tests_test_k110_barrier_history_synced",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L37",
+      "source_location": "L40",
       "target": "tests_k33_daemons_mgmt",
       "weight": 1.0
     },
@@ -723144,7 +723144,7 @@
       "relation": "calls",
       "source": "tests_test_k110_barrier_history_wait_barrier",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L47",
+      "source_location": "L50",
       "target": "tests_test_k110_barrier_history_synced",
       "weight": 1.0
     },
@@ -1063615,10 +1063615,10 @@
       "community_label_version": 1,
       "community_name": "Tests \u00b7 K33 daemons",
       "file_type": "rationale",
-      "id": "tests_test_k110_barrier_history_rationale_36",
+      "id": "tests_test_k110_barrier_history_rationale_39",
       "label": "(fragments still unsynced, MiB acknowledged) summed over node i's roots.",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L36"
+      "source_location": "L39"
     },
     {
       "_origin": "ast",
@@ -1063626,10 +1063626,10 @@
       "community_label_version": 1,
       "community_name": "Tests \u00b7 K33 daemons",
       "file_type": "rationale",
-      "id": "tests_test_k110_barrier_history_rationale_44",
+      "id": "tests_test_k110_barrier_history_rationale_47",
       "label": "Every node acknowledged the file and a barrier made it durable.",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L44"
+      "source_location": "L47"
     },
     {
       "_callable": true,
@@ -1063641,7 +1063641,7 @@
       "id": "tests_test_k110_barrier_history_synced",
       "label": "synced()",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L35"
+      "source_location": "L38"
     },
     {
       "_callable": true,
@@ -1063653,7 +1063653,7 @@
       "id": "tests_test_k110_barrier_history_up",
       "label": "up()",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L58"
+      "source_location": "L61"
     },
     {
       "_callable": true,
@@ -1063665,7 +1063665,7 @@
       "id": "tests_test_k110_barrier_history_verified",
       "label": "verified()",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L54"
+      "source_location": "L57"
     },
     {
       "_callable": true,
@@ -1063677,7 +1063677,7 @@
       "id": "tests_test_k110_barrier_history_wait_barrier",
       "label": "wait_barrier()",
       "source_file": "tests/test_k110_barrier_history.py",
-      "source_location": "L43"
+      "source_location": "L46"
     },
     {
       "_origin": "ast",
