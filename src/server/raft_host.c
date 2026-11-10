@@ -12128,7 +12128,8 @@ static int dg_put_fragment(struct efs_raft_host *h, struct efs_export *ex,
             return EFS_ERR_NET;
         }
         const struct efs_msg_data_commit_reply *cr = reply;
-        rc = type != EFS_MSG_DATA_COMMIT_REPLY || rlen != sizeof(*cr) || cr->boot_epoch != epoch
+        rc = type != EFS_MSG_DATA_COMMIT_REPLY || !efs_data_commit_reply_ok(reply, rlen) ||
+             cr->boot_epoch != epoch
              ? EFS_ERR_IO : cr->rc == EFS_OK ? EFS_OK : EFS_ERR_FENCED;
         free(reply);
     }
@@ -12154,7 +12155,8 @@ static int dg_commit_probe(const struct efs_node *n)
         return EFS_ERR_NET;
     }
     const struct efs_msg_data_commit_reply *cr = reply;
-    int rc = type == EFS_MSG_DATA_COMMIT_REPLY && rlen == sizeof(*cr) && cr->rc == EFS_OK
+    int rc = type == EFS_MSG_DATA_COMMIT_REPLY && efs_data_commit_reply_ok(reply, rlen) &&
+             cr->rc == EFS_OK
              ? EFS_OK : EFS_ERR_FENCED;
     free(reply);
     dg_conn_release(n, pc);

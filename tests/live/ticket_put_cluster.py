@@ -47,7 +47,7 @@ def ticketed_put(ticket, fi):
     deadline = time.monotonic() + 15
     while True:
         reply = put_reply(ticket.nodes[fi]-1, ticket.body(fi))
-        assert len(reply) == 11 and reply[0] == 7, (fi, reply)
+        assert len(reply) == 19 and reply[0] == 7, (fi, reply)
         if reply[1] != ticket_put.BUSY or time.monotonic() > deadline: return reply[1]
         time.sleep(.1)
 
@@ -58,7 +58,7 @@ def unticketed_refused(ino):
     before = stored()
     for node in range(4):
         reply = put_reply(node, ticket_put.unticketed_body(ino))
-        assert len(reply) == 11 and reply[:2] == bytes([7, ticket_put.ERROR]), ('unticketed PUT not refused', node, reply)
+        assert len(reply) == 19 and reply[:2] == bytes([7, ticket_put.ERROR]), ('unticketed PUT not refused', node, reply)
     assert stored() == before, 'a refused PUT stored a fragment'
 
 kw = dict(members=4, env=cluster.env)

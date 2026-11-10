@@ -41,7 +41,7 @@ int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return e
 int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static uint64_t noted;static uint64_t efs_client_commit_note(efs_node_id_t n){(void)n;return ++noted;}
-int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==11 && c==&conns[2]?EFS_PUT_CHUNK_QUOTA_EXCEEDED:(mode==8 && c==&conns[1]) || (mode==10 && c==&conns[2])?EFS_PUT_CHUNK_STALE:mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
+int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch,uint64_t *ack){(void)c;*epoch=123;*ack=0;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==11 && c==&conns[2]?EFS_PUT_CHUNK_QUOTA_EXCEEDED:(mode==8 && c==&conns[1]) || (mode==10 && c==&conns[2])?EFS_PUT_CHUNK_STALE:mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
 '''+reply_fn+drain_fn+pollfds_fn+f+r'''
 int main(void){
  int pp[2];assert(!pipe(pp));

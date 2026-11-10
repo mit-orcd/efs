@@ -6,7 +6,7 @@
  * the immutable admitted ticket; exactly ticket.fragment_len bytes follow.
  * No NEW path hint: an ambiguous retry must probe every storage root before
  * choosing a destination. Reply: EFS_PUT_REPLY_LEN bytes, status + path +
- * big-endian boot verifier (efs_put_reply_encode). */
+ * big-endian boot verifier and ack position (efs_put_reply_encode). */
 #define EFS_PUT_UPLOAD_HEADER_LEN (8u + EFS_PUT_TICKET_WIRE_LEN)
 typedef char efs_put_upload_header_len_check[EFS_PUT_UPLOAD_HEADER_LEN == EFS_PUT_HEADER_LEN ? 1 : -1];
 static inline void efs_put_upload_wr32(uint8_t *p,uint32_t value)
@@ -46,24 +46,26 @@ static inline int efs_put_reply_rc(uint8_t status)
  default: return EFS_ERR_PROTO;
  }
 }
-static inline void efs_put_reply_encode(int rc,uint8_t path,uint64_t boot_epoch,
+static inline void efs_put_reply_encode(int rc,uint8_t path,uint64_t boot_epoch,uint64_t ack,
                                         uint8_t out[EFS_PUT_REPLY_LEN])
 {
  out[0]=efs_put_reply_status(rc);out[1]=rc==EFS_OK?path:0xff;
- efs_put_epoch_write(out+2,boot_epoch);
+ efs_put_epoch_write(out+2,boot_epoch);efs_put_epoch_write(out+10,rc==EFS_OK?ack:0);
 }
 /* One received reply frame. A frame of any other type or length, or an OK
  * without a boot verifier, is a protocol error and never a stored fragment. */
 static inline int efs_put_reply_decode(uint8_t type,const uint8_t *p,uint32_t len,
-                                       uint8_t *path,uint64_t *boot_epoch)
+                                       uint8_t *path,uint64_t *boot_epoch,uint64_t *ack)
 {
  if(path)*path=0xff;
  if(boot_epoch)*boot_epoch=0;
+ if(ack)*ack=0;
  if(type!=EFS_MSG_PUT_CHUNK_REPLY || !p || len!=EFS_PUT_REPLY_LEN)return EFS_ERR_PROTO;
  int rc=efs_put_reply_rc(p[0]);uint64_t epoch=efs_put_epoch_read(p+2);
  if(rc==EFS_OK && !epoch)return EFS_ERR_PROTO;
  if(rc==EFS_OK && path)*path=p[1];
  if(boot_epoch)*boot_epoch=epoch;
+ if(rc==EFS_OK && ack)*ack=efs_put_epoch_read(p+10);
  return rc;
 }
 #endif

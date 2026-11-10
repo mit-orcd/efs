@@ -3367,7 +3367,7 @@ static int cmd_data_commit(int argc, char **argv)
         uint32_t len = 0;
         int ok = send_recv(fd, EFS_MSG_DATA_COMMIT, NULL, 0, &type, &reply, &len) == 0 &&
                  type == EFS_MSG_DATA_COMMIT_REPLY &&
-                 len == sizeof(struct efs_msg_data_commit_reply);
+                 efs_data_commit_reply_ok(reply, len);
         close(fd);
         const struct efs_msg_data_commit_reply *r = reply;
         printf("%s: data-commit %s roots=%u\n", argv[a],

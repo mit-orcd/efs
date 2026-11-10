@@ -102,7 +102,7 @@ try:
     for cycle in range(2):
         (a/'clean.bin').write_bytes(payload)
         record=work/'n4'/'.efs-durable-epoch'
-        old=record.read_bytes();assert old[:8]==b'EFSDUR02'
+        old=record.read_bytes();assert old[:8]==b'EFSDUR03'
         verifier=int.from_bytes(old[40:48],'big');assert verifier
         nodes[4].terminate();nodes[4].wait(timeout=30);start(4)
         assert int.from_bytes(record.read_bytes()[40:48],'big')==verifier

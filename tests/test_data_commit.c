@@ -126,13 +126,13 @@ static int put_unpublished(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node
                unsigned ack)
 {
     struct efs_put_ticket t;
-    uint64_t seq[3] = {0}, ep[3] = {0};
+    uint64_t seq[3] = {0}, ep[3] = {0}, pos[3] = {0};
     memset(&t, 0, sizeof(t));
     t.ino = ino; t.ci = ci; t.inode_gen = 5; t.object = ino * 1000 + ci;
     t.nodes[0] = a; t.nodes[1] = b; t.nodes[2] = c;
     for (int i = 0; i < 3; i++)
         if (ack & (1u << i)) { seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]]; }
-    return efs_client_stripe_note(&t, seq, ep);
+    return efs_client_stripe_note(&t, seq, ep, pos);
 }
 /* Existing cases model an acknowledged REPORT before their fsync. */
 static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs_node_id_t c,
@@ -465,11 +465,11 @@ int main(int argc, char **argv)
     /* Malformed records are refused, never stored. */
     {
         struct efs_put_ticket t = {.ino = 1, .inode_gen = 5, .object = 1, .nodes = {1, 2, 3}};
-        uint64_t one[3] = {1, 0, 0}, two[3] = {1, 2, 0}, ep[3] = {101, 101, 0}, bad[3] = {101, 0, 0};
-        assert(efs_client_stripe_note(&t, one, ep) == EFS_ERR_INVAL);
-        assert(efs_client_stripe_note(&t, two, bad) == EFS_ERR_INVAL);
+        uint64_t one[3] = {1, 0, 0}, two[3] = {1, 2, 0}, ep[3] = {101, 101, 0}, bad[3] = {101, 0, 0}, ack[3] = {0};
+        assert(efs_client_stripe_note(&t, one, ep, ack) == EFS_ERR_INVAL);
+        assert(efs_client_stripe_note(&t, two, bad, ack) == EFS_ERR_INVAL);
         t.nodes[2] = 0;
-        assert(efs_client_stripe_note(&t, two, ep) == EFS_ERR_INVAL && live() == lost);
+        assert(efs_client_stripe_note(&t, two, ep, ack) == EFS_ERR_INVAL && live() == lost);
     }
     /* A full table is swept (every record proven) before a new record; a
      * table full of unprovable records refuses the PUT. */

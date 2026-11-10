@@ -70,13 +70,13 @@ static int put(efs_ino_t ino, uint32_t ci, efs_node_id_t a, efs_node_id_t b, efs
                unsigned ack)
 {
     struct efs_put_ticket t;
-    uint64_t seq[3] = {0}, ep[3] = {0};
+    uint64_t seq[3] = {0}, ep[3] = {0}, pos[3] = {0};
     memset(&t, 0, sizeof(t));
     t.ino = ino; t.ci = ci; t.inode_gen = 5; t.object = ino * 1000 + ci;
     t.nodes[0] = a; t.nodes[1] = b; t.nodes[2] = c;
     for (int i = 0; i < 3; i++)
         if (ack & (1u << i)) { seq[i] = efs_client_commit_note(t.nodes[i]); ep[i] = epochs[t.nodes[i]]; }
-    return efs_client_stripe_note(&t, seq, ep);
+    return efs_client_stripe_note(&t, seq, ep, pos);
 }
 static int live(void) { pthread_mutex_lock(&commit_mu); int n = (int)g_st_live; pthread_mutex_unlock(&commit_mu); return n; }
 

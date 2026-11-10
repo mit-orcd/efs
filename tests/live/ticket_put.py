@@ -8,7 +8,7 @@ modes `create` and `admit`) and builds the frame here:
 
   EFS_MSG_PUT_CHUNK (6): be32 export, be32 fragment index, the 216-byte
   ticket wire (EFS_PUT_UPLOAD_HEADER_LEN 224), then exactly fragment_len
-  bytes. Reply EFS_MSG_PUT_CHUNK_REPLY (7): status, path, be64 boot verifier.
+  bytes. Reply EFS_MSG_PUT_CHUNK_REPLY (7): status, path, be64 boot verifier, be64 ack.
 
 `Cluster` runs a disposable formed membership (tcp, raft-mkfs) for wire
 tests that used to start one unformed daemon. Only processes it started

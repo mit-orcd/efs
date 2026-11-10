@@ -40,8 +40,8 @@ static unsigned aways,stripes,drops;static int stripe_rc=EFS_OK,degrade_hard;
 static void node_note_away(efs_node_id_t n){assert(n==3);aways++;}
 static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;if((fulls||aways)&&spare_left&&n[2]==3){n[2]=4;spare_left--;}}
 /* K35: every acknowledged object is recorded with its acknowledgements. */
-static int efs_client_stripe_note(const struct efs_put_ticket *t,const uint64_t *seq,const uint64_t *epoch)
-{assert(t->object==77);for(unsigned i=0;i<3;i++)assert(seq[i]?epoch[i]==9:!epoch[i]);stripes++;return stripe_rc;}
+static int efs_client_stripe_note(const struct efs_put_ticket *t,const uint64_t *seq,const uint64_t *epoch,const uint64_t *ack)
+{(void)ack;assert(t->object==77);for(unsigned i=0;i<3;i++)assert(seq[i]?epoch[i]==9:!epoch[i]);stripes++;return stripe_rc;}
 static void efs_client_degraded_drop(efs_ino_t ino,uint32_t ci,uint64_t gen){assert(ino==1&&!ci&&gen==77);drops++;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}

@@ -24,8 +24,17 @@
  * chunked/streamed variant. */
 #define EFS_MSG_MAX_LEN (3072u * 1024 * 1024)
 
-/* Ordinary PUT body: status + path + 64-bit verifier, fixed endian. */
-#define EFS_PUT_REPLY_LEN 10u
+/* Ordinary PUT body: status + path + 64-bit verifier + 64-bit ack, fixed
+ * endian. The ack names the storage root and its open durability epoch when
+ * the fragment was acknowledged: root in the top 8 bits, then a 56-bit
+ * position (efs_put_pos: boot 16 bits, barrier sequence 40) that orders
+ * epochs across restarts of one root; 0 means no position. */
+#define EFS_PUT_REPLY_LEN 18u
+#define EFS_PUT_POS_MASK ((1ull << 56) - 1)
+static inline uint64_t efs_put_pos(uint32_t boot, uint64_t seq)
+{ return boot >= (1u << 16) || seq >= (1ull << 40) ? 0 : ((uint64_t)boot << 40) | seq; }
+static inline uint64_t efs_put_ack_make(uint8_t root, uint64_t pos)
+{ return pos ? ((uint64_t)root << 56) | pos : 0; }
 static inline uint64_t efs_put_epoch_read(const uint8_t *p)
 { uint64_t v=0; for(unsigned i=0;i<8;i++) v=(v<<8)|p[i]; return v; }
 static inline void efs_put_epoch_write(uint8_t *p, uint64_t v)
@@ -842,7 +851,7 @@ struct efs_msg_bench_put {
     /* uint8_t data[data_len]; */
 };
 
-/* PUT reply: EFS_PUT_REPLY_LEN bytes, status + path + boot verifier. */
+/* PUT reply: EFS_PUT_REPLY_LEN bytes, status + path + boot verifier + ack position. */
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1
 #define EFS_PUT_CHUNK_QUOTA_EXCEEDED 2
@@ -898,7 +907,29 @@ struct efs_msg_data_commit_reply {
     int32_t rc;           /* EFS_OK or EFS_ERR_IO (a durability barrier failed) */
     uint32_t roots;       /* async roots covered */
     uint64_t boot_epoch;  /* nonzero durability verifier; retained only after all-root clean stop */
+    uint32_t history;     /* efs_data_commit_history entries that follow */
+    uint32_t reserved;
 };
+/* Barrier history (K110): one entry per predecessor incarnation of a root
+ * whose last completed barrier is proven (clean verified recovery dropped
+ * nothing it covers). A fragment acknowledged by `verifier` at ack position
+ * a on `root` was durable when a <= position (efs_put_pos order). Only
+ * sent with rc == EFS_OK. */
+struct efs_data_commit_history {
+    uint64_t verifier;
+    uint64_t position;
+    uint32_t root;
+    uint32_t reserved;
+};
+#define EFS_DATA_COMMIT_RING 7u
+#define EFS_DATA_COMMIT_HISTORY_MAX (EFS_MAX_STORAGE_PATHS * EFS_DATA_COMMIT_RING)
+/* A well-formed reply: the header and exactly `history` entries after it. */
+static inline int efs_data_commit_reply_ok(const void *reply, uint32_t len)
+{
+    const struct efs_msg_data_commit_reply *r = reply;
+    return r && len >= sizeof(*r) && r->history <= EFS_DATA_COMMIT_HISTORY_MAX &&
+           len == sizeof(*r) + r->history * sizeof(struct efs_data_commit_history);
+}
 
 /* SYNC_STATS: per storage root durability state. Empty request.
  * mode: 2 asynchronous acknowledgement; 0 root not attached. */
@@ -1910,7 +1941,8 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 /* Hot-path helper: receive a 1-byte status reply without malloc.
  * On success sets *type and *status. Returns EFS_OK or an error. */
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
-int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch);
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch,
+                       uint64_t *ack);
 
 /* ---- transport-dispatching variants (struct efs_conn, network.h) ----
  * Same semantics as the fd-based originals. With a live RDMA QP, all supported complete logical frames go over segmented RDMA. TCP is used
@@ -1930,9 +1962,9 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *hdr, uint32_t hdr_len,
                            void *body, uint32_t body_len);
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
-/* PUT reply: status, root index, and mandatory big-endian boot verifier. */
+/* PUT reply: status, root index, mandatory big-endian boot verifier and ack position. */
 int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
-                            uint8_t *path, uint64_t *epoch);
+                            uint8_t *path, uint64_t *epoch, uint64_t *ack);
 
 /* GET_SEGMENT reply: 4-byte BE status, 4-byte BE bytes, 32-byte digest, then
  * the fragment (EFS_SEGMENT_GET_REPLY header). TCP receives a success body
