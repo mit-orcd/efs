@@ -30,7 +30,7 @@ OVER=SIZE-200          # partial first and last chunks (with a base), full chunk
 STOP_BOUND_S=20.0      # the product stop bound is 60 s; a retired chunk needs a pass or two
 work=Path(tempfile.mkdtemp(prefix='efs-k102-',dir=os.environ.get('TMPDIR')))
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_FAULT_')}
-env.update(EFS_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='600000')  # the packer must not free room under the test
 c=Cluster(work,'k102',[1,2,3],env)
 
 
