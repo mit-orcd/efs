@@ -450,6 +450,7 @@ docs-check:
 	python3 scripts/check_doc_links.py
 	python3 scripts/check_guide_counts.py
 	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c
+	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
 

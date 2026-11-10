@@ -4,6 +4,7 @@
 
 - `efsd.c` — daemon entry, startup/stop; `cluster.c` — cluster formation and membership wiring; `discovery.c/.h` — local-subnet discovery (never defines membership).
 - `raft_host.c` — the production Raft host (hosted groups, apply pump, ReadIndex, publication, GC, sessions, transactions); owns every hosted group's state. **The file the [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md) splits next** (the split waits for W123). ReadIndex code (`host_read_*`, `host_wait_*`, the view, the waiter slots, the follower RPC): [entry map](../../docs/status/2026-11/readindex-entry-map-20261108.md#entry-map), checked by `make docs-check`.
+- Concern map of `raft_host.c` (every function under one concern, with state, mutex, entry points, logs and tests; the lock order): [raft-host-map.md](../../docs/how-it-works/raft-host-map.md), checked by `make docs-check`. Start there for a defect in the file.
 - `handler.c` — request dispatch per connection; `thread.c` — conn/writer thread stacks; `writer.c` — writer pool; `peer_pool.c` — persistent server→server connections.
 - `server_internal.h` — shared `g_server`-style state, export lifetime (use-count guarded by `s->lock`); the anti-example in developing.md.
 - `member_store.c/.h` — durable boot counter, member identity and committed membership under `<meta root>/mdraft`.
@@ -13,6 +14,30 @@
 - `reclaim.c` — W124 node reclaim; `recovery.c` — verified recovery after an unclean stop (K36).
 - `iostats.c` — always-on relaxed-atomic I/O counters.
 - Header-only helpers: `apply_ring.h`, `apply_wait.h` (W159), `dest_fault.h` (test hook), `directory_sync_group.h`, `publication_session_fast.h`, `query_export_lease.h`, `query_refresh.h`, `read_index_pair_remote.h`, `write_prof.h` — state owned by the includer.
+
+**Symptom to concern (`raft_host.c`).**
+
+Section names of [raft-host-map.md](../../docs/how-it-works/raft-host-map.md); log keys are listed in [diagnostics](../../docs/how-it-works/diagnostics.md).
+
+| Symptom | Concern |
+| --- | --- |
+| `raft-host: apply ...` line, an `incompatible` or `kv_incomplete` group (`host_mark_incompatible`, `host_mark_incomplete`) | Apply: core, then the Apply handler section of that command |
+| `txn-fault` | Apply: core; Transaction coordination |
+| `append-abandon`, append reservation or catch-up refusal | Append |
+| `namespace-prof`, `EXIST`/`NOT_FOUND` on create, mkdir, rmdir, unlink, link, rename | Namespace operations |
+| `query-catchup`, `query-config`, `query-publish`, `query-recovery`, `query-refresh`, `query-restore`, `query-revisions` | Query service |
+| `raft-snap`, snapshot import BUSY, group apply BUSY during an import | Snapshots |
+| `read-prof` | Encoding helpers and diagnostic switches; ReadIndex round |
+| read returns BUSY or NOT_PRIMARY, `wait_applied` timeout, stale follower read | ReadIndex round; Group view, waiters and leader state |
+| `report-receipt`, `report-split`, REPORT STALE or BUSY, publication unit refused | Publication and REPORT |
+| `storage-fence`, session UNREGISTERED or FENCED, lock waiter never granted | Sessions, leases and lock waits |
+| `raft-host: form`, `auto_form`, `mkfs`, HELLO refused, member add FENCED | Formation and member join |
+| `host_cfg`, retired replica campaigns, learner not caught up | Membership view and group configuration |
+| GC backlog, reap, fragment delete, GC ack | Reclaim and GC thread |
+| `dg_one`, rebuild pass, degraded mark not cleared | Degraded-fragment rebuild |
+| stranded transaction, `host_fin_one`, `host_txn_recover_one` | Transaction recovery and finisher |
+| pump stall, inbox full, heartbeat late, `host_stop_leading` | Pump, inbox and applied checkpoint; Outbox and sender threads |
+| `server_raft_host_status` field wrong or missing | Observability and status |
 
 ## Contract
 
