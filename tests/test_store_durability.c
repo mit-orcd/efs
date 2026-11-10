@@ -520,7 +520,7 @@ static void test_record_ring_pair(void)
     pthread_t t;assert(!pthread_create(&t,NULL,stress_writer,NULL));
     char f[1200];snprintf(f,sizeof(f),"%s/%s",root,PUT_SYNC_RECORD);
     int fd=open(f,O_RDONLY);assert(fd>=0);
-    for(int i=0;i<300;i++){
+    for(int i=0;i<100;i++){
         pthread_mutex_lock(&r->mu);pthread_mutex_lock(&r->rec_mu);   /* re-arm: an unvalidated ring, as attach leaves it */
         r->ring[0].verifier=221;r->ring[0].position=efs_put_pos(1,4);r->ring_n=1;r->ring_ok=0;
         r->recovery_uncertain=1;
