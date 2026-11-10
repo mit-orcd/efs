@@ -1469,6 +1469,179 @@ static void test_snapshot_rejects_delayed_compacted_prefix(void)
     }
 }
 
+/* K103: the leader's zero-prefix ReadIndex contact proves only leadership,
+ * so a follower whose log starts above index 1 (snap_idx > 0) must answer it
+ * as an acknowledgement. Rejecting it as "prev-compacted" made the leader
+ * count a log mismatch, rewrite next_index to snap_idx + 1 and resend entries
+ * the follower already held, once per read round. Delivery here goes through
+ * efs_raft_recv, not efs_raft_read_control (which never had the problem). */
+static void read_probe_fixture(struct net *n, struct efs_raft_store **st,
+                               struct app *app, struct efs_raft_cfg *cfg,
+                               int tail)
+{
+    uint8_t cmd = 'K';
+    uint64_t idx = 0;
+    int lid, i, f;
+
+    boot_n(n, st, app, cfg, 3, 7);
+    CHECK(elect(n, 20) == 1, "k103 fixture elects");
+    lid = leader_id(n);
+    for (i = 0; i < 5; i++)
+        CHECK(efs_raft_propose(n->r[lid], &cmd, 1, &idx) == EFS_OK, "k103 early entry");
+    elect(n, 8);
+    for (f = 0; f < 3; f++)
+        if (f != lid)
+            CHECK(efs_raft_snapshot(n->r[f]) == EFS_OK, "k103 follower compacts");
+    for (i = 0; i < 5; i++)
+        CHECK(efs_raft_propose(n->r[lid], &cmd, 1, &idx) == EFS_OK, "k103 late entry");
+    elect(n, 8);
+    if (tail) {
+        /* An unrelated local tail the leader has not sent: a probe reply must
+         * not be the thing that ships it. */
+        efs_raft_arm_durable(n->r[lid]);
+        CHECK(efs_raft_propose_local(n->r[lid], &cmd, 1, &idx) == EFS_OK &&
+              efs_raft_submit(n->r[lid], idx) == EFS_OK &&
+              efs_raft_durable(n->r[lid], idx) == EFS_OK, "k103 unsent leader tail");
+    }
+}
+
+static void test_read_probe_compacted_follower(void)
+{
+    for (int tail = 0; tail < 2; tail++) {
+        struct net n;
+        struct efs_raft_store *st[3];
+        struct app app[3];
+        struct efs_raft_cfg cfg;
+        struct efs_raft_peer_progress pb[3], pa[3];
+        struct efs_raft_log_progress lb[3], la[3];
+        int lid, f, batches[3], ae[3];
+        uint64_t commit;
+
+        read_probe_fixture(&n, st, app, &cfg, tail);
+        lid = leader_id(&n);
+        commit = efs_raft_commit(n.r[lid]);
+        n.snap_chunks = 0;
+        for (f = 0; f < 3; f++) {
+            if (f == lid) continue;
+            CHECK(efs_raft_log_progress(n.r[f], &lb[f]) == EFS_OK && lb[f].snap_index > 0 &&
+                  lb[f].snap_index < lb[f].last_index, "k103 follower is compacted below its tail");
+            CHECK(efs_raft_peer_progress(n.r[lid], f, &pb[f]) == EFS_OK, "k103 progress before");
+            batches[f] = n.batches[f];
+            ae[f] = n.ae_requests[f];
+        }
+        CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "k103 read round begins");
+        CHECK(efs_raft_read_ready(n.r[lid]), "k103 read completes on the probe replies alone");
+        for (f = 0; f < 3; f++) {
+            if (f == lid) continue;
+            CHECK(efs_raft_log_progress(n.r[f], &la[f]) == EFS_OK &&
+                  efs_raft_peer_progress(n.r[lid], f, &pa[f]) == EFS_OK, "k103 progress after");
+            CHECK(la[f].rejects_sent == lb[f].rejects_sent, "k103 follower logs no prev-compacted rejection");
+            CHECK(pa[f].rejects == pb[f].rejects, "k103 leader counts no peer rejection");
+            CHECK(pa[f].next_index == pb[f].next_index && pa[f].match_index == pb[f].match_index,
+                  "k103 probe reply leaves match and next unchanged");
+            CHECK(n.batches[f] == batches[f] && pa[f].batches_sent == pb[f].batches_sent,
+                  "k103 no AppendEntries with entries follows the probe");
+            CHECK(n.ae_requests[f] == ae[f] + 1, "k103 exactly the probe went to the follower");
+        }
+        CHECK(n.snap_chunks == 0, "k103 no snapshot follows the probe");
+        CHECK(efs_raft_commit(n.r[lid]) == commit, "k103 probe reply does not move commit");
+        free_n(&n, st, 3);
+    }
+}
+
+/* The follower's answer, delivered whole and batched, for the exact probe the
+ * leader builds, and the requests that must still be refused. */
+static void test_read_probe_compacted_reply(void)
+{
+    for (int batched = 0; batched < 2; batched++) {
+        for (int kind = 0; kind < 4; kind++) {
+            struct net n = { .n = 3, .cap_rep = 1 };
+            struct app app = {0};
+            struct efs_raft_cfg cfg = {0};
+            struct efs_raft_store *st = efs_raft_mem_create();
+            struct efs_raft_log_progress lp;
+            struct efs_raft_msg m;
+            uint8_t image[13] = {0};
+            int rc;
+
+            CHECK(st != NULL, "k103 reply store");
+            if (!st) continue;
+            /* kind 3: the follower is already in a newer term than the probe. */
+            if (kind == 3) CHECK(st->save_hard(st, 3, -1) == EFS_OK, "k103 newer term");
+            cfg.n = 3; cfg.id = 1; cfg.voters = 7;
+            cfg.store = st; cfg.store_ctx = st; cfg.send = send_now; cfg.net = &n;
+            cfg.apply = apply_cmd; cfg.app = &app; cfg.snap_chunk = snap_chunk;
+            cfg.election_ticks = 10; cfg.heartbeat_ticks = 2;
+            n.drop[0] = 1;
+            n.r[1] = test_raft_new(&cfg);
+            CHECK(n.r[1] != NULL, "k103 reply follower");
+            if (!n.r[1]) { efs_raft_mem_free(st); continue; }
+            if (kind != 3) {
+                wr32_t(image, 7); image[8] = 'D'; wr32_t(image + 9, 4);
+                memset(&m, 0, sizeof(m));
+                m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 1;
+                m.last_log_index = 4; m.last_log_term = 1; m.leader_commit = 4;
+                m.success = 1; m.nentries = 1;
+                m.entries[0].cmd = image; m.entries[0].clen = sizeof(image);
+                CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && app.snap_at == 4, "k103 snapshot installs");
+            } else {
+                CHECK(efs_raft_term(n.r[1]) == 3, "k103 follower term 3");
+            }
+            memset(&m, 0, sizeof(m));
+            m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 1;
+            m.vote_granted = 1; m.last_log_index = 9; /* the read round's marker */
+            if (kind == 1) m.vote_granted = 0;        /* ordinary empty AppendEntries */
+            if (kind == 2) m.leader_commit = 4;       /* commit probe at a compacted prefix */
+            n.cap_n = 0;
+            rc = batched ? efs_raft_recv_batch(n.r[1], &m, 1) : efs_raft_recv(n.r[1], &m);
+            CHECK(rc == EFS_OK && n.cap_n == 1, "k103 probe is answered");
+            CHECK(efs_raft_log_progress(n.r[1], &lp) == EFS_OK, "k103 reply progress");
+            if (kind == 0) {
+                CHECK(n.cap_ok && n.cap_match == 0 && n.cap_read_context == 9 && lp.rejects_sent == 0,
+                      "k103 compacted follower acknowledges the read probe");
+            } else if (kind == 3) {
+                CHECK(!n.cap_ok && lp.rejects_sent == 1 && efs_raft_term(n.r[1]) == 3,
+                      "k103 stale-term probe is still refused");
+            } else {
+                CHECK(!n.cap_ok && n.cap_match == 4 && lp.rejects_sent == 1,
+                      "k103 ordinary and commit AppendEntries at a compacted prefix still refused with the rebase hint");
+            }
+            efs_raft_free(n.r[1]); efs_raft_mem_free(st);
+        }
+    }
+}
+
+/* A follower in a newer term refuses the probe and the leader steps down. */
+static void test_read_probe_newer_term_steps_down(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    int lid, f;
+
+    read_probe_fixture(&n, st, app, &cfg, 0);
+    lid = leader_id(&n);
+    f = (lid + 1) % 3;
+    /* A higher-term message from the third member moves f past the leader. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = (lid + 2) % 3; m.to = f;
+    m.term = efs_raft_term(n.r[lid]) + 1;
+    CHECK(efs_raft_recv(n.r[f], &m) == EFS_OK && efs_raft_term(n.r[f]) == m.term,
+          "k103 follower moves to a newer term");
+    n.capture_read = 1;
+    CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK && n.read_req[f] && n.read_req[f]->vote_granted,
+          "k103 probe captured for the newer-term follower");
+    CHECK(efs_raft_recv(n.r[f], n.read_req[f]) == EFS_OK && n.read_reply[f] &&
+          !n.read_reply[f]->success && n.read_reply[f]->term == m.term,
+          "k103 newer-term follower refuses the probe and reports its term");
+    CHECK(efs_raft_recv(n.r[lid], n.read_reply[f]) == EFS_OK &&
+          efs_raft_role(n.r[lid]) != EFS_RAFT_LEADER, "k103 leader steps down on the refusal");
+    for (int i = 0; i < 3; i++) { msg_free_deep(n.read_req[i]); msg_free_deep(n.read_reply[i]); }
+    free_n(&n, st, 3);
+}
+
 /* Resync withdraws election eligibility until a verified image installs.
  * A transfer/grant already queued before the operator's request must not
  * promote the very replica whose local state is being repaired. */
@@ -3704,6 +3877,9 @@ int main(int argc, char **argv)
         RUN(test_leadership_transfer);
         RUN(test_resync_fences_elections);
         RUN(test_snapshot_rejects_delayed_compacted_prefix);
+        RUN(test_read_probe_compacted_follower);
+        RUN(test_read_probe_compacted_reply);
+        RUN(test_read_probe_newer_term_steps_down);
         RUN(test_grow_3_to_4);
         RUN(test_solo_durable_cap_then_grow);
         RUN(test_i18_joint_quorum);
