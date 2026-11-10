@@ -4,7 +4,7 @@
 # Private 3-daemon RDMA cluster for W125 P0 measurements on node9901 (or
 # another node: W125_ADDR=<its address>):
 # ports PORT+1..PORT+3 (default 17671-17673), stores under DIR/n{1,2,3},
-# --direct-io, one efs-fuse mount at DIR/mnt (W125_TRANSPORT=tcp: TCP instead). Never touches orcd-mini
+# fragment I/O always O_DIRECT (D42), one efs-fuse mount at DIR/mnt (W125_TRANSPORT=tcp: TCP instead). Never touches orcd-mini
 # (17432-17434) or w100 (27432/27433). REL holds efsd, efs-fuse, efs-mgmt
 # and scripts/client.sh of one build.
 #
@@ -52,10 +52,13 @@ start)
   done
   mkdir -p "$D"/{n1,n2,n3,logs,mnt}
   for i in 1 2 3; do
-    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
+    # K33 CLI: n1 seeds (`efsd ADDR:PORT STORE`), the others join it; no
+    # discovery, so the live cluster on the same host never sees this one.
+    if [ $i -eq 1 ]; then ep="$ADDR:$((PORT+1))"
+    else ep="--join $ADDR:$((PORT+1)) --listen $ADDR:$((PORT+i))"; fi
     nohup "$0" run-daemon "$D/logs/n$i.pid" "$D/logs/n$i.rc" \
-      "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-      --quota 200G --direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+      "$REL/efsd" $ep "$D/n$i" --quota 200G --discovery-port 0 \
+      >> "$D/logs/efsd-n$i.log" 2>&1 &
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" 2>/dev/null && break; sleep 0.5; done
   done
   for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done

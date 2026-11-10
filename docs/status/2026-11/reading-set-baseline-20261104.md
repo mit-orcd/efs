@@ -184,3 +184,31 @@ grep -n "^static.*host_read_[a-z_]*(\|^static.*host_wait_[a-z_]*(" src/server/ra
 ```
 
 What (c) must move for the after-measurement to show a reduction: fix 1 needs the retained-release table and drain named in the guide and a `.release` route that reaches `test_open_lease.py` and `test_flock_description_release.py`; fix 3 needs the FLUSH/FSYNC surfacing tests routed under `.write` and the second error channel named in the contract; fix 2 is the unsplit state and changes only with the ReadIndex pilot (after W123).
+
+## Measures (Task EV, Nov 9)
+
+Added after the Nov 9 outside review of the pilots. Each measure is counted
+from a reading log: one row per file range, grep or command, with lines,
+category and needed yes/no, as in the tables above. Pages report
+understanding, validation and their total separately; a headline that
+quotes understanding alone hides a rise in validation.
+
+| Measure | Definition | Counted from the log |
+|---|---|---|
+| Understanding lines needed | lines the change or decision depends on, outside the tests | sum of "needed" rows in every category except tests (guide, interface, implementation, callers, shared state, navigation) |
+| Validation lines needed | test and routing lines needed to check the change | sum of "needed" rows in the tests and routing categories |
+| Total needed | the whole reading the change depends on | understanding needed plus validation needed |
+| Lines opened | every line read or printed to the reader | sum of all rows, needed or not, understanding and validation, reported per half and in total |
+| Irrelevant reading | lines opened and not needed | lines opened minus total needed; dead ends (ranges or searches not needed) are listed beside it by name |
+| Missed dependencies | a file or function the change had to touch or reason about that the reader did not open | the reference answer's read list, or a finding at review, minus the files in the log; zero only when a reference or review exists and every item in it is in the log |
+| Correctness | whether the change matches the reference | "matches", "better" (with the evidence that shows it: a failing variant, a cited line), or "wrong" (with the miss); not derivable without a reference |
+| Necessary expansion | owners beyond the named one that the question required | the files in the log outside the named component's guide, interface and implementation, each with the dependency it carries; counted as success when the dependency is real (the change or its correctness rests on it), as irrelevant reading when it is not |
+
+"One guide, one interface, one implementation file and the routed tests"
+is the target for a single-owner question. It is not a criterion for a
+cross-owner question: there the measures are irrelevant reading, missed
+dependencies and correctness alongside the total, and reading another
+owner that the change needs is necessary expansion, not a failure of the
+boundary. The [blind-reader page](blind-reader-20261109.md) is the
+example: its question 2 needed the KV apply scope to find a race the
+reference missed.

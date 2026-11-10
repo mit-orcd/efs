@@ -1570,10 +1570,10 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
  * The only data-fragment PUT mode: NFS unstable/commit
  * (docs/status/2026-10/intel-async-durability-20261015.md). A fragment is ACKed
  * after its write and close; it joins its root's open epoch. A per-root
- * syncer runs one barrier when the epoch is EFS_PUT_SYNC_MS old (default
- * 200, 1..10000), holds EFS_PUT_SYNC_BYTES (default 256 MiB), or a
- * DATA_COMMIT (client fsync) asks; PUTs wait above twice that byte bound.
- * Smaller values make durability more aggressive.
+ * syncer runs one barrier when the epoch is 200 ms old, holds 256 MiB
+ * (both built in: A6 and A8 removed EFS_PUT_SYNC_BYTES and EFS_PUT_SYNC_MS),
+ * or a DATA_COMMIT (client fsync) asks; PUTs wait above twice that byte
+ * bound.
  *
  * Barrier: syncfs(root) (writeback and journal commit), then the epoch
  * record <root>/.efs-durable-epoch rewritten and fdatasynced. That
@@ -1635,20 +1635,6 @@ static uint64_t put_sync_wall_ns(void)
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-}
-
-static void put_sync_config(void)
-{
-    static int done;
-    if (!done) {
-        done = 1;
-        const char *w = getenv("EFS_PUT_SYNC_MS");
-        if (w && *w) {
-            unsigned long v = strtoul(w, NULL, 10);
-            if (v >= 1 && v <= 10000) put_sync_window_ms = v;
-        }
-        efs_setting_u64("EFS_PUT_SYNC_MS", put_sync_window_ms);
-    }
 }
 
 /* V2 is a fixed, checksummed record. Clean-restart reuse must not trust a
@@ -1934,7 +1920,6 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
 {
     if (!s)
         return NULL;
-    put_sync_config();
     char root[EFS_MAX_PATH] = {0};
     int idx = fragment_root_lookup(s, path, root);
     if (idx < 0)

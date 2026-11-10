@@ -328,8 +328,7 @@ this list, before it ships.
   client, read-your-writes hold via the dcache. This resembles NFS
   close-to-open consistency (publication at `flush`, visibility on the
   next open/read elsewhere). Reads on an already-open description may retain
-  a chunk mapping for `EFS_READ_MAP_TTL_MS` (default 200 ms, zero disables
-  this cache); a new open invalidates mapping freshness. This is only
+  a chunk mapping for 200 ms (built in); a new open invalidates mapping freshness. This is only
   close-to-open consistency: client-side buffering does
   not by itself imply weak coherence — lock- or lease-based PFSs recall
   buffered data to make it visible, and EFS has no such recall. It is a
@@ -1648,10 +1647,10 @@ One row per active effort; the linked page states the exact source, verdict, rem
 
 | Effort | Verdict | State page |
 | --- | --- | --- |
-| Alpha 1.0 Stage 1 acceptance | Planning only; no PASS/FAIL recorded on the matrix | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
+| Alpha 1.0 Stage 1 acceptance | Batch F on candidate `9bb50fe79` (Nov 9): F1 0 FAIL on a third gate run, F2 to F5 PASS; 18 K rows VERIFIED on `9bb50fe79` ([batch F](../status/2026-11/batch-f-candidate-20261109.md)). Batch O on the same candidate (Nov 9–10, [Task EW](../status/2026-11/orcd-mini-batch-o-20261109.md)): O1 FAIL (K38), K32 reopened, K102 new; O5/O6/O8/O9 PASS, O3 one criterion not met, O4 NOTRUN; K8, K26 and K51 VERIFIED on it. K38 fix merged in wave 70 ([Task FB](../status/2026-11/k38-recurrence-20261110.md)); `9bb50fe79` is no longer the release candidate, batches F and O rerun on the fixed one; batches D and S in progress | [Stage 1 matrix](../status/stage1-acceptance-matrix-20261030.md) |
 | Alpha 1.0 known defects (section K) | OPEN; no release candidate or topology acceptance | [K register](../status/alpha-1.0-2plus1-checklist.md) |
 | W123 crash recovery | Not accepted; correctness gates passed, formal performance FAIL, v3 wait capture pending | [W123 current state](../status/w123-current.md) |
-| W171 less context per change | In progress; phase 3 splits of `efs_fuse.c` (Nov 4) and `meta_apply.c` (Nov 5) landed, measured reading sets not reduced; write-back ownership pilot (Task DM, Nov 6, merged in wave 60; its `ready` race fixed by Task DT, wave 61) cut lines needed 691 to 593 and stopped at the boundary; Task EB (merged in wave 64, Nov 8) repeated it on the open-reference table (640 to 543), added multi-tag test routes that refuse misspellings, and put the component guides and per-component nodes in the code graph; wave 65 (Nov 9) merged Task EC, which made the `.find` result cache private to `find_res.c` (542 to 428 lines needed) and fixed K101, Task ED, which checks guide counts in `make docs-check`, audited every catalogue tag and declared the `raft_host.c` prefix tags, Task DO, the `raft_host.c` ReadIndex entry map and before-measurement ([evidence](../status/2026-11/readindex-entry-map-20261108.md)), and Task EE, the review of the Nov 9 feedback into briefs EF to EI ([review](../status/2026-11/review-feedback-nov9-20261109.md)); wave 66 (Nov 9) merged Task EF, the graph's `tested_by` edges from `tests_for.py`'s resolver ([evidence](../status/2026-11/graph-selector-resolver-20261109.md)), Task EH, one current-status block per active page, Task EI, two changes made by blind readers, the unmount report and the GC watermark double count, read with 8 to 10 source files against the implementers' 3 to 4 ([evidence](../status/2026-11/blind-reader-20261109.md)), and Task EJ, the K54 fence test asserting what K54 forbids; wave 67 (Nov 9) merged Task EK (the k37 degraded-count `begin` keeps the latest apply's marks) and the eight small tasks EL to ES (`EFS_FUSE_PREFIX` alone drives the fuse3 build, the sequence binaries on the sanitizer lists, 40 budget rows refit down, the K101 pattern audit found no second case, stop files already cleaned by Task DI, every evidence script cited, two open.c splice tests migrated onto the interface test, host-limit NOTRUN rows marked in the gate summary); the split still waits on the W123 recovery merge | [Structure plan](../status/2026-11/structure-plan-20261102.md), [Task ED](../status/2026-11/navigation-leftovers-20261108.md) |
+| W171 less context per change | In progress; phase 3 splits of `efs_fuse.c` (Nov 4) and `meta_apply.c` (Nov 5) landed, measured reading sets not reduced; write-back ownership pilot (Task DM, Nov 6, merged in wave 60; its `ready` race fixed by Task DT, wave 61) cut lines needed 691 to 593 and stopped at the boundary; Task EB (merged in wave 64, Nov 8) repeated it on the open-reference table (640 to 543), added multi-tag test routes that refuse misspellings, and put the component guides and per-component nodes in the code graph; wave 65 (Nov 9) merged Task EC, which made the `.find` result cache private to `find_res.c` (542 to 428 lines needed) and fixed K101, Task ED, which checks guide counts in `make docs-check`, audited every catalogue tag and declared the `raft_host.c` prefix tags, Task DO, the `raft_host.c` ReadIndex entry map and before-measurement ([evidence](../status/2026-11/readindex-entry-map-20261108.md)), and Task EE, the review of the Nov 9 feedback into briefs EF to EI ([review](../status/2026-11/review-feedback-nov9-20261109.md)); wave 66 (Nov 9) merged Task EF, the graph's `tested_by` edges from `tests_for.py`'s resolver ([evidence](../status/2026-11/graph-selector-resolver-20261109.md)), Task EH, one current-status block per active page, Task EI, two changes made by blind readers, the unmount report and the GC watermark double count, read with 8 to 10 source files against the implementers' 3 to 4 ([evidence](../status/2026-11/blind-reader-20261109.md)), and Task EJ, the K54 fence test asserting what K54 forbids; wave 67 (Nov 9) merged Task EK (the k37 degraded-count `begin` keeps the latest apply's marks) and the eight small tasks EL to ES (`EFS_FUSE_PREFIX` alone drives the fuse3 build, the sequence binaries on the sanitizer lists, 40 budget rows refit down, the K101 pattern audit found no second case, stop files already cleaned by Task DI, every evidence script cited, two open.c splice tests migrated onto the interface test, host-limit NOTRUN rows marked in the gate summary); wave 68 (Nov 10) merged Task ET, the apply visibility contract between owners ([page](apply-visibility.md)), Task EU, contract-to-case maps in the owner guides checked statically, and Task EV, the reading-set method reporting understanding, validation and total apart with necessary cross-owner reading counted as success; the split still waits on the W123 recovery merge | [Structure plan](../status/2026-11/structure-plan-20261102.md), [Task ED](../status/2026-11/navigation-leftovers-20261108.md) |
 
 ### Maintaining this index
 
@@ -10890,7 +10889,7 @@ larger of two linear ramps:
 
 The busy rate is `floor + (idle − floor) × pressure`. The backlog is
 counted every 30 s. A pass reads its segments' files on 16 threads and
-builds and switches its segments concurrently (`EFS_PACK_SEGMENTS_PER_PASS`, at most 32). Passes run back to
+builds and switches its segments concurrently (8 per pass). Passes run back to
 back while backlog and budget remain.
 
 **Segment quota reserve.** `PUT_SEGMENT` may exceed a node's quota by
@@ -10926,24 +10925,27 @@ segments, live, dead, holed, underfilled and compacted total.
 **Backfill.** `PACK_INDEX` (MD 78) backfills the candidate index from a
 leader scan of inode shards, for stores written before packing.
 
-**Tunables** (efsd environment; defaults in parentheses):
+**Pacing** (built in; A8 removed their `EFS_PACK_*` environment overrides,
+which now stop efsd when set):
 
-| Variable | Meaning |
+| Value | Meaning |
 | --- | --- |
-| `EFS_PACK_MIN_AGE_MS` (60000) | quiet time before a closed file is packed |
-| `EFS_PACK_FILES_PER_S` (5000) | idle packing rate per group |
-| `EFS_PACK_BUSY_FILES_PER_S` (50) | floor while busy |
-| `EFS_PACK_BUSY_COMMITS_PER_S` (100) | foreground commit rate that counts as busy |
-| `EFS_PACK_UNPACKED_GIB` (64) | unpacked bytes where pressure starts (full at 2×) |
-| `EFS_PACK_SPACE_START_PCT` / `_FULL_PCT` (50 / 80) | quota-usage pressure ramp |
-| `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
-| `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
-| `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` (180) | daily window start, UTC minute of day |
-| `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
+| 60000 ms | quiet time before a closed file is packed |
+| 5000 files/s | idle packing rate per group |
+| 50 files/s | floor while busy |
+| 100 commits/s | foreground commit rate that counts as busy |
+| 64 GiB | unpacked bytes where pressure starts (full at 2×) |
+| 50 % / 80 % | quota-usage pressure ramp |
+| 8 | segments per pass, and compaction per daily pass |
+| 60 s | idle time before idle compaction |
+| 256 | output segments per idle batch |
+| 03:00 UTC | daily window start |
+| 64 | inode shards scanned per backfill step |
 
-Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
-compaction batch, a 120 min daily window and full coldness at 86400 s
+Also built in (A6): a 10 s work cap per idle compaction batch, a 120 min
+daily window and full coldness at 86400 s. Test builds (`EFS_FAULTS`) read
+`EFS_FAULT_PACK_MIN_AGE_MS`, `_INTERVAL_MS`, `_FAIL_BACKOFF_MS`,
+`_COMPACT_IDLE_S` and `_COMPACT_DAILY_START_MIN`
 ([inventory](settings.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
@@ -11351,8 +11353,8 @@ The LOCAL inode row carries `nents`, a count of immediate children
 decrement it). Crossing `nents > EFS_DIR_SPREAD_MIN` commits `SPLITTING` on
 that same parent-row PUT — one Raft entry, no extra round. After spread the
 count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
-a distributed counter (the spec rejected that). Runtime override:
-`EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
+a distributed counter (the spec rejected that). Test builds only:
+`EFS_FAULT_DIR_SPREAD_MIN` (`EFS_FAULTS`, A8). Pressure-triggered spread is specified; the
 bound is not a number in the spec and is not invented here. Source review
 found size-based admission and migration of already-SPLITTING directories,
 but no pressure-based automatic trigger ([W81](#w81)). Draining
@@ -11892,7 +11894,7 @@ A request whose reply was lost after it was sent, or whose retry budget ran
 out after a send, has an **unknown** outcome: the server may have applied
 it. The client never turns that into an error by guessing. Before failing
 it resolves the request against its receipt, under the **same identity**
-and a fresh bounded window (`EFS_RESOLVE_MS`, default 8 s):
+and a fresh bounded window (8 s, built in):
 
 ```text
 identified directory op    receipt = the op-id window above (durable)

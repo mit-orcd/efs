@@ -11,6 +11,20 @@ validate rose 306 to 361 (the new compiled test).** `g_wb` is private to
 OVERBUDGET; TSan FUSE lane 3 of 3 PASS. No K row, blocks alpha: no.
 Merged into devel in wave 60 (Nov 7); its `ready` race was fixed by Task DT and merged in wave 61 (Nov 7). Status Nov 9: remaining failures none; active run none; next action none on this page, W171 continues on the [structure plan](structure-plan-20261102.md).
 
+**Headline by the [reading-set measures](reading-set-baseline-20261104.md#measures-task-ev-nov-9)** (Task EV, Nov 9; numbers from the sections below, before → after):
+
+| Measure | Before | After |
+|---|---|---|
+| Understanding lines needed | 691 | 593 |
+| Validation lines needed | 306 | 361 |
+| Total needed | 997 | 954 |
+| Lines opened (understanding / validation / total) | 1,074 / 306 / 1,380 | 767 / 405 / 1,172 |
+| Irrelevant reading (opened − total needed) | 383 | 218 |
+| Dead ends | 3 | 2 |
+| Source files opened | 7 | 4 |
+
+Missed dependencies, correctness and necessary expansion cannot be derived: the reading was the implementer's own, with no reference answer to compare against.
+
 > **Current status (Nov 8, Task EB):** merged into devel in wave 60
 > ([ledger](ledger.md)). The `ready` / start-failure finding left open at
 > the end of this page was fixed by Task DT ([write-back `ready` flag and

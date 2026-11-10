@@ -1017,8 +1017,8 @@ src/sim/sim_disk.o: src/sim/sim_disk.c src/sim/sim_internal.h include/efs/sim.h 
 src/sim/sim_ns.o: src/sim/sim_ns.c src/sim/sim_internal.h include/efs/sim.h include/efs/txn.h include/efs/kv_key.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
 
-tests/test_sim: tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o $(LIB) $(LDFLAGS)
+tests/test_sim: tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o tests/faults/meta/dir_layout.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o tests/faults/meta/dir_layout.o $(LIB) $(LDFLAGS)
 
 # Not part of `make test`: the suite exits 2 without real integration, and
 # that must not be turned into a green unit run.
@@ -1164,7 +1164,8 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
 FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
 FAULT_RAFT_OBJS = tests/faults/raft/raft_disk.o
-FAULT_META_OBJS = $(patsubst src/meta/%.c,tests/faults/meta/%.o,$(META_APPLY_SRCS))
+# A8: dir_layout.c reads EFS_FAULT_DIR_SPREAD_MIN only with the gate on.
+FAULT_META_OBJS = $(patsubst src/meta/%.c,tests/faults/meta/%.o,$(META_APPLY_SRCS) src/meta/dir_layout.c)
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<

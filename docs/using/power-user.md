@@ -56,11 +56,10 @@ without a usable device; `auto` logs the transport it uses.
 | `EFS_DCACHE_HARD_BYTES` | shared body-admission budget (default 256 MiB; not a process RSS cap) |
 | `EFS_DCACHE_DRAIN_BYTES` | reserved drain/recovery body capacity (default 64 MiB) |
 | `EFS_DCACHE_BYTES` | soft dirty-body reclaim target in bytes (default 128 MiB); not the hard allocation bound |
-| `EFS_CLIENT_CONNS_PER_NODE` | pooled connections per server node |
+| `EFS_DCACHE_READ_BYTES` | read headroom above the body budget (default 64 MiB) |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
 | `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership committed at formation and grown by later joins; node ids come from the cluster (K33). Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
-| `EFS_RDMA_BUFS` | RDMA buffer pool size |
 | `EFS_LOG_TS` | UTC timestamps are enabled by default; `=0` disables the timestamp wrapper |
 | `EFS_DCACHE_TRACE=1` | client dcache/publish trace (the `report` / `dcache` lines) |
 | `EFS_REPORT_DBG=1` | client REPORT pack + verdict detail |

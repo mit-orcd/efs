@@ -187,7 +187,8 @@ KV `fdatasync` calls of that moment wait behind it. That predicts a
 periodic stall, and the profile shows p99 at 5 to 20 times p50 with idle
 CPUs. Candidate: pace compaction output with `sync_file_range` the way the
 rotation does, so a barrier finds little that is not its own. Size: p99,
-not p50. Refute it with: `EFS_PUT_SYNC_MS` at 50, 200 and 1,000 on a
+not p50. Refute it with: private builds that differ only in the barrier window (50,
+200 and 1,000 ms; Task FA built the `EFS_PUT_SYNC_MS` setting in, wave 69) on a
 private cluster under tiny-file load; the theory predicts create p99
 spikes that follow the barrier period and grow with compaction activity,
 and `last_barrier_us` peaks at those moments. No correlation closes the

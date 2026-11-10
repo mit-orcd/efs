@@ -11,7 +11,7 @@ that is). After every interruption the ended daemon is restarted (or the
 join retried) and the test checks one membership: every member reports the
 same table of ids 1..N with distinct endpoints, each daemon holds the id its
 endpoint has in that table, group 0 votes on {1,2,3} and group 2 on {2,3,4}
-from four members. Packing is off (EFS_PACK_MIN_AGE_MS one hour) and GC is
+from four members. Packing is off (EFS_FAULT_PACK_MIN_AGE_MS one hour) and GC is
 off, so the data check is exact: files written before the additions read
 back, and the fragment files on all stores are exactly three per chunk of
 the files written (no orphaned fragment on any store, none on a joiner).
@@ -44,7 +44,7 @@ for b in (EFSD, MGMT):
         sys.exit(f'{b} missing: run make first')
 work = Path(tempfile.mkdtemp(prefix='efs-k33i-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_MEMBER_EXIT')}
-env.update(EFS_FAULT_GC_DISABLE='1', EFS_PACK_MIN_AGE_MS='3600000')
+env.update(EFS_FAULT_GC_DISABLE='1', EFS_FAULT_PACK_MIN_AGE_MS='3600000')
 CHUNK = 128 * 1024
 SIZES = (1, 4096, 100000, CHUNK, 3 * CHUNK + 17)
 FUSE = fuse_ok()

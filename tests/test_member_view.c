@@ -406,7 +406,7 @@ static void runtime(void)
 int main(void)
 {
     setenv("EFS_TRANSPORT", "tcp", 1);
-    setenv("EFS_CLIENT_VIEW_POLL_MS", "100", 1);
+    efs_client_view_poll_ms = 100; /* A8: test hook, built in 1000 */
     listeners();
     records();
     judgement();

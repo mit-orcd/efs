@@ -2,7 +2,7 @@
 """W130 one-replica DIR fault: a corrupt stored row on one replica must halt
 that group on that replica — never skip, never misread.
 
-Fault-build daemons (tests/k33_daemons.py), EFS_DIR_SPREAD_MIN small so a
+Fault-build daemons (tests/k33_daemons.py), EFS_FAULT_DIR_SPREAD_MIN small so a
 directory split (the DIR command sequence: begin-split, migrate, finish)
 happens at 64 entries. With EFS_FAULT_DIR_CORRUPT_FILE armed on node 3, that
 replica's apply damages the directory's stored row after its successful
@@ -44,7 +44,7 @@ RESYNC_DEADLINE = int(os.environ.get('W130_RESYNC_DEADLINE', '300'))
 work = Path(tempfile.mkdtemp(prefix='efs-w130-', dir=os.environ.get('TMPDIR')))
 env = dict(os.environ)
 env['EFS_TRANSPORT'] = 'tcp'
-env['EFS_DIR_SPREAD_MIN'] = SPREAD_MIN
+env['EFS_FAULT_DIR_SPREAD_MIN'] = SPREAD_MIN
 env['EFS_TRACE_READDIR'] = '1'  # one bounded log line per READDIR page (K48 attribution)
 
 

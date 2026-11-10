@@ -45,7 +45,7 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k33p-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_MEMBER_EXIT')}
-env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+env.update(EFS_FAULT_PACK_MIN_AGE_MS='500', EFS_FAULT_PACK_INTERVAL_MS='200')
 env.pop('EFS_FAULT_GC_DISABLE', None)
 SMALL = (1, 17, 512, 4095, 4096, 9000, 16384)
 LARGE = (64 * 1024 + 1, 300000, 1024 * 1024 + 3)

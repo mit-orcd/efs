@@ -69,7 +69,7 @@ static int efs_client_rpc_past_deadline(void) { return deadline && now_ms >= dea
     'static uint64_t g_node_full_until_ms[EFS_MAX_NODES + 1];\n' + \
     'static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];\n' + \
     macro('PUT_SPARE_PROBE_MS') + 'static uint64_t g_node_spare_probe_ms[EFS_MAX_NODES + 1];\n' + \
-    fn('static int spare_reprobe') + fn('static int node_is_full') + fn('static uint64_t put_away_mark_ms') + fn('static void node_note_away') + \
+    fn('static int spare_reprobe') + fn('static int node_is_full') + fn('static void node_note_away') + \
     fn('static int node_is_away') + fn('static void reroute_untried_fragments') + r'''
 static void place(efs_ino_t ino, uint32_t ci, efs_node_id_t out[3])
 {

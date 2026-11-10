@@ -27,6 +27,10 @@ struct efs_rdma_conn;    /* opaque, rdma.c */
 
 int efs_rdma_transport(void);       /* EFS_TRANSPORT_* */
 int efs_rdma_available(void);       /* transport != tcp and a usable IB dev */
+/* Test hook (A8): posted receives per QP for the next connections, 2..64;
+ * 0 keeps the built-in 6. Set only by tests/test_rdma_segmented.c and the
+ * xprt bench. */
+extern int efs_rdma_test_nrecv;
 /* Startup check and report (efsd, efs-fuse): EFS_OK, or a refusal already
  * printed (unknown value; rdma without a usable device). */
 int efs_transport_startup(const char *prog);

@@ -309,7 +309,7 @@ A request whose reply was lost after it was sent, or whose retry budget ran
 out after a send, has an **unknown** outcome: the server may have applied
 it. The client never turns that into an error by guessing. Before failing
 it resolves the request against its receipt, under the **same identity**
-and a fresh bounded window (`EFS_RESOLVE_MS`, default 8 s):
+and a fresh bounded window (8 s, built in):
 
 ```text
 identified directory op    receipt = the op-id window above (durable)

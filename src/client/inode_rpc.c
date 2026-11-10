@@ -134,20 +134,11 @@ static const char *rpc_req_ident(uint8_t type, const void *req, uint32_t len,
 }
 
 /* W155: how long a client may spend resolving a request whose reply was
- * lost, on top of the budget that expired. EFS_RESOLVE_MS overrides; read
- * once. Any thread may be first: read and set atomically (as K83). */
+ * lost, on top of the budget that expired: 8000 ms, built in (A8; was
+ * EFS_RESOLVE_MS, which no test or launch set to another value). */
 static uint64_t rpc_resolve_ms(void)
 {
-    static long ms_s = -1;
-    long ms = __atomic_load_n(&ms_s, __ATOMIC_ACQUIRE);
-    if (ms < 0) {
-        const char *e = getenv("EFS_RESOLVE_MS");
-        long v = e && *e ? strtol(e, NULL, 10) : 8000;
-        ms = v < 0 ? 0 : v;
-        efs_setting_u64("EFS_RESOLVE_MS", (unsigned long long)ms);
-        __atomic_store_n(&ms_s, ms, __ATOMIC_RELEASE);
-    }
-    return (uint64_t)ms;
+    return 8000;
 }
 
 /* The publisher shares this existing resolution allowance across retries;

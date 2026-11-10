@@ -21,8 +21,8 @@ S=$(cd "$(dirname "$0")" && pwd)/orcd_mini_ssh.sh; HERE=$(cd "$(dirname "$0")" &
 q() { "$S" "$@" 2>&1 | grep -v -e NOTICE -e 'scheduled maintenance' -e '^\*\*\*' -e '^ *$'; }
 DA=/data1/efs/prof/c1-$TAG; DB=/data1/efs/orcd-mini-client/prof/c1-$TAG
 MA=/data1/efs/mnt/c1-$TAG; MB=/data1/efs/orcd-mini-mnt/c1-$TAG
-q node9901 "mkdir -p $DA && cat > $DA/w125_concurrent.py" < "$HERE/w125_concurrent.py"
-q node9900 "mkdir -p $DB && cat > $DB/w125_concurrent.py" < "$HERE/w125_concurrent.py"
+q node9901 "mkdir -p $DA && cat > $DA/w125_concurrent.py" < "$HERE/../w125/w125_concurrent.py"
+q node9900 "mkdir -p $DB && cat > $DB/w125_concurrent.py" < "$HERE/../w125/w125_concurrent.py"
 q node9901 "cat > $DA/run.sh && chmod +x $DA/run.sh" <<EOF
 #!/bin/bash
 cd $DA; until grep -q ^RC= $WA 2>/dev/null; do sleep 15; done

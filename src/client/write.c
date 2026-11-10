@@ -947,8 +947,9 @@ _Static_assert(sizeof(struct efs_chunk_rec) + sizeof(struct efs_ino_size_rec) +
                sizeof(uint64_t) <= REPORT_PRESSURE_RECORD_BYTES,
                "REPORT admission byte charge must cover a chunk and inode");
 static uint64_t report_reserved, report_waits, report_timeouts;
-static uint64_t report_limit_records, report_limit_bytes, report_admit_ms;
-static pthread_once_t report_config_once = PTHREAD_ONCE_INIT;
+/* Built in (A8): 8192 records, 16 MiB, 8000 ms admission wait; the unit
+ * test (test_report_pressure.py) sets these statics. */
+static uint64_t report_limit_records = 8192, report_limit_bytes = 16ull << 20, report_admit_ms = 8000;
 static __thread uint64_t report_request_records;
 static void meta_flush_enqueue(efs_ino_t ino);
 
@@ -957,31 +958,6 @@ static uint64_t report_clock_ms(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static uint64_t report_env(const char *name, uint64_t fallback)
-{
-    const char *value = getenv(name);
-    char *end = NULL;
-    unsigned long long n = fallback;
-    if (value && *value && *value != '-') {
-        errno = 0;
-        n = strtoull(value, &end, 10);
-        if (errno || *end || !n)
-            n = fallback;
-    }
-    efs_setting_u64(name, n);
-    return n;
-}
-
-static void report_config(void)
-{
-    report_limit_records = report_env("EFS_REPORT_MAX_RECORDS", 8192);
-    report_limit_bytes = report_env("EFS_REPORT_MAX_BYTES", 16ull << 20);
-    report_admit_ms = report_env("EFS_REPORT_ADMIT_MS", 8000);
-    if (report_admit_ms > 60000)
-        report_admit_ms = 60000;
-    efs_setting_u64("EFS_REPORT_ADMIT_MS", report_admit_ms);
 }
 
 /* dirty_mu held. Detached snapshots remain charged until release. */
@@ -1024,7 +1000,6 @@ int efs_client_report_admit(uint64_t records)
         return EFS_OK;
     if (report_request_records)
         return EFS_ERR_INVAL; /* caller must finish its previous reservation */
-    pthread_once(&report_config_once, report_config);
     uint64_t limit = report_limit_records;
     if (limit > report_limit_bytes / REPORT_PRESSURE_RECORD_BYTES)
         limit = report_limit_bytes / REPORT_PRESSURE_RECORD_BYTES;
@@ -1599,6 +1574,30 @@ struct stale_retry_view {
     struct efs_msg_inode_writer_view_reply authority;
 };
 
+/* The host refuses this span by rule, whatever the base: it overlaps a live
+ * span (an overlap needs a fold of the fetched image, see span_of) or the
+ * chain is full (meta_apply publish.c, EFS_PUB_STALE_OVERLAP / CHAIN_FULL).
+ * Sending the same record again can never win (K38 recurrence, Nov 9: the
+ * mapping and delta view matched, 1,500 identical OVERLAP refusals). */
+static int span_refused(const struct efs_chunk_rec *r, const struct efs_chunk_entry *ce)
+{
+    uint32_t live = 0;
+
+    for (uint32_t i = 0; i < ce->ndelta && i < EFS_CHUNK_DELTA_MAX; i++) {
+        const struct efs_chunk_delta *d = &ce->deltas[i];
+
+        if (!d->len)
+            continue;
+        live++;
+        if (d->generation == r->chunk_generation && d->off == r->delta_off &&
+            d->len == r->delta_len)
+            continue; /* this record's own landed span: the classifier's done case */
+        if (d->off < r->delta_off + r->delta_len && r->delta_off < d->off + d->len)
+            return 1;
+    }
+    return live >= EFS_CHUNK_DELTA_MAX;
+}
+
 /* A transaction can abort on admission/lock BUSY while its chunk mapping
  * did not change. Its uploaded immutable body is still owned: retry that
  * object under the next publication id, rather than settle it REJECTED and
@@ -1628,6 +1627,8 @@ static int stale_retry_owned(const struct efs_chunk_rec *r, uint64_t seq,
          r->delta_base_n != (absent ? 0 : ce->ndelta) ||
          r->delta_base_seq != (absent ? 0 : ce->delta_seq)))
         return 0;
+    if (r->delta_len && !absent && span_refused(r, ce))
+        return 0; /* ordinary rebase: fold the span into the fetched image */
     /* One fresh FileID/epoch proof per inode in this repull round, not one
      * network round-trip per chunk of a large atomic write. No global cache. */
     if (view->ino != r->ino || view->generation != r->file_generation) {
@@ -3738,33 +3739,15 @@ static int node_is_full(efs_node_id_t id)
  * two fragments. Found by tests/test_k35_fsync_degraded.py case 7: node 3
  * marked away by a write during its restart kept a 4-member cluster from
  * placing around node 4, stopped a few seconds later, so every stripe
- * touching node 4 was acknowledged degraded. EFS_FAULT_AWAY_MARK_MS
- * (milliseconds) overrides the window; tests make it long so the
- * interleaving is forced, not timed. */
+ * touching node 4 was acknowledged degraded. A8: the window is built in
+ * (no fault hook; efs-fuse is never built with EFS_FAULTS). */
 #define PUT_AWAY_MARK_MS 10000u
 static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];
-
-static uint64_t put_away_mark_ms(void)
-{
-#if EFS_FAULTS
-    /* Fault builds only (A6): tests make the window outlast the test so the
-     * away-member interleaving is forced, not timed. */
-    static uint64_t ms;
-    if (!ms) {
-        const char *v = getenv("EFS_FAULT_AWAY_MARK_MS");
-        unsigned long long n = v && *v ? strtoull(v, NULL, 10) : 0;
-        ms = n ? (uint64_t)n : PUT_AWAY_MARK_MS;
-    }
-    return ms;
-#else
-    return PUT_AWAY_MARK_MS;
-#endif
-}
 
 static void node_note_away(efs_node_id_t id)
 {
     if (id && id <= EFS_MAX_NODES)
-        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + put_away_mark_ms(),
+        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + PUT_AWAY_MARK_MS,
                          __ATOMIC_RELAXED);
 }
 

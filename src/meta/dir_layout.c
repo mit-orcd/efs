@@ -1,4 +1,3 @@
-#include "efs/settings.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
 #include "efs/meta_apply.h"
@@ -10,19 +9,18 @@
 
 uint32_t efs_dir_spread_min(void)
 {
-    const char *e = getenv("EFS_DIR_SPREAD_MIN");
-    unsigned long v;
-    char *end = NULL;
     uint32_t r = EFS_DIR_SPREAD_MIN;
+#if EFS_FAULTS
+    /* A8: tests spread small directories; product builds keep 65536. */
+    const char *e = getenv("EFS_FAULT_DIR_SPREAD_MIN");
+    char *end = NULL;
 
     if (e && *e) {
-        v = strtoul(e, &end, 10);
+        unsigned long v = strtoul(e, &end, 10);
         if (end != e && v > 0 && v <= UINT32_MAX)
             r = (uint32_t)v;
     }
-    static int noted;
-    if (!__atomic_exchange_n(&noted, 1, __ATOMIC_RELAXED))
-        efs_setting_u64("EFS_DIR_SPREAD_MIN", r);
+#endif
     return r;
 }
 
