@@ -182,6 +182,9 @@
     "scripts/evidence/k01/k01_restart_elections.sh": 6,
     "scripts/evidence/k05/k05_session_fence_gate.sh": 5,
     "scripts/evidence/k08/k08_two_client.sh": 4,
+    "scripts/evidence/k110/analyze_runs.py": 2,
+    "scripts/evidence/k110/run_series.sh": 2,
+    "scripts/evidence/k110/stripe_histogram.py": 1,
     "scripts/evidence/k14/k14_atomic_cluster.sh": 23,
     "scripts/evidence/k16/k16_identity_cluster.sh": 10,
     "scripts/evidence/k22/k22_snapshot_import.sh": 6,
@@ -599,7 +602,7 @@
     "tests/live/a11_revoke_timing.py": 3,
     "tests/live/amd-enable-soft-roce.sh": 1,
     "tests/live/append_burst.py": 4,
-    "tests/live/append_failover.py": 34,
+    "tests/live/append_failover.py": 36,
     "tests/live/append_loaded.py": 5,
     "tests/live/append_oracle.py": 7,
     "tests/live/append_oracle_cluster.sh": 5,
@@ -1696,6 +1699,9 @@
     "scripts/evidence/k01/k01_restart_elections.sh": "cde444b064733d7600bb5a875c0df7982f30396e480a110b5c7239bb36e63d14",
     "scripts/evidence/k05/k05_session_fence_gate.sh": "5f79153cba2812327a53514b44f3e65ee03fa78280d0717d773c90f45dc65218",
     "scripts/evidence/k08/k08_two_client.sh": "de308bf4b34f134107b64b05b7eecc682da23e3b2f30986f885874afcbcbc1af",
+    "scripts/evidence/k110/analyze_runs.py": "9dc2bdc9e7df9eb85b6b39a13427bbf962d83352081590c8d8bc17169140989a",
+    "scripts/evidence/k110/run_series.sh": "a70a1b94e24c8efcd989f93ab02ab8d8d89f803b61ef70e177c92178f769c5f1",
+    "scripts/evidence/k110/stripe_histogram.py": "b1cbc39e788c44f37a5ba0cf01ac46ba4e00436b83c5006073ae44c34eb2aba6",
     "scripts/evidence/k14/k14_atomic_cluster.sh": "327be11f721d8f01bd649977241aa62bb945882ae02999119272a8d8440d2913",
     "scripts/evidence/k16/k16_identity_cluster.sh": "7209540466df2c1d6f888ee93ca149c8921e6c46586608e4062bc1ea78ac2788",
     "scripts/evidence/k22/k22_snapshot_import.sh": "725ac7f487efa6f77e6093c560910283022140b3012c7a830a705539de8d2b87",
@@ -2127,7 +2133,7 @@
     "tests/live/a11_revoke_timing.py": "2175f389ac597954772249d4b9f2b6db996d492fdb63dcc21f139db9b2a3a128",
     "tests/live/amd-enable-soft-roce.sh": "69f3dcd7aa3769b1d61a04cb833efe95e5b6e6d9d478957cb19c72bbaea7250f",
     "tests/live/append_burst.py": "84ef83ce1386ea1f7cea4ff437404db5924e2158100849a6511977dcddffef50",
-    "tests/live/append_failover.py": "05f48fcbf4d82d6dd1e38c0f65842fd3d9c8201ce324313a1eb20006b5df7412",
+    "tests/live/append_failover.py": "4b0eff67f45900b578288cf3f002e68e3b7351969bc41e9574960c6911381c48",
     "tests/live/append_loaded.py": "054425621b8eb9d5ed9583e758f1de4b7b2c07bd3e6e23eda0997677b2840da2",
     "tests/live/append_oracle.py": "761ed6fb52c4b1ef076a02ab90ea06668d991aede68e624dd092d06fe07ed80f",
     "tests/live/append_oracle_cluster.sh": "c7cfad1e0dcecff6a52d8c6872d8c21386688597104eca606de54265470ee386",
@@ -3004,10 +3010,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1796
+    "calls": 1798
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "cc0cf28998f5f1e74bb48c01fa74130f4457d799"
+  "source_commit": "9640468f8cd2007db82f76ab078519e9506162bf"
 }
