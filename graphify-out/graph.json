@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "3faf596e70b6f805f44d8f0c2ade5d47c0f0b740"
+      "source_commit": "7d177a6e9125554e392e4126f8795b9ac9189fb1"
     }
   },
   "links": [
@@ -196117,6 +196117,15 @@
       "relation": "mentions_symbol",
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:235",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L287",
+      "target": "src_common_pack_ledger_member"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:235",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L289",
       "target": "src_common_pack_ledger_member"
     },
@@ -198872,6 +198881,15 @@
       "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
       "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
       "source_location": "L162",
+      "target": "src_common_pack_ledger_member"
+    },
+    {
+      "confidence": "EXTRACTED",
+      "evidence_method": "literal",
+      "relation": "mentions_symbol",
+      "source": "efs:section:docs/status/alpha-1.0-2plus1-checklist.md:86",
+      "source_file": "docs/status/alpha-1.0-2plus1-checklist.md",
+      "source_location": "L163",
       "target": "src_common_pack_ledger_member"
     },
     {
