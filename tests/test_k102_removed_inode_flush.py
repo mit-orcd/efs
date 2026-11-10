@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """K102: write-back of a removed inode is retired, and a stop names what refuses it.
 
-Three private daemons, node 3 at a small quota and filled through the real
-refusal path (as tests/test_k90_unmount_enospc.py). A 300000 B write is one
-W77 unit of three chunks; its close answers ENOSPC with the tail chunk still
-dirty on mount A. Another mount then removes the file, so the server answers
-NOT_FOUND for everything mount A still holds for it.
-- Before the fix mount A retried that chunk on every pass of the stop drain
-  (`dcache-flush-fail ino=N stage=put rc=-3`, about 100 a second), the stop
-  was refused after 60 s and the refusal named nothing (both counts 0).
-- Now each chunk is retired once (`dcache-inode-gone`), the stop succeeds and
+Three private daemons, node 3 at a small quota filled through the real refusal
+path (as tests/test_k90_unmount_enospc.py). Mount A publishes a 300000 B file,
+then overwrites all but 200 B of it with one write (one W77 unit of eight
+chunks, the first and last partial with a published base): the close answers
+ENOSPC and the chunks stay dirty. Mount B then removes the file, so the server
+answers NOT_FOUND for everything mount A still holds for it. This is the
+field shape of K102 (orcd-mini, ior hard): dirty partial chunks of a held unit.
+- Before the fix mount A retried those chunks on every pass of the stop drain
+  (`dcache-flush-fail ... stage=put rc=-3`, then `report-sync-fail ino=0
+  stage=held-unit-flush rc=-3`, about 100 pairs a second), the stop was
+  refused after 60 s and the refusal named nothing (both counts 0).
+- Now each chunk is retired once (`dcache-inode-gone`) and the stop succeeds,
   mount A unmounts clean (K90 keeps QUOTA's meaning for files that exist).
 Skipped (NOTRUN) without FUSE.
 """
@@ -21,7 +24,9 @@ if not fuse_ok():
     print('K102 removed inode flush: NOTRUN (FUSE unavailable)')
     raise SystemExit(0)
 QUOTA=4<<20
-SIZE=300000
+SIZE=1<<20             # eight 128 KiB chunks, as much as one fill file charges node 3
+OFFSET=100
+OVER=SIZE-200          # partial first and last chunks (with a base), full chunks between
 STOP_BOUND_S=20.0      # the product stop bound is 60 s; a retired chunk needs a pass or two
 work=Path(tempfile.mkdtemp(prefix='efs-k102-',dir=os.environ.get('TMPDIR')))
 env={k:v for k,v in os.environ.items() if not k.startswith('EFS_FAULT_')}
@@ -36,11 +41,11 @@ def used():
     return int(m[1])
 
 
-def refused_close(m,name):
-    """One write request, no fsync: the refusal reaches close, the tail stays dirty."""
-    fd=os.open(m.path/name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
+def overwrite_refused(m,name):
+    """One buffered write over every chunk: the refusal reaches close."""
+    fd=os.open(m.path/name,os.O_WRONLY)
     ino=os.fstat(fd).st_ino
-    assert os.write(fd,payload(name,SIZE))==SIZE
+    assert os.pwrite(fd,payload(name,OVER),OFFSET)==OVER
     try:
         os.close(fd)
         raise AssertionError('close was not refused')
@@ -53,14 +58,27 @@ try:
     c.start(1);c.start(2,join=1);c.start(3,join=1,quota=str(QUOTA>>20)+'M')
     for i in (1,2,3):c.wait_log(i,r'raft-host: formed: 3 members')
     a=Mount(c,1,'mnt-a');b=Mount(c,1,'mnt-b')
-    now=used();charge=0;fills=0
-    while not charge or QUOTA-now>=charge:
-        fd=os.open(a.path/f'fill-{fills}',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
-        os.write(fd,payload(f'fill-{fills}',1<<20));os.fsync(fd);os.close(fd)
-        fills+=1;after=used();charge=max(charge,after-now);now=after
+    fd=os.open(a.path/'gone',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
+    assert os.write(fd,payload('gone',SIZE))==SIZE
+    os.fsync(fd);os.close(fd)
+    def fill(name,size):
+        fd=os.open(a.path/name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
+        os.write(fd,payload(name,size));os.fsync(fd);os.close(fd)
+        before,after=now[0],used();now[0]=after
+        return after-before
+    now=[used()]
+    one=fill('fill-chunk',1<<17)   # node 3's charge for one chunk
+    charge=0;fills=0
+    while not charge or QUOTA-now[0]>=charge:
+        charge=max(charge,fill(f'fill-{fills}',1<<20));fills+=1
         assert fills<16,'quota never filled'
-    gone=refused_close(a,'gone')
-    # Mount B removes the file: mount A is not told and keeps the dirty tail.
+    # Room for three more chunks on node 3: the overwrite lands three of its
+    # eight (records for the unit, unreported) and is refused for the rest.
+    while QUOTA-now[0]>=4*one:
+        fill(f'fill-chunk-{fills}',1<<17);fills+=1
+        assert fills<64,'quota never filled'
+    gone=overwrite_refused(a,'gone')
+    # Mount B removes the file: mount A is not told and keeps the dirty chunks.
     (b.path/'gone').unlink()
     assert not (b.path/'gone').exists()
     t=time.monotonic()
@@ -73,17 +91,19 @@ try:
         time.sleep(2)   # the refusal line follows the control reply
         log=a.text()
         n=len(re.findall(rf'dcache-flush-fail ino={gone} stage=put rc=-(?:3|14)\b',log))
+        pairs=len(re.findall(r'report-sync-fail ino=0 stage=held-unit-flush [^\n]*rc=-(?:3|14)\b',log))
         refused=re.findall(r'stop-refused[^\n]*',log)
         raise AssertionError(f'stop of mount A refused (rc {stop.returncode}) after {time.monotonic()-t:.0f} s: '
-                             f'{n} retries of removed inode {gone}; {refused}; {out.strip()}')
+                             f'{n} retries of removed inode {gone}, {pairs} report-sync-fail held-unit-flush; '
+                             f'{refused}; {out.strip()}')
     took=time.monotonic()-t
     log=a.text()
     assert stop.returncode==0,(stop.returncode,out,log[-3000:])
     assert 'stop-refused' not in log,log[-3000:]
-    # Each chunk of the removed inode is retired once: the tail by NOT_FOUND
-    # (merge-base fetch), the full chunks by STALE (ticket of a removed FileID).
-    for ci in (0,1,2):
+    # Each dirty chunk of the removed inode is retired once.
+    for ci in range(8):
         assert len(re.findall(rf'dcache-inode-gone ino={gone} ci={ci}:',log))==1,(ci,log[-3000:])
+    assert 'report-sync-fail' not in log,log[-3000:]
     # The refused close logged rc=-11 before the removal. At most the pass that
     # found the inode gone may log NOT_FOUND/STALE; never a retry loop.
     retries=len(re.findall(rf'dcache-flush-fail ino={gone} stage=put rc=-(?:3|14)\b',log))
