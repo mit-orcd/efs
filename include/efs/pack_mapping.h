@@ -195,6 +195,12 @@ struct efs_pack_candidate {
 };
 int efs_meta_pack_candidate(struct efs_kv *, efs_ino_t ino, uint64_t inode_generation,
     struct efs_pack_candidate *);
+/* The candidate `seen`, read earlier, against the KV now: EFS_OK while it is
+ * the same live inode with the same source row; EFS_ERR_STALE once the file
+ * is gone, unlinked or republished, when the fragments `seen` names may be
+ * reclaimed and a failed read of them is not a read error. Other codes: the
+ * KV read failed. */
+int efs_meta_pack_candidate_alive(struct efs_kv *, const struct efs_pack_candidate *seen);
 /* Compare-and-delete: a key that is gone or holds another value is left
  * alone; a stored value of another length is PROTO. */
 int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group,

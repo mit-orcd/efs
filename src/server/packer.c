@@ -1054,6 +1054,23 @@ static void pk_read_failure(const char *kind, uint8_t group, uint64_t object,
                 rc, (unsigned long long)n);
 }
 
+/* K105: a candidate whose fragments cannot be read is no read error when the
+ * file was unlinked or republished after the pass read its metadata: reclaim
+ * removes the fragments of a dead inode or a superseded generation. The
+ * metadata is checked after the failed read (death precedes reclaim), so a
+ * file still live and unchanged keeps counting. The candidate key stays; the
+ * next scan drops it. */
+static int pk_candidate_gone(struct efs_kv *kv, const struct efs_pack_candidate *c, int rc)
+{
+    static uint64_t noted;
+    if (efs_meta_pack_candidate_alive(kv, c) != EFS_ERR_STALE) return 0;
+    uint64_t n = __atomic_add_fetch(&noted, 1, __ATOMIC_RELAXED);
+    if (n <= 256 || !(n % 1024))
+        efs_telemetry_log(0, "packer: candidate-gone ino=%016llx read_rc=%d gone=%llu\n",
+                (unsigned long long)c->ino, rc, (unsigned long long)n);
+    return 1;
+}
+
 static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
                            const struct efs_node *nodes, uint32_t count)
 {
@@ -1436,10 +1453,12 @@ static int pk_group(uint8_t group, uint64_t term)
             uint32_t k = jobs[q].start;
             for (uint32_t x = jobs[q].start; x < jobs[q].end; x++) {
                 if (!rcs || rcs[x - first] != EFS_OK) {
-                    pk_read_failure("candidate", group, files[x].c.ino,
-                                    files[x].c.base.generation,
-                                    rcs ? rcs[x - first] : EFS_ERR_NOMEM);
-                    STAT_ADD(read_errors, 1);
+                    int frc = rcs ? rcs[x - first] : EFS_ERR_NOMEM;
+                    if (frc == EFS_ERR_NOMEM || !pk_candidate_gone(kv, &files[x].c, frc)) {
+                        pk_read_failure("candidate", group, files[x].c.ino,
+                                        files[x].c.base.generation, frc);
+                        STAT_ADD(read_errors, 1);
+                    }
                     free(files[x].data);
                     files[x].data = NULL;
                     continue;
