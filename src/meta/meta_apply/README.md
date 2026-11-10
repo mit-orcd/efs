@@ -77,6 +77,8 @@ and `test_meta_cmd_namespace.py` (command tags).
 - Ownership smell: the write check in `rows.c` calls `pub_stage_owner`
   (`pub_stage.h`), the bottom layer reaching up, because a staged publication
   owns its chunk key until resolved.
+- Apply visibility (staged, committed, visible; the derived counters'
+  count-once rule): [apply-visibility.md](../../../docs/how-it-works/apply-visibility.md).
 - Invariants: I5–I9, I16–I19, I23, I24
   ([architecture §4](../../../docs/how-it-works/architecture.md#4-invariants)).
 

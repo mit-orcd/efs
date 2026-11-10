@@ -14,7 +14,11 @@
  * CREATE file = one atomic batch {dentry, inode, alloc} on the dentry
  * shard (LOCAL: parent shard; SPLITTING/HASHED: hashed 64-lane shard).
  * LOOKUP is layout-aware (hashed-then-local during SPLITTING; I8).
- * A live dentry whose inode row cannot be resolved is I9 (EFS_ERR_IO). */
+ * A live dentry whose inode row cannot be resolved is I9 (EFS_ERR_IO).
+ * Apply visibility: a batch is staged (only the apply thread sees it),
+ * committed at efs_kv_lsm_apply_end (table scans see it), and a derived
+ * counter's note is visible before that commit; see
+ * docs/how-it-works/apply-visibility.md. */
 
 #define EFS_META_LANES 64
 /* Shared with admission accounting; changing apply capacity changes its charge. */
