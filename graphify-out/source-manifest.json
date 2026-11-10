@@ -145,6 +145,7 @@
     "scripts/evidence/ed/tag_audit.py": 7,
     "scripts/evidence/fb/gc_files_race.py": 2,
     "scripts/evidence/fb/io_start_compare.sh": 1,
+    "scripts/evidence/fb/io_start_diag.py": 2,
     "scripts/evidence/fin/fin_accounting_audit.py": 1,
     "scripts/evidence/fin/fin_accounting_controls.py": 2,
     "scripts/evidence/fin/fin_accounting_gate.sh": 11,
@@ -1490,7 +1491,7 @@
     "docs/how-it-works/developing.md": "4d7a35ffea3289d2db685957366736d2acdee7b01f6ae7701532ec3b2e35b154",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
-    "docs/how-it-works/performance.md": "07a59cebbdd235e724c08dd2a9a7da699ee32d511313a43310e1cf213eb9e9b6",
+    "docs/how-it-works/performance.md": "ce97db01e595e29bab1a83040c91ff0057046179ca77812e21a0ffd1cc02ba2a",
     "docs/how-it-works/protocols/data.md": "ec925c086cdea4293a24f485a1194f19e1e77d7622ecc1f1be4d3d4a5486e908",
     "docs/how-it-works/protocols/directory.md": "2e9f346007213ba7e1d23c8d79969f7cf5c9d59426b5d0f951c86ed53f6296be",
     "docs/how-it-works/protocols/sessions.md": "97134e8eb13cdf3f47c9247391c8f3ca663d78b9f91996a3c55bb7a15aaa368a",
@@ -1659,6 +1660,7 @@
     "scripts/evidence/ed/tag_audit.py": "8249d0920d1703c51dbcac46c6306dc324f7aacc3c48f5c7f9e365483f71f6aa",
     "scripts/evidence/fb/gc_files_race.py": "199c0d770109b53e86f122e992fc323813994ba41e95ca88034c2ed0fd2457f8",
     "scripts/evidence/fb/io_start_compare.sh": "cdef5b94f0d23bb3c124a716c38ce9fefb3141c6d7e8b43426d89fa8a6629238",
+    "scripts/evidence/fb/io_start_diag.py": "75b454e190482fe22ee974a3217646112c7ab580b0676c4aa4e6779cd7ba04e5",
     "scripts/evidence/fin/fin_accounting_audit.py": "221499c149c00c7301fbc221d54b12a8e4daae5d30b34a1bbb175c9d85d86cf4",
     "scripts/evidence/fin/fin_accounting_controls.py": "266e49372c6cc9ad580915fbbf53c4462b33de06930fb85982e69f495f016706",
     "scripts/evidence/fin/fin_accounting_gate.sh": "f77641c01d76742a2e70a543fd6a80ad1d6922f73bd167309892ddb6e9f139d3",
@@ -1884,7 +1886,7 @@
     "src/bench/bench_local.h": "bd4897d31dc49a670592d995ac0704915fdb87c29aae185f9895aafc7f8d99ad",
     "src/bench/blake3_bench.c": "17ecb3eebd642c90b92c45d2b387e92544aac51cfe0b121e084b8d37212f39ee",
     "src/bench/blake3_bench.h": "6ac22cacbe6dad8ad757ba34d69a8584923fb63b54cf9f2eae3ea3b9d0fd49db",
-    "src/bench/io_bench.c": "b74f8c2a712df1cd9504a3f16053676093fe534fa34ac268a47e8432e990008f",
+    "src/bench/io_bench.c": "93cad53c1907f44eb5491adbc35f401b9bb2ea2d12e752ae7db1ffb9baebdc5e",
     "src/bench/io_bench.h": "29109c3730dadabda0864a08318730886cc07816fbe451c47f99bbb79dc34268",
     "src/bench/latency.h": "cf78d75c9a57500b6c5b73f3241558f0b7a44c93e15d79fb5938f77c867d4970",
     "src/bench/perf_control.h": "1065b26c7718d721ae3ae05af1dae6149b51a0f60e9f5b3f9f47f0331903a820",
@@ -3010,5 +3012,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "6ab44e92ef47b39edcaaebe96269978587a1a5c2"
+  "source_commit": "ffd5565f280c4fbb05bfe0a05fa7ce2db624ffa3"
 }
