@@ -109,13 +109,38 @@ third devel run, 11.0 s, fell between two fences.
 
 Fix (`src/server/raft_host.c`): `host_recover_thread` (defined after `host_gc_thread`) calls `host_txn_recover_pass` every `GC_LOOP_MS` (the cadence the GC
 loop kept for it), started beside the GC thread, woken and joined at stop; the GC pass no longer calls it (its `recover=`
-field is gone from the `gc-pass` log line; no script reads it). The recovery state (`rec_*`, `dec_scan`, cursors) is touched
+field is gone from the `gc-pass` log line; no script reads it; also gone: GC stage 6 in the `gc_stage` status word, so a stuck
+recovery no longer shows as a GC stage, and the recovery scans are no longer counted in the GC thread's `scans=`/`keys=`
+columns, they now run on the recovery thread). The recovery state (`rec_*`, `dec_scan`, cursors) is touched
 only by this thread now, as before only by the GC thread; the proposals it makes go through `host_bg_propose`, which the
 finisher thread already uses concurrently. The reclaim fence itself still waits 10 to 30 s with the member halted (the
 `reap_fence` column is unchanged): REAP completion for those inodes is withheld, as it must be, only recovery no longer
 waits behind it. Test `tests/test_txn_recover_thread.py` asserts the GC thread source has no recovery call and runs the
-production `host_recover_thread` (one pass per `GC_LOOP_MS`, a stop that does not wait out the cadence); on devel it fails
-on its first assertion.
+production `host_recover_thread` under a fake clock and a fake timed wait (the deadline asked for is monotonic now plus
+`GC_LOOP_MS`, and the stop broadcast ends a parked wait), with no duration bound; on devel it fails on its first assertion.
+
+## Review follow-up (coordinator's independent review of `64517d251`)
+
+Five findings, all taken; the follow-up commit is `b639f2312` (code and tests), measured and verified below.
+
+1. **Recovery cadence on the wall clock.** `rec_cv` is now created with `CLOCK_MONOTONIC` (as the file's other condition
+   variables) and the deadline is computed on that clock. `tests/test_txn_recover_thread.py` fails if either is reverted.
+2. **Re-arm on any failed probe.** The exchange now returns answered, silent or failed. The background probe re-arms the
+   30 s mark only on `silent`; a refusal, a DNS failure, `EMFILE`, `ENOMEM` or a wrap failure leaves the mark to expire.
+3. **`node_mute` on the wrong evidence.** Mute is set only when TCP was accepted and the declaration stayed unanswered until
+   the local 5 s bound ran out (`efs_net_remaining_ms() == 0` with the local bound, not the caller's), in both
+   `efs_client_conn_get` and the exchange, and cleared only by an answered exchange or a successful checkout (no longer on a
+   connect failure). A fast reset or refusal, and the caller's own deadline running out (`spare_reprobe`'s 250 ms), no longer
+   mark a live member mute. Tests: reset, refusal with a stale mute, caller-bound 250 ms and the silent case, in
+   `tests/test_node_probe_exchange.py` and `tests/test_conn_checkout_budget.py`.
+4. **Wall-clock bounds in `tests/test_txn_recover_thread.py`.** Removed (see above): no duration remains in the test.
+5. **Comment and test strictness.** The `read.c` comment now says a non-mute member is probed in the foreground and a mute
+   one returns 0 at once. `tests/test_node_reprobe.py` is exact again (`node_down_until_ms[0] == 50000` after a refused
+   probe), which finding 2 makes true.
+
+Diagnostics this change removed (listed at the reviewer's request): the `recover=` field of the `gc-pass` line, GC stage 6,
+and recovery scans in the GC thread's `scans=`. Known limit: a halted member's accept queue (`EFS_LISTEN_BACKLOG`, 512) can fill; connects then time out rather than stay accepted, and that is not counted as silence, so the
+mark is not re-armed and mute is not set by it (an earlier mute stays until an answer or a successful checkout).
 
 ## (a) A request already in flight to the halted member: analysis, not fixed
 
@@ -157,6 +182,28 @@ All on intel1 against the final tree (`git archive` of `522b2bc40`, plus the two
 | `python3 scripts/check_k_register.py` | PASS (107 rows in each table) |
 | `python3 scripts/check_doc_links.py`, `make docs-check` | PASS with this page committed (the architecture pages were regenerated, they changed with the source) |
 | `sh scripts/rebuild-code-graph.sh`, `python3 tests/test_code_graph.py` | PASS (18685 nodes; 10 tests OK) |
+
+### Review round (head `f8c12bdef`: `b639f2312` plus the test-marker fix)
+
+Same host and method, a fresh `git archive` of `f8c12bdef`, built (`make -j8 all tests/faults/efsd`) and verified in one
+sequence; no other code differs. Binary identity (SHA-256 prefix): `efsd` 753aecbe, `efs-fuse` 1d3c95e2,
+`tests/faults/efsd` a195a9d8; the finisher-disabled tree for (c): `efsd` eaf10c1b, `efs-fuse` 2eab7f29,
+`tests/faults/efsd` cb9c6000. Raw output: `~maik/efs-artifacts/taskFL-20261110/review-f8c12bdef/` on intel1, its own
+`SHA256SUMS` has SHA-256 `7682eff9cf450c3959018faac2f1bc3916d61a3af094e97e320851e69b97bccc`.
+
+| check | result |
+|---|---|
+| (b) 30 writes, node 3 halted / not halted | 13.1 s (7.04 s, 5.03 s, then 0.03 to 0.04 s, no error) / 1.1 s: unchanged by the review fixes |
+| (c) first `txn-recover ... ABORT` after the fault, node 3 halted / not halted (finisher off, 60 s window) | 7.7 s (record age 7.8 s; `reap_fence` still 40.6 s and 17.7 s) / 5.5 s; no errors, longest unlink 7.9 s / 5.7 s. One run each, five runs in parallel on the 8 CPUs, so slower than the 5.1 to 6.9 s of the earlier fixed runs; devel was 32.7, 32.0 and 11.0 s |
+| resume (mode `r`, SIGCONT after 6 writes) | 250 writes in the 8 s after the resume; the last degraded acknowledgement for node 3 is 0.01 s before the SIGCONT: none after it |
+| `make test` | rc 0 |
+| `tests_for.py client/node_cache --run`, `client/read --run`, `server/raft_host.txn --run` | rc 0 each |
+| live `tests/test_k35_fsync_degraded.py` (twice) and `tests/test_k34_stop_put.py` | PASS (K35 130.2 s, 143 files exact; K34 10.0 s) |
+| `bash tests/sanitizer_check.sh asan` | VERDICT PASS (59 run, 0 failed) |
+| `bash tests/sanitizer_check.sh tsan` | VERDICT FAIL (31 run, 2 failed): `k96_status_slots_live` is K107 (fixed on another branch, not here); `k37_segment_rebuild` is the test race described above (same assertion, fails on devel too) |
+| mutation checks of the new assertions | re-arming on any failure, muting on any failure, muting on the caller's deadline and counting a fast reset as silent in `efs_client_conn_get` each fail `tests/test_node_probe_exchange.py` or `tests/test_conn_checkout_budget.py`; `REALTIME` in the recovery wait fails `tests/test_txn_recover_thread.py` |
+| `python3 scripts/check_k_register.py`, `python3 scripts/check_doc_links.py`, `make docs-check` | PASS (architecture pages regenerated) |
+| `sh scripts/rebuild-code-graph.sh`, `python3 tests/test_code_graph.py` | PASS |
 
 ## What is not verified
 
