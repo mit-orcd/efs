@@ -1,6 +1,6 @@
 # K102: a client retries a removed inode's write-back and its stop refusal names nothing (Task FC)
 
-**Verdict: PASS for the fix, `make test`, `tests_for` and ASan; TSan gate NOT clean (an unrelated `lim` race, see Results). K102 FIXED on branch `claude/optimistic-williams-2bb8ca`, blocks alpha: yes until the orcd-mini clean stop is rerun.**
+**Verdict: PASS for the fix, `make test`, `tests_for` and ASan; full TSan lane NOT clean twice in a row on the merged tree (two different intermittent tests, no race report; the earlier `lim` race is fixed, see Results). K102 FIXED on branch `claude/optimistic-williams-2bb8ca`, blocks alpha: yes until the orcd-mini clean stop is rerun.**
 The new test `tests/test_k102_removed_inode_flush.py` fails on the unfixed product code (4,992 retries of the removed inode and 4,992
 `report-sync-fail ... held-unit-flush` lines in 62 s, then `stop-refused ... (retained-releases=0 wb-pending=0)`) and passes with the fix
 (stop succeeds in 0.4 to 1.0 s, mount exit 0, no retry line). The loop of the orcd-mini client was the stop drain's own 60 s loop, not a
@@ -116,10 +116,43 @@ All on node9900 (final gate tree = commit `8735d7f9b` source; the raw files name
 | `d4_progress` solo under TSan | fixed / unfixed | 3 of 3 PASS on each tree |
 | full TSan | unfixed `98e34842d` | PASS (31 run, 0 failed, 606 s) (`tsan-base-full.txt`) |
 
-TSan is therefore not a clean rc 0 on the final tree. The two reports are in `efs_dcache_maybe_reclaim`, whose lines this branch does not touch
-(`git diff 98e34842d -- src/client/write.c` has no hunk there; the function is the pre-existing `if (!lim) lim = dcache_reclaim_limit();` benign-race
-idiom). The single unfixed full run passed, so one run does not prove the race pre-exists under gate load, and the fixed full runs split 1 pass to 2
-fails. The honest reading is: a pre-existing race in untouched code that the gate hits intermittently; not proven independent of the branch's timing.
+### The `lim` race, fixed, and the merged tree (Nov 10, later)
+
+The TSan failure above was the lazy `static uint64_t lim` of `efs_dcache_maybe_reclaim`, two FUSE write threads storing the same value (the code
+called it a benign race, TSan fails the lane on it). Commit `ce0462bcc` replaces it by an atomic cache (`lim_cache`, relaxed load and store; each
+thread computes the same value, so a repeat store is harmless). Nothing else in the function changed.
+
+Other lazy `static` caches in `src/client/write.c`, listed and not changed:
+
+- `put_away_mark_ms()` (`static uint64_t ms`, `if (!ms) ms = ...getenv`): the same plain lazy-init idiom, read by the PUT path of several threads.
+  It exists only in `EFS_FAULTS` builds (`#if EFS_FAULTS`), so the product `efs-fuse` the TSan lane builds does not contain it; it would race in a
+  fault build under TSan.
+- `static int said` (putid table NOMEM, mtime-pin table full) and `static int logged` (server size below dirty coverage): plain one-shot or
+  counted log flags, written without atomics; the mtime-pin and putid sites run under their own table locks, the report one is the `logged < 10`
+  counter. None is a cache of a computed value.
+- Already atomic: `dbg_s`, `on_s` (atomic with a local copy, commented as the TSan fix), `seq`, `noted`, `g_reclaim`/dirty counters.
+
+After merging devel at wave 70 (`9403d0666`; merge commit `e033747bd`, conflicts only in `ledger.md`, both entries kept) the K102 test failed to
+start (devel's A8 audit removed `EFS_PACK_MIN_AGE_MS`; the test now sets `EFS_FAULT_PACK_MIN_AGE_MS` as the K90 test does, `d582764f3`). On that
+tree (node9900, uploaded as a tar of the tracked files, local and remote sha256 `5d21c0e9a3c5e36c2a21ca134c04e9b7dd8a9cf32ef25b9704b5da2445ee898e`,
+with quiet host checks before the start, raw output in `merged2/`):
+
+| Check | Result |
+|---|---|
+| `tests/test_k102_removed_inode_flush.py` | PASS: 5 chunks retired once each, stop in 0.9 s, mount exit 0 (`k102-test.txt`) |
+| `make test` | rc 0 (`make-test-rc.txt`) |
+| full TSan lane 1 | `d4_progress` PASS (125 s); FAIL `pump_logging`: `writes` 44 under the 50 floor in a 35 s blocked-sink run (`tsan-1.txt`, `tsan-1-pump_logging.out`) |
+| full TSan lane 2 | `d4_progress` PASS (123 s); FAIL `k37_segment_rebuild`: "packer moved 0 of 4" after node 3 returned (`tsan-2.txt`, `tsan-2-k37_segment_rebuild.out`) |
+| `pump_logging` solo, TSan, same build | 3 of 3 PASS (`tsan-solo-pump_logging-*.txt`) |
+| `k37_segment_rebuild` solo, TSan, same build | 3 of 3 PASS (`tsan-solo-k37_segment_rebuild-*.txt`) |
+
+So the `lim` race no longer appears (no ThreadSanitizer report in either lane; the two failures are a throughput floor and a packer timing
+assertion, in tests that touch the client write rate and the server packer, not in a race report). Both pass solo three times and neither lane failed
+the same test; they are intermittent failures of the lane under TSan slowdown that this branch did not cause as far as I can show, and I did not
+change a bound or add a sleep. The full TSan lane is therefore still not an rc 0 on this tree in two runs, for two different tests. What is missing
+for a clean verdict is a third full run, or an owner for the two intermittents.
+
+The earlier statement that the single unfixed full run proved nothing stands: the baseline comparison was one run.
 
 ## Reproduction commands
 
@@ -138,7 +171,7 @@ bash tests/sanitizer_check.sh asan
 Prerequisites: `/dev/fuse`, `fusermount3`, libfuse as above. The unfixed side: check out `98e34842d` (or `9bb50fe79`), copy only the new test file in.
 Cleanup: the test removes its work directory under `TMPDIR`; remove the tree you uploaded.
 
-Raw output (outside Git): `~erbmi1/efs-artifacts/taskFC-20261110/` on node9900, `SHA256SUMS` hash `e4fad67fdd1abac2644774753962be5fd87147c9e1fdec7812f52330c781fd08`. It holds the unfixed and fixed test
+Raw output (outside Git): `~erbmi1/efs-artifacts/taskFC-20261110/` on node9900, `SHA256SUMS` hash `855644d7ae9f674a6e1b84222daf9ad03845e472a88e0f200288c1bfcb93767e` (78 files; the merged-tree runs are in `merged2/`). It holds the unfixed and fixed test
 outputs, `make test`, `tests_for`, `tsan` and `asan` logs. The earlier unfixed runs there (`k102-test-unfixed.txt`, `-2.txt`) are of an earlier shape of
 the test (fresh file, then a whole-file overwrite) that showed the retry loop but not the `held-unit-flush` pair; `-3.txt` is the final shape.
 
@@ -159,5 +192,5 @@ writeback error, and `stop-refused` prints every return code and counter the sto
   not dirty, so nothing re-enters the loop, and the state stays visible in `dcache-pending` of a later refusal.
 - getattr is the only evidence of removal; it is the owner's authoritative answer (the REPORT repair pass relies on the same NOT_FOUND). A lagging
   owner is not modelled.
-- TSan `d4_progress` race on `lim` in `efs_dcache_maybe_reclaim` (see Results): not fixed here (outside the task), a follow-up: make `lim` an atomic or `pthread_once`. The TSan gate was not obtained as rc 0 on the final tree.
+- The full TSan lane was not obtained as rc 0 on the merged tree: `pump_logging` and `k37_segment_rebuild` each failed once in two full runs and passed 3 of 3 solo (see Results). The `lim` race (first reported here) is fixed by `ce0462bcc`.
 - Which of fetch or PUT gave the field's -3 is not proven (see (c)).
