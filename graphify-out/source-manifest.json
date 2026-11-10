@@ -182,6 +182,7 @@
     "scripts/evidence/k01/k01_restart_elections.sh": 6,
     "scripts/evidence/k05/k05_session_fence_gate.sh": 5,
     "scripts/evidence/k08/k08_two_client.sh": 4,
+    "scripts/evidence/k103/read_probe_live.py": 5,
     "scripts/evidence/k14/k14_atomic_cluster.sh": 23,
     "scripts/evidence/k16/k16_identity_cluster.sh": 10,
     "scripts/evidence/k22/k22_snapshot_import.sh": 6,
@@ -524,7 +525,7 @@
     "src/meta/session.c": 62,
     "src/meta/txn.c": 87,
     "src/mgmt/efs_mgmt.c": 73,
-    "src/raft/raft.c": 122,
+    "src/raft/raft.c": 123,
     "src/raft/raft_disk.c": 37,
     "src/raft/raft_disk_internal.h": 3,
     "src/raft/raft_log.c": 35,
@@ -1267,7 +1268,7 @@
     "tests/test_query_target_route.py": 2,
     "tests/test_query_work_trace.py": 2,
     "tests/test_queued_read_control.py": 1,
-    "tests/test_raft.c": 84,
+    "tests/test_raft.c": 88,
     "tests/test_raft_ack_window.py": 1,
     "tests/test_raft_append_offsets.py": 1,
     "tests/test_raft_log_entries.py": 2,
@@ -1696,6 +1697,7 @@
     "scripts/evidence/k01/k01_restart_elections.sh": "cde444b064733d7600bb5a875c0df7982f30396e480a110b5c7239bb36e63d14",
     "scripts/evidence/k05/k05_session_fence_gate.sh": "5f79153cba2812327a53514b44f3e65ee03fa78280d0717d773c90f45dc65218",
     "scripts/evidence/k08/k08_two_client.sh": "de308bf4b34f134107b64b05b7eecc682da23e3b2f30986f885874afcbcbc1af",
+    "scripts/evidence/k103/read_probe_live.py": "e308a6182d814faf9c3eaa6317942cb6b1712642360cf04cc63a9fe5cfb8545b",
     "scripts/evidence/k14/k14_atomic_cluster.sh": "327be11f721d8f01bd649977241aa62bb945882ae02999119272a8d8440d2913",
     "scripts/evidence/k16/k16_identity_cluster.sh": "7209540466df2c1d6f888ee93ca149c8921e6c46586608e4062bc1ea78ac2788",
     "scripts/evidence/k22/k22_snapshot_import.sh": "725ac7f487efa6f77e6093c560910283022140b3012c7a830a705539de8d2b87",
@@ -2048,7 +2050,7 @@
     "src/mgmt/README.md": "397d5285a0af929c47d1d73b94372ee172512bd73154a56a70d1656ca251ac94",
     "src/mgmt/efs_mgmt.c": "a03080833ac2f96b9840f379eeb8c6bd16449240e492a75f476c6070d4b57653",
     "src/raft/README.md": "486f9c0640cb38e6a5795a93e0d9602d29d667c909b69a6513db8cc830b83f09",
-    "src/raft/raft.c": "e61083e895d2c888fb106c1dfe29a069ebba1f9dbad1ff8050f825453d714279",
+    "src/raft/raft.c": "63728ef41a086dbd557b416f17549e72a3492960c5d39ce5e28440ea8d7296a8",
     "src/raft/raft_disk.c": "a15c3fab03707e53c024f74b0541ac7c3dd142303e29d86e8e765c7ca21ec590",
     "src/raft/raft_disk_internal.h": "9ff9eec41773a463fff79b35deac363bf60d7666f0fee4461f0485a4e21176e3",
     "src/raft/raft_log.c": "c2cd52a95d2619276efe12490c94396187cadb614ca7a198fabdaa3d4c771650",
@@ -2795,7 +2797,7 @@
     "tests/test_query_target_route.py": "8fd121f6214a0b5ee0c4bbc819aff998255270fc20136a74f81bb58680646c1c",
     "tests/test_query_work_trace.py": "5a1476591a2b1cdad56baf124438a57f9f12388ab595e265167ad5307ddd5e83",
     "tests/test_queued_read_control.py": "5108cb0968c4fcfa7044fc9bb87f043d6c9726e40cd36fafdda18d215140eeb7",
-    "tests/test_raft.c": "c1ee40c49b4c1ffc07f8a676f2fe0b9f8b53bccc0956559c3978f9bd92115f12",
+    "tests/test_raft.c": "7eba7c399dfc1b684c3ad5936131533d54a166c5f8de8caf2de6944491c747c7",
     "tests/test_raft_ack_window.py": "ac33c3889f3c6f7d4c9a501a0f6d7c52dd7268490cb69ae7b6df084b2867b153",
     "tests/test_raft_append_offsets.py": "b2df596168c0745312bd695fb1241f3b7777d50589c7fd51e8d79849b9d3c15e",
     "tests/test_raft_log_entries.py": "9b3339fcc8c9ba8c711a97dc39f7873b4151c4fc64a1359b438b4eee34af6201",
@@ -3004,10 +3006,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1796
+    "calls": 1800
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "cc0cf28998f5f1e74bb48c01fa74130f4457d799"
+  "source_commit": "d0d7624a1ac4f1a7462a167f311e2cf9cb2a40bb"
 }
