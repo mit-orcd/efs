@@ -5,7 +5,7 @@ Generated page: any source change that adds, renames or moves a diagnostic key m
 
 Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`.
 
-Found: 102 diagnostic keys in 262 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
+Found: 102 diagnostic keys in 263 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
 
 ## Error codes
 
@@ -254,6 +254,7 @@ Found: 102 diagnostic keys in 262 (key, function) rows, 29 error codes; 371 `fpr
 | `raft-snap` | `src/server/raft_host.c` | `host_maybe_snapshot` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_export_pass` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_import_pass` | `server/raft_host` |
+| `raft-snap` | `src/server/raft_host.c` | `host_snap_import_pump` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_open` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `snap_import_poll` | `server/raft_host` |
 | `raft-status` | `src/mgmt/efs_mgmt.c` | `cmd_raft_status` | `mgmt/efs_mgmt` |
