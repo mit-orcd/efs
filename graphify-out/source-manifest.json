@@ -73,7 +73,7 @@
     "scripts/build-code-graph.py": 21,
     "scripts/calibrate_test_budgets.sh": 7,
     "scripts/check_doc_links.py": 6,
-    "scripts/check_guide_counts.py": 6,
+    "scripts/check_guide_counts.py": 7,
     "scripts/check_include_boundary.py": 5,
     "scripts/check_k_register.py": 4,
     "scripts/client.sh": 14,
@@ -1585,7 +1585,7 @@
     "scripts/build-code-graph.py": "9fc67ce1e5866dd68709caec57766474a012b203116738c0e48126008d6e1b38",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/check_doc_links.py": "3cc40133ba30aef5ac48df7e9adbdcb7c6a32d5c9385b24acbba0b3d5c18e37d",
-    "scripts/check_guide_counts.py": "95a7927177d14e79669e363441f80da78d87db40c5fce762d4cf42cea64c5bf9",
+    "scripts/check_guide_counts.py": "2cb99aeeb33284de5e6809e2094819051cc5d9ea896942f5925a103eedb3bd77",
     "scripts/check_include_boundary.py": "138b840b33146e7c9c8d08d46d01a6f14d3926da23a95b7e07b8eebf70f54e83",
     "scripts/check_k_register.py": "bee7eea3696a7bd0559b00545e8c87e3223b12d9a1c6b272cc324c4936ee4391",
     "scripts/client.sh": "155b5db39a1e7e0375c38421748753eb8cce5b2ccadba0484ccea6937b24998a",
@@ -3000,10 +3000,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1795
+    "calls": 1796
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "753d4dfff1a273bae50baddf0a7791cf736a0199"
+  "source_commit": "8d9f3379f729973dc05d70aa926a02559f538982"
 }
