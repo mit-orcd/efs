@@ -55,8 +55,8 @@ static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi,const char *why)
 {(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2&&why&&!strncmp(why,"why=",4));logs++;}
 static void degraded_why(int failed,char *buf,size_t cap){snprintf(buf,cap,"why=%d",failed);}
-static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota,uint64_t *seq,uint64_t *epoch)
-{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota&&seq&&epoch);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail||(degrade_hard&&i==2&&t->nodes[2]==3)?1:2;usleep(5000);
+static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota,uint64_t *seq,uint64_t *epoch,uint64_t *pos)
+{(void)pos;(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota&&seq&&epoch);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail||(degrade_hard&&i==2&&t->nodes[2]==3)?1:2;usleep(5000);
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;
  /* full_slot: that member refuses as full after the other two ACK. */
  if(full_slot>=0 && t->nodes[full_slot]==3 && (!quota_recover_after || calls<=(unsigned)quota_recover_after)){for(unsigned i=0;i<3;i++){if((int)i==full_slot)quota[i]=1;else if(!acked[i]){acked[i]=1;seq[i]=calls*3+i+1;epoch[i]=9;}}return EFS_OK;}
@@ -179,7 +179,7 @@ int main(void){
 '''
 # Moved from the retired tests/test_put_hint.py (W154): every outer attempt
 # resends the same object (the admitted ticket) and unions its acknowledgements.
-assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);' in s
+assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch, pos);' in s
 with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)

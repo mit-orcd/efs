@@ -57,8 +57,8 @@ int main(void){
   uint64_t start=report_clock_ms();deadline=mode==2?start:start+15;
   /* mode 9: fragments 0 and 1 were acknowledged by an earlier attempt of
    * this object: only fragment 2 is sent, and the two count (K34). */
-  int acked[3]={mode==9,mode==9,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0};
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  int acked[3]={mode==9,mode==9,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0},pos[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch,pos);
   if(mode==9)assert(sends==1&&checkouts==1&&acked[0]&&acked[1]&&!acked[2]);
   /* mode 6: the third member answers BUSY after the quorum: alive, its
    * fragment not stored, so the caller may complete the stripe (K34). */
@@ -86,24 +86,24 @@ int main(void){
   * and waits for its reply within the drain. */
  {
   mode=8;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+100;
-  int acked[3]={1,1,0},quota[3]={0,0,0};uint64_t seq[3]={7,8,0},epoch[3]={123,123,0};
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  int acked[3]={1,1,0},quota[3]={0,0,0};uint64_t seq[3]={7,8,0},epoch[3]={123,123,0},pos[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch,pos);
   assert(rc==EFS_OK&&sends==1&&checkouts==1&&acked[2]&&seq[2]&&epoch[2]==123&&seq[0]==7&&seq[1]==8);
  }
  /* K39: one earlier acknowledgement counts once: with the other two
   * members BUSY there is no quorum (it returned OK holding one fragment). */
  {
   mode=7;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+50;
-  int acked[3]={1,0,0},quota[3]={0,0,0};uint64_t seq[3]={7,0,0},epoch[3]={123,0,0};
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  int acked[3]={1,0,0},quota[3]={0,0,0};uint64_t seq[3]={7,0,0},epoch[3]={123,0,0},pos[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch,pos);
   assert(rc==EFS_ERR_BUSY&&sends==2&&acked[0]&&!acked[1]&&!acked[2]&&failed[1]==3&&failed[2]==3);
  }
  /* K39: the third member's connection fails after the quorum (it stops):
   * a hard failure of that slot, so the caller resends or places it around. */
  {
   mode=12;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+50;
-  int acked[3]={0,0,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0};
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  int acked[3]={0,0,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0},pos[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch,pos);
   assert(rc==EFS_OK&&acked[0]&&acked[1]&&!acked[2]&&failed[2]==1&&!fails);
  }
  close(pp[0]);close(pp[1]);return 0;
