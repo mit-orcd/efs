@@ -1975,6 +1975,89 @@ bounds, weaker durability or new format/placement scope. No task is complete
 merely because a microbenchmark improved; the affected end-to-end workload must
 be checked for regressions.
 
+### Stage 3.0 letter tasks — server and protocol theories (Nov 9 review)
+
+**P3-G–P3-K** come from a code review of the server and of the client-server
+and server-server protocol at `9bb50fe79`
+([theories, evidence and refuting measurements](2026-11/stage3-server-protocol-theories-20261109.md)).
+All five are **OPEN / theory, measurement NOTRUN**: each joins a measured
+baseline already in the tree to a verified code fact and names the run that
+would refute it. Common reading: on the measured workloads the daemons are
+idle (9 of 192 cores for 1,649 creates/s, leader samples 63 % in the kernel),
+so throughput at fixed concurrency is set by the latency of one consensus
+round and by the number of sequential rounds per operation. The rules of the
+first six apply: Stage 2 first, P1 baseline, no new switches, no weaker
+durability, no format or placement scope.
+
+- [ ] **P3-G — Consensus round: shorten the thread handoff chain.**
+  One round wakes a sleeping thread eight times (proposer to pump by eventfd,
+  pump to per-peer sender thread through a heap copy, follower connection
+  thread to its pump through the inbox copy, the same back, pump to proposer);
+  the pump sleeps in `poll` without spinning
+  (`src/server/raft_host.c::host_propose_impl`, `host_send`, `host_sender`,
+  `server_raft_host_inbox`, `host_pump_poll_timeout`). Theory: round latency is
+  the sum of those wakes, not disk or CPU work; a stat with no disk write
+  takes 1.0–1.8 ms p50. Measure `EFS_WRITE_PROF` phases (`commit_apply`
+  against `persist`) and `perf sched latency` first. Evaluate, smallest first:
+  a bounded pump spin while a round is outstanding; the pump sending on the
+  peer socket itself with the sender thread as the backpressure path; the
+  follower's connection thread running the AppendEntries receive step.
+  Preserve the durable-before-ack rule, receive-persist cohorts, `h->mu`
+  ownership rules and bounded idle CPU. Gate: TSan lane, K1 stop gates, leader
+  change and slow-follower faults; compare create, stat, unlink and fsync
+  p50/p99 and creates/s. If `persist` dominates, close with that finding.
+- [ ] **P3-H — Small files: fewer sequential rounds per file.**
+  Create (with its lease), ticket admission, fragment PUTs, publication,
+  settlement and close are up to five consensus rounds and one storage round
+  per tiny file; W94 measured about +20 % creates/s for one round removed.
+  The ticket already carries the body digest and fragment checksums
+  (`include/efs/put_ticket.h`), so for a single-object file admission and
+  publication name the same object and settlement can retire in the
+  publication's apply. First record a per-file histogram of entry tags and of
+  the rounds the writer blocks on. Preserve K13 (fragments accepted only for
+  an admitted ticket) and K14 (atomic publication). A fused
+  admission-publication needs a new log command encoding and a rule for when
+  the client may hold fragments until the publish round: both need the user's
+  scope decision before any code.
+- [ ] **P3-I — Read-only opens: lease edges per file read.**
+  Every first open of an inode on a mount, read-only included, takes the HOLD
+  lease by a log command and the last release returns it
+  (`src/client/efs_fuse/open.c::efs_fuse_open_ino_run`); open p50 is 0.7 ms
+  above stat p50. Evaluate a bounded linger of the lease after the last close
+  with batched returns, so re-opens are free and close edges stop competing
+  with writers on group 0. Removing the open edge for read-only opens changes
+  what an unlinked open file promises and is the user's decision, not part of
+  this task. Gate: unlink-while-open, session expiry and K54 clean unmount
+  with lingered leases; measure lease entries as a share of group 0 commits
+  under a read-mostly tree and drop the task below a fifth.
+- [ ] **P3-J — Ticket admission: combine concurrent single ADMITs at the leader.**
+  Task U's named follow-up, not listed here before: 48–73 % of FUSE admissions
+  are single `ADMIT` entries although `ADMIT_BATCH` exists, because the cohort
+  forms on the client from kernel callback timing. The leader can combine the
+  admissions waiting in one proposal window into one `ADMIT_BATCH` (existing
+  tag). Rerun Task U's matrix untraced; compare entries/MiB and ior easy
+  write. K13 admission semantics, per-ticket verdicts and bounds unchanged.
+- [ ] **P3-K — PUT barrier: keep unrelated dirty data out of `syncfs`.**
+  The fragment barrier is `syncfs(root)` every 200 ms
+  (`src/server/store.c::put_sync_barrier_locked`); fragments are `O_DIRECT`,
+  but KV segments are written buffered and synced at their end
+  (`src/kv/kv_seg.c`), so each barrier writes back a running compaction and
+  the Raft and KV log syncs of that moment queue behind it. Theory: this is
+  the p99 at 5–20 times p50 with idle CPUs. Test without code first:
+  `EFS_PUT_SYNC_MS` at 50, 200 and 1,000 under tiny-file load; the spikes
+  should follow the barrier period and `last_barrier_us`. Evaluate pacing
+  compaction output with `sync_file_range`, as the Raft log rotation already
+  does. The barrier keeps covering every acknowledged fragment.
+
+**Order for these five:** P3-G's refuting measurement first (it decides
+whether round latency or round count is the larger term), then P3-H's
+histogram, P3-K's no-code test, P3-J with the ior easy baseline, P3-I last.
+**Reviewed and left out** (numbers on the page): an owner per group (group 2
+carries 1–2 % of commits; the concentration is W66), single-threaded apply
+(2–3 % of leader CPU), the sorted-array memtable, the single RDMA poller,
+fragment-file and chunk-size costs (formats), and a clock-based read lease
+(would rest read correctness on clock drift).
+
 ## F. Release evidence and alpha 1.0 exit
 
 - [ ] **F1** Unit/integration, enabled-feature and applicable memory/concurrency
