@@ -23,6 +23,17 @@ counts are checked again and the inline fallback has its own pass ("Tests"); (4)
 budget row follows the rule, the wrapper has no timeout of its own and the driver polls no
 clock ("Budget and waits").
 
+**Third round (review of `3a984be56`).** Round 2's private connections had no cap. (1) At most
+`HOST_FENCE_MAX_INFLIGHT` (32, the peer pool's size per member) exchanges wait on one member; past
+it the member counts unreached at once and no worker starts ("Bounding the workers"). It is 32 and
+not 1 on purpose, with a test that shows why. (2) Healthy-path cost measured: no difference on loopback
+("The healthy path"). (3) The stop now wakes the workers when the handler drain begins, so an
+unmount handler waiting on two silent members no longer holds the stop for the 30 s receive bound:
+0.2 s instead of 30.4 s on devel ("Fence workers and the daemon stop"). (4) Unit coverage for arm,
+disarm, wake, drain and resume on real sockets; `--sigstop` is gated; the `stop woke` count is
+exact; the RDMA statement on this page was wrong and is corrected ("Tests", "Not verified").
+(5) The budget row was re-measured under three 8-job gates: 200 s ("Budget and waits").
+
 ## Source and build
 
 * Base: devel `cff8eb424`. Branch `claude/sad-brahmagupta-5d44a8`. Round 1: code
@@ -34,7 +45,9 @@ clock ("Budget and waits").
   `8d88c13e3` (comments, budget text, the client-visible rc in the documents), `06bb0e396` and
   `12c515461` (`settings.md`, `settings.h` for the new fault variable); the round 2 checks in
   "Verification on xorinox" ran on `12c515461`, and the page, ledger and graph commits that
-  follow change no source.
+  follow change no source. Round 3: devel merged first (`1605178cb`, `ledger.md` the only
+  conflict), code and tests `a42a5cb85`, the driver's `--healthy` mode `adb479839`; the round 3
+  checks ran on that tree (the page, budget text and graph commits after it change no source).
   Binaries `efsd`, `tests/faults/efsd`, `efs-fuse`, `efs-mgmt`, `efs-bench` from
   `make all tests/faults/efsd` on the host; build id `unknown` (no `.git` there).
   The "before" runs used the unmodified `git archive cff8eb424` tree built the
@@ -46,7 +59,8 @@ clock ("Budget and waits").
   is not running, and in fault builds parks on `EFS_FAULT_FENCE_PARK`),
   `src/server/peer_pool.c` and `server_internal.h` (`server_peer_conn_new_armed`:
   the same private connection, with a hook that publishes the socket during the
-  handshake), `src/common/session_revoke.c` (comment),
+  handshake), `src/server/handler.c` (round 3: `server_handlers_begin_stop` wakes the
+  fence workers), `src/common/session_revoke.c` (comment),
   `tests/test_storage_fence_members.py`, new `tests/live/k109_stalled_member_unmount.py`
   and `tests/test_k109_stalled_member_unmount.py`, `Makefile`, `tests/budgets.tsv`,
   `tests/sanitizer_check.sh` (both new tests join the gate), and the three documents
@@ -157,6 +171,7 @@ The fix (`src/server/raft_host.c`):
   over its own connection (`host_fence_rpc`), not the shared pool, and the daemon
   stop wakes and joins it (next section). If a thread cannot be created the member
   is asked inline, as before; this node's own member is always asked inline;
+* at most `HOST_FENCE_MAX_INFLIGHT` exchanges wait on one member (round 3, next section);
 * the call returns when a majority sealed, when a refusal arrived, or when every
   member has answered; it never waits for the rest, and no new timeout, sleep
   or bound was added or changed (the 15 s barrier is untouched);
@@ -176,6 +191,46 @@ handler (`EFS_MSG_STORAGE_SESSION_FENCE`) and by the fence itself for this node.
 `server_peer_conn_new` keeps its behaviour (it now calls `server_peer_conn_new_armed`
 with no hook); `peer_connect` has no other change.
 
+## Bounding the workers
+
+Round 2 started one detached thread per remote member per round and opened a private socket
+in each, with no limit; the pool's 32-connection cap and its 3-failures-in-10-s cooldown no
+longer applied. A member that never answers held one thread and one socket per round until the 30 s
+receive bound, two rounds per unmount, so a burst of unmounts would pile up about 2 x unmounts x stalled
+members within 30 to 60 s, and at the member a hung handler pins a connection per round against
+`EFS_SERVER_MAX_CONNS`.
+
+The fix (`raft_host.c`, `host_fence_claim` / `host_fence_release`): a counter per member id under
+one mutex. A round claims a slot for each remote member before it starts the worker; the worker gives
+it back when its exchange ended (before it records the answer, so a round that returns on that answer
+never sees its own slot held). At `HOST_FENCE_MAX_INFLIGHT` waiting exchanges the round starts no
+worker and counts that member unreached at once (`FENCE_CAPPED`, logged as `storage-fence:
+member=N ... not asked: 32 exchanges already wait on it`, the first ten and every thousandth). Threads
+and sockets are therefore bounded by 32 per remote member, whatever the unmount rate. No timeout or sleep
+was added; the counter is released by the existing receive bound or by the stop's wake.
+
+**Why 32 and not the one in-flight exchange the review suggested.** Unmounts on one node run
+concurrently, and each round asks every remote member. With one exchange per member, a healthy
+member that is answering a neighbour's round would be counted unreached for every other concurrent
+round, and with this node plus one answering member being the only way to a majority of three, those
+unmounts would fail closed (BUSY) on a healthy cluster. The unit test below runs 8 threads x 200
+concurrent rounds against two healthy members and requires every round to succeed; with the cap
+changed to 1 it fails (mutant below). 32 is the pool's size per peer (`EFS_PEER_DATA_CONNS`), so a stalled member
+costs at most what a busy one cost before. The pool's down-cooldown is not restored (it needs
+a clock, and the cap already bounds the cost): a member that refuses connections costs one failed
+connect per round (a TCP refusal is immediate; a black-holed address is bounded at 2 s by
+`EFS_CONNECT_TIMEOUT_SEC`, inside a worker, never inside the caller once a majority sealed).
+
+**Unit tests** (`tests/test_storage_fence_members.py`, both programs run in `make test`):
+
+* 100 rounds against a member that never answers: every round returns OK (this node and member 2),
+  exactly 32 workers were started for the silent member (and 100 for the healthy one), and
+  after release every slot is back at 0;
+* both remote members at the cap: no worker starts, the round returns BUSY at once, only this node's
+  check ran; one member at the cap: the other and this node are a majority, OK;
+* 8 threads x 200 concurrent rounds against healthy members: every round OK, every slot back at 0;
+* mutants: cap 1 (the concurrency rows abort), no cap (the 100-round row aborts on the spawn count).
+
 ## Fence workers and the daemon stop
 
 Round 1 let a worker ask over `server_peer_conn_get` (the shared pool). The review found
@@ -194,19 +249,41 @@ The fix:
   hook runs after `connect`, before the declare, and `disarm` before any close; both and
   the drain run under one mutex, so a listed socket is open). A worker also counts itself
   active for the whole exchange.
+* `server_raft_host_fence_wake` (round 3) refuses new exchanges and calls `shutdown(fd)` on every
+  listed socket without waiting. `server_handlers_begin_stop` calls it, so it runs when the
+  stop begins, before the handler drain: an unmount handler waits for its workers, and the drain would
+  otherwise wait for that handler for as long as the workers wait (below).
 * `host_fence_drain`, the first call of `server_raft_host_stop` (before the host's own
-  teardown, and so before the `peer-pool` phase), refuses new exchanges, calls
-  `shutdown(fd)` on every listed socket and waits for the active count to reach 0. A TCP
-  wait (declare, send or receive) returns at once; the worker records "transport
-  unavailable" and exits. It logs `storage-fence: stop woke N worker(s) waiting on a
-  member`. `server_raft_host_stop` clears the flag at its end (`host_fence_resume`), so a host started again asks members again.
+  teardown, and so before the `peer-pool` phase), wakes again (a no-op for sockets already woken)
+  and waits for the active count to reach 0. A TCP wait (declare, send or receive) returns at once;
+  the worker records "transport unavailable" and exits. It logs `storage-fence: stop woke N
+  worker(s) waiting on a member`, N counting each worker once however many wakes saw it.
+  `server_raft_host_stop` clears the flag at its end (`host_fence_resume`), so a host started again asks members again.
 * No timeout, sleep or bound is added; the wait is on a condition variable.
 
+**An unmount handler waiting on two silent members (review item 3).** With nodes 2 and 3 both
+reachable and never answering a fence, an unmount on node 1 waits for both workers (the
+majority cannot be reached) for the 30 s receive bound. In round 2 the wake ran only in the
+raft-host phase, after the handler drain, so a SIGTERM waited for that handler. Measured on xorinox
+(`--silent2`, SIGTERM sent once both nodes had logged the parked fence): node 1 exits orderly, rc 0, in
+**0.2 s** on this tree; **30.5 s** with only the `server_handlers_begin_stop` call removed (so the test fails
+without the fix); **30.4 s on devel** (`cff8eb424` plus the fault hook). That wait is not new:
+devel's serial loop waited the same 30 s on a pooled connection that nothing woke. The measured wait
+stays inside the 40 s handler-drain share and the 50 s total. The review's 62 s worst case needs a
+worker whose declare handshake and then its exchange each run to their 30 s bound; it was not
+produced here (the longest measured is 30.5 s), and the wake cuts both waits. The unmount
+client exits 1 in all three runs (fails closed). A fence a healthy handler had in hand when the stop begins
+is now refused too (the node is stopping); the client retries it against the new leader.
+
 Limits, stated plainly: (a) the socket is not listed during `connect()` itself, so a member
-that does not answer SYN holds the drain for the connect's own bound; (b) an RDMA
-connection waits on its completion queue, not on the socket, so `shutdown(fd)` does not
-wake it and the drain waits for that exchange's own 30 s receive bound (the RDMA stop was
-not run here); (c) a fence the stopping node itself issues during the drain is refused
+that does not answer SYN holds the drain for the connect's own bound (`EFS_CONNECT_TIMEOUT_SEC`, 2 s);
+(b) RDMA: round 2 said an RDMA exchange waits on the completion queue and `shutdown(fd)`
+does not wake it. That was wrong. Every wait of an RDMA exchange (the send's completion and credit
+waits, `send_credit` at `rdma.c:1594` and `1618`, and the receive at `1748`) goes through
+`message_pause` (`rdma.c:1717`), which polls the control socket (`rc->tcp_fd`, the same fd the
+registry lists) every millisecond, and `tcp_retired` (`rdma.c:1708`) marks the connection broken on a zero
+peek, which is what a shut-down socket returns. So the stop wakes an RDMA exchange the same way; read
+from the code, **not run** (every run here uses TCP); (c) a fence the stopping node itself issues during the drain is refused
 (`transport unavailable`, counted as unreached), which is what a stopping node should do.
 The first design (list only the established connection) was tried on xorinox and was
 wrong: with the member frozen the worker waits in the declare handshake, the drain waited
@@ -221,6 +298,36 @@ leader instead of using its own frozen KV (`raft_host.c:15882`), so it cannot
 admit a revoked epoch from stale state. **Not run:** a hand-built old-epoch PUT
 against the stalled member after a revoke (K54's control, with stall instead of
 kill). It is listed under "Not verified".
+
+## The healthy path (review item 2)
+
+Round 2's worker connects, declares (and on RDMA upgrades) per remote member per round, inside the
+majority wait; the pooled path had these done. Measured with `--healthy --runs 20` (three private
+members, no stall, TCP over loopback on xorinox, four alternating batches of 20 clean
+unmounts, both trees built the same way): the client has no separate timer for the storage-fence
+barrier, so the table gives the whole revoke (`ms=`: BEGIN, the barrier, the bitmap reads, the shard
+fence, cleanup and FINISH with its second barrier) and `fence_ms=` (the shard-fence stage only; it does not
+contain the barrier).
+
+| Tree | Batch | Revoke `ms` median | max | `fence_ms` median | max |
+| --- | --- | ---: | ---: | ---: | ---: |
+| devel `cff8eb424` | 1 | 62 | 80 | 4.5 | 9 |
+| devel `cff8eb424` | 2 | 61 | 99 | 4.5 | 7 |
+| this branch | 1 | **44** | 53 | 5.0 | 8 |
+| this branch | 2 | **44** | 55 | 5.0 | 7 |
+
+The whole revoke is 17 to 18 ms faster at the median: devel walks the members one after another in
+both barriers, this branch asks them at once, and the private handshake (loopback: connect and declare
+in well under a millisecond) is far smaller than what the concurrent ask saves. The shard-fence stage is unchanged,
+as it should be. **Limits:** loopback has no network round trip; on a real network the connect and declare
+add about two round trips per remote member per round, inside the majority wait (the first remote answer
+decides, so the slower of the two members does not add), and on RDMA the upgrade adds more. That was
+not measured here. **Choice:** each exchange opens its own connection and no persistent fence connection is kept. A
+persistent connection per member would remove the handshake, but it needs reuse, an idle reap, a drop
+on error and a drain that finds it between exchanges, which is the complexity round 1's pool use
+failed on; with 2 rounds per unmount and the numbers above the handshake is not worth it. If the
+multi-host check shows the handshake in the revoke time, a persistent connection per member is the
+next step.
 
 ## Reproduction
 
@@ -268,8 +375,8 @@ The `--park` run (below) has no frozen process and stops in 177 ms.
 
 | Test | Before | After |
 | --- | --- | --- |
-| `tests/test_storage_fence_members.py` (fast; 33 rows by two modes, each run with a thread per remote member and again with thread creation failing; slow-member, late-refusal, refusal-vs-slow, roster-change, duplicate-identity and short-roster cases) | on devel `cff8eb424`: the nine did-not-seal rows with a majority sealed fail (`got -15 want 0`, `-13`, `-1`, `-3`); the adapter then hung, so later rows did not run on devel | PASS; plain x3 on xorinox, and in the TSan and ASan lanes |
-| `tests/test_k109_stalled_member_unmount.py` (live; two clusters, below) | devel: 3 of 3 phase-1 unmounts fail after 15 s (`FAIL 1/4`); round 1 code under ASan: `FAIL`, heap-use-after-free in the stop (below) | PASS 4/4 then PASS 2/2; in the ASan lane PASS |
+| `tests/test_storage_fence_members.py` (fast; 33 rows by two modes, each run with a thread per remote member and again with thread creation failing; slow-member, late-refusal, refusal-vs-slow, roster-change, duplicate-identity and short-roster cases; round 3: the per-member cap and concurrent healthy rounds, and a second program for the worker registry) | on devel `cff8eb424`: the nine did-not-seal rows with a majority sealed fail (`got -15 want 0`, `-13`, `-1`, `-3`); the adapter then hung, so later rows did not run on devel | PASS; plain x3 on xorinox, and in the TSan and ASan lanes |
+| `tests/test_k109_stalled_member_unmount.py` (live; four clusters, below) | devel: 3 of 3 phase-1 unmounts fail after 15 s (`FAIL 1/4`); round 1 code under ASan: `FAIL`, heap-use-after-free in the stop (below); round 2 code: the `--silent2` stop takes 30.5 s (limit 12 s) | PASS 4/4, PASS 2/2 (`--park`), PASS 2/2 (`--sigstop`), PASS 1/1 (`--silent2`); in the ASan lane PASS |
 | `tests/test_k54_member_down_fence.py`, `tests/test_k54_member2_unmount.py` (unchanged) | not run here | round 1: PASS, 25.6 s and 9.4 s; the log assertion `reached 2 of 4 members, no majority` holds. Round 2 changed the worker's connection, so these were rerun as part of `tests_for server/raft_host` (below) |
 
 **Counts.** Every call asks each member once, and this node's own check runs once, whatever
@@ -290,7 +397,18 @@ workers: the result must equal the threaded result, no worker is spawned and eve
 answered at return. The inline path waits for each member in turn (which is why the guide says
 the stop can wait on a slow member in that case).
 
-**Live test, two clusters.** (1) The L0-stall cluster of round 1: three clean unmounts with
+**Registry unit test (round 3).** The test's second program compiles the worker registry
+(`host_fence_arm`, `host_fence_disarm`, `host_fence_rpc`, `server_raft_host_fence_wake`, `host_fence_drain`,
+`host_fence_resume`) with real socketpairs and stubs only for the connection setup and the message calls: a
+completed exchange leaves nothing listed; a worker parked in an exchange and one parked in the
+declare handshake are each woken by the drain (`rc -1`, nothing listed, nothing active, exactly one log line
+`stop woke 1 worker(s)`); a new exchange after the stop began is refused before it connects; `resume` makes
+the next exchange work; two parked workers woken by `wake` before the drain are counted once (`woke 2`),
+with `wake` itself logging nothing; a socket opened after the wake is refused by `arm`. Mutants: the
+wake not calling `shutdown` and the arm not listing the socket both hang the program (killed by hand; the
+test has no timeout of its own, the gate's budget bounds it).
+
+**Live test, four clusters.** (1) The L0-stall cluster of round 1: three clean unmounts with
 node 3 stalled, then node 2 stalled and one refused unmount. (2) `--park --runs 1`: node 3 is a
 fault build with `EFS_FAULT_FENCE_PARK=1` (a storage-fence request is never answered; the node
 answers everything else) and node 1 has `EFS_FAULT_SHUTDOWN_RECORD_PARK=write`. One clean unmount
@@ -298,7 +416,13 @@ answers everything else) and node 1 has `EFS_FAULT_SHUTDOWN_RECORD_PARK=write`. 
 node 1; the test waits for node 1's `shutdown: outcome=orderly rc=0` line (all phases done, the
 pool destroyed; the parked record keeps the process alive for up to 5 s) and only then kills
 node 3. A worker the stop did not drain wakes on that kill and uses the freed connection.
-It also requires node 1 to exit 0 and to log `stop woke N worker(s)`. The hook,
+It also requires node 1 to exit 0 and to log exactly `stop woke 2 worker(s)` (one worker per fence
+round, two rounds per unmount; node 3's own log shows its two `parked by EFS_FAULT_FENCE_PARK` lines).
+(3) `--sigstop --runs 1` (round 3, now gated): node 3 is `SIGSTOP`ped after the writes, so the workers wait in the declare
+handshake; the same stop checks, `woke 2`. (4) `--silent2` (round 3): nodes 2 and 3 both park every
+fence; the client's `stop` waits on node 1's handler, `SIGTERM` goes to node 1 once both nodes logged the
+parked fence, and node 1 must exit 0 orderly in under 12 s (0.2 s measured; the limit is far below the 30 s
+the workers would otherwise wait out) while the unmount fails closed. The hook,
 `EFS_FAULT_FENCE_PARK` in `server_raft_host_storage_session_fence`, is a `for(;;)sleep(60)` park
 under `#if EFS_FAULTS`, like `EFS_FAULT_SHUTDOWN_PARK`; it is product source but compiled only into
 fault builds, inactive without the variable, and documented in `settings.md`. It is the one
@@ -313,12 +437,18 @@ freed by `efs_conn_destroy` ← `server_peer_pool_shutdown` ← `sd_peers`, allo
 
 ## Budget and waits
 
-`tests/budgets.tsv`: the unit test stays in `test` (30 s ceiling; measured in `make test`
-below). The live wrapper is in `test-long` at **95 s**, slot 1: three solo runs on xorinox took
-72, 73 and 73 s; the rule (1.25 x the slowest of three solo runs, rounded up to 5 s) gives
-91.25 s, so 95 s. Round 1's row said 120 s (a provisional figure, not the rule); the first
-review's 85 s was computed on the 65 s of round 1, before the second cluster (about 10 s) was
-added. The 8-job gate measurement of the row is still owed.
+`tests/budgets.tsv`: the unit test stays in `test` (30 s ceiling; 0 to 1 s measured). The live wrapper is
+in `test-long`, slot 1, now **200 s** (round 2: 95 s). The wrapper runs four clusters since round 3
+(`--sigstop` is gated and `--silent2` is new; the `--sigstop` stop alone takes about 35 s, 30 s of it a
+wait on the frozen member that is older than this task). Measured on xorinox: three solo runs 124, 124, 126 s;
+then three 8-job gates (`EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh`, the full test-all, each
+TOTAL 603 FAIL 0, 887, 899 and 901 s) in which the row took **156.3, 165.5 and 152.2 s**. The file's
+rule (tests/budgets.tsv header: the median of the host's three clean 8-job gates, times 1.25, rounded up to 5 s) gives
+1.25 x 156.3 = 195.4, so **200 s**. It is one host, not the three the header names (intel1, xorinox, fstor007);
+the slowest of the three gates, 165.5 s, is inside it. The first gate ran the interim 160 s row
+and one gate (165.5 s) went over it, which is why the interim row was replaced. The three gates also report
+`NOTRUN 11` (host limits: no cluster scripts, no RDMA hardware, no valgrind), so their status is INCOMPLETE as on
+the earlier xorinox gates, and `OVERBUDGET 23 to 25` rows that are not this task's; K109's row is not among them at 200 s.
 
 The wrapper no longer passes `timeout=900` to `subprocess.run`: a second limit besides the
 row's budget, which the gate enforces. The drivers wait on log lines (`Cluster.wait_log`, the
@@ -346,6 +476,29 @@ it stays blocked until that member holds the sealed epoch
 ([K54 page](../2026-10/k54-member-down-unmount-20261030.md)).
 
 ## Verification on xorinox
+
+**Round 3, on `adb479839`.** `git archive` of that commit extracted under `~/efs-taskFO/src`, `make -j8 all
+tests/faults/efsd`, TMPDIR under `~/efs-taskFO/tmp`, build id `unknown`; a second tree `base` from
+`git archive cff8eb424` for the devel measurements (plus the fault hook for the silent-members stop), and
+`src-nowake`, this tree with only the `server_raft_host_fence_wake()` call in `server_handlers_begin_stop`
+removed. The commits after `adb479839` change this page, `tests/budgets.tsv` (the budget text and number) and the graph only. Logs in
+`~maik/efs-artifacts/taskFO-round3-20261110/` (35 files, `SHA256SUMS` beside it).
+
+| Check | Result |
+| --- | --- |
+| `python3 tests/test_storage_fence_members.py` x3 plain | 3 of 3 PASS, 0 to 1 s; 4 mutants of the round 3 code run on the Mac (cap 1, no cap, wake without `shutdown`, arm not listing) fail the test |
+| `make test` | rc 0, 180 s |
+| `python3 tests/test_k109_stalled_member_unmount.py` solo x3 | PASS x3: `4/4`, `2/2`, `2/2`, `1/1` each; 124, 124, 126 s |
+| `--healthy --runs 20` x2 per tree | devel: revoke `ms` median 62 and 61, max 80 and 99; this branch: median 44 and 44, max 53 and 55 (above) |
+| `--silent2` | this tree: exit 0 in 0.2 s; without the wake: 30.5 s (FAIL); devel: 30.4 s |
+| `--park --runs 1`, `--sigstop --runs 1` | PASS 2/2 each, `stop woke 2 worker(s)` exact; node 1 exit 0 in 5.2 s and 35.0 s |
+| `python3 scripts/tests_for.py common/session_revoke --run` | rc 0, 148 s |
+| `python3 scripts/tests_for.py server/raft_host --run` | rc 0, 666 s |
+| `bash tests/sanitizer_check.sh asan` | VERDICT PASS, 62 run, 0 failed, 518 s |
+| `bash tests/sanitizer_check.sh tsan` | VERDICT PASS, 34 run, 0 failed, 682 s (`k37_segment_rebuild`, which failed once in round 2, passed) |
+| three 8-job `make_test_summary.sh` gates | TOTAL 603, FAIL 0, NOTRUN 11 (host limits), INCOMPLETE, 887 / 899 / 901 s; the K109 row 156.3 / 165.5 / 152.2 s |
+| `make docs-check` (Mac worktree, after `scripts/gen_diagnostics.py` for the new log keys) | rc 0, 0 dangling links, concern map and diagnostics checks pass |
+| `python3 tests/test_make_test_recipe.py` | PASS (106 budget rows, budgeted gate inside its 1750 s ceiling) |
 
 **Round 2, on the final tree.** `git archive 12c515461` extracted under `~/efs-taskFO/new`
 (the page, ledger and graph commits after it change no source), `make all tests/faults/efsd`,
@@ -396,20 +549,21 @@ and the live test ran on the final build of round 1.
   fsync that fails on armed members) was not run. With a fault on every member
   nothing seals and the call fails as before; with the fault on fewer than a
   majority the revoke now succeeds with those members unsealed (K54's rule).
-* The stop drain is checked for TCP with a member that never answers a fence (`--park`) and,
-  frozen with `SIGSTOP`, for a worker waiting in the declare handshake. Not run: the RDMA stop
-  (the drain waits for the exchange's own 30 s bound there, by reading of the code), and a stop
+* The stop drain is checked for TCP with a member that never answers a fence (`--park`), with
+  one frozen by `SIGSTOP` (a worker waiting in the declare handshake) and with two silent members
+  and an unmount handler waiting (`--silent2`). Not run: the RDMA stop (by reading of
+  `message_pause`, the exchange is woken like a TCP one; see above), and a stop
   while a worker is in `connect()` to an address that does not answer SYN (the connect's own
-  bound). A worker's last steps after the drain returns (its answer recorded into its own
+  2 s bound). The `--sigstop` stop takes 35 s in total, of which 5 s is the parked exit record: about 30 s are
+  spent in the raft-host phase on the frozen member elsewhere than the fence workers (45.5 s on devel);
+  that wait is older than this task and was not attributed. A worker's last steps after the drain returns (its answer recorded into its own
   refcounted round, one telemetry line, safe once the sink is unbound) can still run; they use no
   host state.
-* Cost of the private connections. A pooled connection is capped (32 data connections per peer)
-  and honours the pool's down-cooldown; the worker's connection has neither. A fence round
-  against a member that never answers now leaves a thread and a socket for up to the 30 s receive
-  bound, and a member that is black-holed costs a full connect per round (on RDMA also the
-  upgrade). Fence rounds are two per unmount, so this is small, but it was not measured at
-  production unmount rates or against a down member.
-* Gate timing of the new live test under 8-job contention.
+* Cost of the private connections. They are now capped (32 per member) but do not have the pool's
+  down-cooldown, so a member that refuses connections costs one failed connect per round, and the
+  per-round handshake was measured on loopback only (above), not on a real network or on RDMA, and
+  not at production unmount rates.
+* The 200 s row rests on one host (xorinox), not the three the budget header names.
 
 ## Reproduction and artifacts
 
@@ -421,6 +575,9 @@ python3 tests/live/k109_stalled_member_unmount.py --runs 20 --report-only --port
 python3 tests/live/k109_stalled_member_unmount.py --runs 5 --sigstop --port-base 18920
 python3 tests/live/k109_stalled_member_unmount.py --runs 5 --split --client-node 2 --port-base 18940
 python3 tests/live/k109_stalled_member_unmount.py --park --runs 1 --port-base 18960
+python3 tests/live/k109_stalled_member_unmount.py --sigstop --runs 1 --port-base 18980
+python3 tests/live/k109_stalled_member_unmount.py --silent2 --port-base 18900     # stop with a handler waiting on two silent members
+python3 tests/live/k109_stalled_member_unmount.py --healthy --runs 20 --port-base 18920   # revoke ms and fence_ms, healthy cluster
 python3 tests/test_k109_stalled_member_unmount.py
 python3 tests/test_storage_fence_members.py
 EFS_SAN_ONLY=k109_stalled_member bash tests/sanitizer_check.sh asan      # the stop with workers waiting, under ASan
@@ -440,3 +597,8 @@ TSan rerun, the old-code ASan failure `asan-k109-round1-code-FAIL.log` with the 
 solo timings) is in `~maik/efs-artifacts/taskFO-round2-20261110/`, `SHA256SUMS` beside it (27
 files); sha256 of that `SHA256SUMS`:
 `baa0638d096d9d9a20cbdad56c29bf9afa00a7f4242eb462a02632afb295da8c`.
+Round 3 raw output (the healthy-path batches on both trees, the three `--silent2` runs, `--park` and
+`--sigstop`, the solo wrapper runs, `make test`, `tests_for`, the ASan and TSan lanes, the three 8-job gates with their
+summaries and timings, the build logs and the orchestration scripts) is in
+`~maik/efs-artifacts/taskFO-round3-20261110/`, `SHA256SUMS` beside it (35 files); sha256 of that `SHA256SUMS`:
+`a246e98a8482ed358d44e314b374d41556716834dbfd754f0c0b85fe3eaadf53`.
