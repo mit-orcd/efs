@@ -2408,6 +2408,43 @@ static void test_snapshot_busy_survives_delayed_append(void)
     free_n(&n,st,3);
 }
 
+/* K113: the leader moves on without retrying the closing chunk; the host
+ * installs the finished import itself. */
+static void test_snapshot_imported_without_retry(void)
+{
+    struct net n; struct efs_raft_store *st[3]; struct app app[3];
+    struct efs_raft_cfg cfg;
+    boot_n(&n,st,app,&cfg,3,7);
+    cfg.snap_open=snap_open;cfg.snap_read=snap_read;
+    cfg.snap_close=snap_close;cfg.snap_chunk=snap_chunk;
+    for(int i=0;i<3;i++) {
+        efs_raft_free(n.r[i]);cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+        cfg.app=&app[i];cfg.election_ticks=10+(uint32_t)i*10;cfg.heartbeat_ticks=1;
+        n.r[i]=test_raft_new(&cfg);
+    }
+    CHECK(elect(&n,40)==1,"imported election");
+    int leader=leader_id(&n);
+    if(leader<0){free_n(&n,st,3);return;}
+    int follower=(leader+1)%3;
+    app[follower].park_apply=1;app[follower].hold_snapshot=1;
+    n.defer_on=1;n.defer_to=follower;
+    uint8_t cmd=73;uint64_t index=0;
+    CHECK(!efs_raft_propose(n.r[leader],&cmd,1,&index),"queue original append");
+    CHECK(!efs_raft_snapshot(n.r[leader]),"compact");
+    for(int i=0;i<5;i++)(void)efs_raft_tick(n.r[leader]);
+    CHECK(app[follower].snapshot_busy_calls>0,"receiver prepares import");
+    uint64_t incl=efs_raft_snap_index(n.r[leader]),term=efs_raft_term(n.r[leader]);
+    CHECK(efs_raft_snap_imported(n.r[follower],incl+1,term)==EFS_ERR_INVAL,"not the closed image");
+    CHECK(efs_raft_applied(n.r[follower])<incl,"not applied before");
+    CHECK(efs_raft_snap_imported(n.r[follower],incl,term)==EFS_OK,"install without a retry");
+    CHECK(efs_raft_applied(n.r[follower])==incl&&efs_raft_snap_index(n.r[follower])==incl,
+          "snapshot and applied index are the image's");
+    CHECK(efs_raft_snap_imported(n.r[follower],incl,term)==EFS_ERR_INVAL,"installed once");
+    for(int i=0;i<n.ndeferred;i++){msg_free_deep(n.deferred[i]);n.deferred[i]=NULL;}
+    n.ndeferred=0;
+    free_n(&n,st,3);
+}
+
 /* Compacting without a snap_get blob must not skip a learner ahead.
  * wait_voters stays BUSY — match never reaches commit. */
 static void test_install_snapshot_needs_blob(void)
@@ -3896,6 +3933,7 @@ int main(int argc, char **argv)
         RUN(test_ae_batch_catchup);
         RUN(test_ae_catchup_flow_control);
         RUN(test_snapshot_busy_survives_delayed_append);
+        RUN(test_snapshot_imported_without_retry);
         RUN(test_install_snapshot);
         RUN(test_install_snapshot_needs_blob);
         RUN(test_install_snapshot_restarted_leader);
