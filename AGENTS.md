@@ -66,8 +66,9 @@ curated test links and literal document mentions are not runtime proof.
 Component known: start with `graphify explain <tag>`. Owner unknown:
 `graphify query` with the symptom in plain words to locate it, then `graphify explain`,
 both before the first grep or source read. Curated question routes
-(`tools/graphify/routes.json`) lead a known symptom to its owner on the first
-output line; add a route when you had to search. A literal log line or error code: look the key up in
+(`tools/graphify/routes.json`): for a recorded question in its recorded wording
+the first NODE line names the owner (`owner=`) and the next command (`next=`);
+other wordings mostly miss, so add a route when you had to search. A literal log line or error code: look the key up in
 `docs/how-it-works/diagnostics.md` (or `grep -rn '<key>' src`), then
 `graphify explain` the component it names. For a recurring failure, read its route in `docs/how-it-works/failure-routes.md` first. A `tested_by` edge is the test selector's catalogue
 route, not coverage; one inherited from the parent tag is INFERRED and labelled

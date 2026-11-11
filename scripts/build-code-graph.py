@@ -298,7 +298,9 @@ def build(root, out):
         # first. `attributes` are printed on the node's output line: the first
         # line already names the owner.
         node(rid, " ".join(_query_terms(r["question"])), "tools/graphify/routes.json", 1, "question_route")
-        nodes[rid]["attributes"] = {"owner": r["component"], "why": r["why"]}
+        # graphify prints attributes sorted by key and cuts long values: "next" comes first.
+        nodes[rid]["attributes"] = {"next": 'graphify explain "%s"' % r["component"],
+                                    "owner": r["component"], "why": r["why"]}
         edge(rid, cid, "answered_by", "tools/graphify/routes.json", method="curated-question-route")
     # Resolve quoted C includes by exact path, not matching a basename to a
     # possibly unrelated file. Unresolved imports remain labelled boundaries.
