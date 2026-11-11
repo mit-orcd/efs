@@ -140,7 +140,7 @@ static void test_hard_error_requests_resync(void)
 {
     struct fixture f;
     struct host_group *g;
-    char path[] = "/tmp/snap-pump-log-XXXXXX";
+    char path[EFS_TEST_PATH];
     char line[512] = "";
     int fd, saved, i;
     ssize_t n;
@@ -153,7 +153,8 @@ static void test_hard_error_requests_resync(void)
     CHECK(send_chunk(&f) == EFS_ERR_BUSY, "queued");
     host_snap_import_pass(f.h);
     CHECK(g->import_state == SNAP_IMP_DONE, "importer is open");
-    fd = mkstemp(path);
+    efs_test_path(path, sizeof(path), "snap-pump-log-XXXXXX");
+    fd = efs_test_mkstemp(path);
     CHECK(fd >= 0, "log file");
     fflush(stderr);
     saved = dup(2);
