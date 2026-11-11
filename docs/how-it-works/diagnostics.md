@@ -3,7 +3,7 @@
 
 Generated page: any source change that adds, renames or moves a diagnostic key must regenerate it with `python3 scripts/gen_diagnostics.py` (`make docs-check` runs it with `--check` and fails on a stale page).
 
-Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`.
+Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`. Recurring failures have a route that says what the line proves: [failure routes](failure-routes.md).
 
 Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
 
@@ -11,21 +11,21 @@ Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fpr
 
 | rc | Name | Meaning |
 |---|---|---|
-| -1 | `EFS_ERR_IO` |  |
-| -2 | `EFS_ERR_NOMEM` |  |
-| -3 | `EFS_ERR_NOT_FOUND` |  |
-| -4 | `EFS_ERR_EXIST` |  |
-| -5 | `EFS_ERR_INVAL` |  |
-| -6 | `EFS_ERR_NET` |  |
-| -7 | `EFS_ERR_PROTO` |  |
-| -8 | `EFS_ERR_NO_QUORUM` |  |
-| -9 | `EFS_ERR_DECODE` |  |
-| -10 | `EFS_ERR_CHECKSUM` |  |
-| -11 | `EFS_ERR_QUOTA` |  |
-| -12 | `EFS_ERR_NOT_EMPTY` |  |
-| -13 | `EFS_ERR_BUSY` |  |
-| -14 | `EFS_ERR_STALE` |  |
-| -15 | `EFS_ERR_NOT_PRIMARY` |  |
+| -1 | `EFS_ERR_IO` | local file or storage I/O failed, or stored data unreadable |
+| -2 | `EFS_ERR_NOMEM` | allocation or table growth failed; whether a retry helps is not determined |
+| -3 | `EFS_ERR_NOT_FOUND` | the looked-up key, inode or entry is absent (or only a tombstone) |
+| -4 | `EFS_ERR_EXIST` | target already exists (name taken or identity already abandoned) |
+| -5 | `EFS_ERR_INVAL` | argument or request rejected as invalid; the operation did not proceed |
+| -6 | `EFS_ERR_NET` | no connection, or send/receive to a peer failed; peer state unknown |
+| -7 | `EFS_ERR_PROTO` | received or supplied bytes violate the expected format or protocol rules |
+| -8 | `EFS_ERR_NO_QUORUM` | peers reachable but no majority answered; callers wait or retry as for BUSY |
+| -9 | `EFS_ERR_DECODE` | encoded bytes or an erasure-decoded segment could not be decoded |
+| -10 | `EFS_ERR_CHECKSUM` | computed hash differs from the recorded one: content mismatch |
+| -11 | `EFS_ERR_QUOTA` | a configured quota or aggregate size limit would be exceeded |
+| -12 | `EFS_ERR_NOT_EMPTY` | directory still has children; removal or replace refused |
+| -13 | `EFS_ERR_BUSY` | not determined: byte or size limit reached vs queue/resource still in use |
+| -14 | `EFS_ERR_STALE` | request's expected state, epoch or revision no longer matches current state |
+| -15 | `EFS_ERR_NOT_PRIMARY` | this node does not lead the group; the caller must re-resolve the leader |
 | -16 | `EFS_ERR_ACCES` | EACCES (search/execute denied) |
 | -17 | `EFS_ERR_NAMETOOLONG` | ENAMETOOLONG (component > 255) |
 | -18 | `EFS_ERR_AGAIN` | retry: TCP side-channel has a frame |
@@ -34,12 +34,12 @@ Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fpr
 | -21 | `EFS_ERR_NODATA` | ENODATA: xattr name is not set |
 | -22 | `EFS_ERR_OVERFLOW` | EOVERFLOW: explicit metadata/output limit |
 | -23 | `EFS_ERR_ILSEQ` | EILSEQ: unrepresentable legacy name |
-| -24 | `EFS_ERR_UNSUPPORTED` |  |
-| -25 | `EFS_ERR_FRAG_FORMAT` |  |
-| -26 | `EFS_ERR_FRAG_IDENTITY` |  |
-| -27 | `EFS_ERR_FENCED` |  |
-| -28 | `EFS_ERR_UNREGISTERED` |  |
-| -29 | `EFS_ERR_UNFORMED` |  |
+| -24 | `EFS_ERR_UNSUPPORTED` | log entry or command this build cannot apply (unknown tag or bad length) |
+| -25 | `EFS_ERR_FRAG_FORMAT` | fragment record format unknown or older; the record is not served |
+| -26 | `EFS_ERR_FRAG_IDENTITY` | fragment record names a different object than requested; not served |
+| -27 | `EFS_ERR_FENCED` | not determined: epoch below the session floor vs data-commit reply not OK |
+| -28 | `EFS_ERR_UNREGISTERED` | request has no valid or established session identity (uuid, epoch) |
+| -29 | `EFS_ERR_UNFORMED` | cluster formation membership not committed yet; no client metadata served |
 
 ## Diagnostic keys
 

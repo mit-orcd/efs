@@ -67,6 +67,6 @@ Component known: start with `graphify explain <tag>`. Owner unknown:
 `graphify query` to locate it, then `graphify explain`, both before the first
 grep or source read. A literal log line or error code: look the key up in
 `docs/how-it-works/diagnostics.md` (or `grep -rn '<key>' src`), then
-`graphify explain` the component it names. A `tested_by` edge is the test selector's catalogue
+`graphify explain` the component it names. For a recurring failure, read its route in `docs/how-it-works/failure-routes.md` first. A `tested_by` edge is the test selector's catalogue
 route, not coverage; one inherited from the parent tag is INFERRED and labelled
 with the parent.
