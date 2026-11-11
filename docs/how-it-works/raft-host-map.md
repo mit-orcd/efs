@@ -426,13 +426,13 @@ Tests: `tests/test_k35_fsync_degraded.py` `tests/test_k35_placement.py` `tests/t
 
 ## Snapshots
 
-Does: Raft snapshots of the KV: the pump pins a view and the GC thread writes the `.kvx` file (`host_snap_export_pass`); the sender reads it in chunks; a follower writes a `.part` file, queues the import, and the GC thread diffs it (`host_snap_import_pass`) before the pump batches the diff in the ack. While an import is queued, running or being applied, a chunk at offset 0 of any snapshot is answered BUSY (`snap_import_active`), and the pump steps the finished import once per cycle and installs it in the Raft core (`host_snap_import_pump`, `efs_raft_snap_imported`) even when the leader no longer retries that image. `host_maybe_snapshot` decides when.
+Does: Raft snapshots of the KV: the pump pins a view and the GC thread writes the `.kvx` file (`host_snap_export_pass`); the sender reads it in chunks; a follower writes a `.part` file, queues the import, and the GC thread diffs it (`host_snap_import_pass`, which drops an image the member has already applied past or leads) before the pump batches the diff in the ack. While an import is queued, running or being applied, a chunk at offset 0 of any snapshot is answered BUSY (`snap_import_active`; the pump also holds elections while any import state is pending, `snap_import_pending`), and the pump steps the finished import once per cycle and installs it in the Raft core (`host_snap_import_pump`, `efs_raft_snap_imported`) even when the leader no longer retries that image. `host_maybe_snapshot` decides when.
 
 State: `host_group.snap_*`, `part_*`, `import_*` under `h->snap_mu`; `import_block` makes `host_apply` of that group return BUSY while a diff is in flight.
 
 Entry points: none public. In file: `host_snap_open`, `host_snap_read`, `host_snap_close` (raft core callbacks), `snap_import_poll`.
 
-Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_active` `snap_import_poll` `host_snap_chunk` `host_snap_import_pump` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
+Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_active` `snap_import_pending` `snap_import_poll` `host_snap_chunk` `host_snap_import_pump` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
 
 Logs: `raft-snap` (host_snap_open, host_maybe_snapshot, host_snap_export_pass, host_snap_import_pass, host_snap_import_pump); `raft-host` lines from `snap_import_poll`
 

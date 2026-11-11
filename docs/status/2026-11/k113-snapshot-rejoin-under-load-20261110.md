@@ -112,6 +112,40 @@ Raw output outside Git: `~maik/efs-artifacts/taskFU-20261110/` on intel2 (`SHA25
 
 Reproduction: `git archive HEAD | ssh intel2 'mkdir -p ~/efs-taskFU && tar -x -C ~/efs-taskFU'`, then in the tree run the commands in the table. For the base column, replace the three source files with `git show wave77-base:<path>` and build `tests/test_raft` with `-DK113_REFUSE=EFS_ERR_BUSY` (edit the default in the test).
 
+### Round 3 (Task FX)
+
+Base `k113-r3-base` (`447b0f8e1`). The round 2 verification review found no proven defect and left four cases open. All four are settled in code:
+
+| Case | Problem | Change |
+|---|---|---|
+| C1 | An image that was only QUEUED was imported even if a delayed AppendEntries had meanwhile moved `last_applied` past it (applies run until `import_block` is raised at RUN). The import wrote image X over a newer store and `efs_raft_snap_imported` then answered `EFS_ERR_INVAL`: the store was older than the Raft position. | `host_snap_import_pass`, after `import_block` is raised, reads `efs_raft_applied` with `h->mu` held. At or above the image index the import is dropped before the KV is opened or changed: state IDLE, image file unlinked, `import_block` cleared, log line `raft-snap: import dropped group=%u incl=%llu applied=%llu`, and the core forgets its record (`efs_raft_snap_import_drop`, new, called with `h->mu` held). Lock order `h->mu` then `snap_mu`. The `incl <= last_applied` guard in `efs_raft_snap_imported` stays as a fail-closed backstop; from the pump it is no longer reachable, because applies are blocked from that check until the install. |
+| C2 | A member that leads when the import finishes: INVAL, the resync request is refused with NOT_PRIMARY, the store holds X while `last_applied` is below X. | The same check drops the import when the member is the leader. The host also feeds the existing capacity veto (`efs_raft_set_pressure`, which `start_prevote`, `start_election` and a TimeoutNow all test through `capacity_hold`) with "import state is not IDLE", so a member with an import does not campaign. A solo voter is exempt from that veto (`capacity_hold` returns 0 for it) and is covered by the leader drop. |
+| C3 | `snap_installed` returned the result of sending the ack, so a lost ack made the pump treat an installed image as failed and request a resync. | `efs_raft_snap_imported` installs with `to = -1` (no send), then sends the ack best effort. Its result is the install. Other callers of `snap_installed` are unchanged. |
+| C4 | Test and cleanup gaps. | A failed image file is unlinked in `snap_import_poll` on a hard step error and on a FAIL. Stale comments corrected (`raft.c` `imp_*`, `snap_import_cancel`, the FAIL note in `host_snap_import_pass`). `part_fd` is closed in the test fixture. New cases for `leader == -1` (installed, no message sent) and the refusal reply (`success` 1, no vote, `prev_index` = offset). |
+
+New cases: `tests/test_snap_import_pump.c` `test_queued_import_dropped` (applied at X, above X, leader below X: the KV import is never called, state IDLE, `import_block` 0, file gone, log line, core told to forget, a chunk at offset 0 accepted; applied below X: the import runs); `tests/test_raft.c` `test_snap_imported_send_and_leader`, `test_pressure_vetoes_campaign`.
+
+### Round 3 verification
+
+Host intel2 (user maik, 8 threads), work under `~/efs-taskFX/` (removed afterwards): `base` is `git archive` of `k113-r3-base` with only the tests and `Makefile` of this round overlaid, `new` is the fixed tree (commits `K113 round 3` and its test-leak repair on `claude/task-fx-k113-r3-7402f1`). No cluster run.
+
+| Check | `k113-r3-base` sources | Fixed tree |
+|---|---|---|
+| `tests/test_raft.c` `test_snap_imported_send_and_leader`: install with a failing ack send | FAIL: `installed although the ack send fails` | pass |
+| `tests/test_snap_import_pump.c` `test_queued_import_dropped` (applied at or above X, leader) | FAIL: `the KV import was never called` | pass |
+| `tests/test_snap_import_pump.c` `test_hard_error_requests_resync`: failed image file unlinked | FAIL: `the failed image file is unlinked` | pass |
+| `leader == -1` case, refusal reply fields, `test_pressure_vetoes_campaign`, applied-below case | pass (they pin existing behaviour: deleting the code they cover turns them red; they do not fail on the base) | pass |
+| `make`, `./tests/test_raft`, `./tests/test_snap_import_pump`, `tests/test_host_inbox.py`, `tests/test_raft_ack_window.py`, `tests/test_tmpdir_hygiene.py`, `make test` | | rc 0 each |
+| `scripts/tests_for.py server/raft_host --run`, `scripts/tests_for.py raft --run`, `tests/test_k22_snapshot_import.py` | | rc 0 each (the first run failed with `tests/faults/efsd missing`; after `make test-bins tests/faults/efsd`: rc 0) |
+| `tests/sanitizer_check.sh asan` | | first run FAIL: `snap_import_pump` leaked the importer my applied-below case left open (test fixture, fixed); rerun `VERDICT: PASS (68 run, 0 failed, 491s)` |
+| `tests/sanitizer_check.sh tsan` | | `VERDICT: FAIL (44 run, 1 failed)`: only `k37_segment_rebuild` (the known intermittent, not mine, not changed) |
+
+`make test` and the TSan lane ran before the one-line leak repair in `tests/test_snap_import_pump.c`, which only frees the importer at the end of a test case; the test and the ASan lane were rerun after it.
+
+Raw output outside Git: `~maik/efs-artifacts/taskFX-20261111/` on intel2 (`SHA256SUMS` hash `351560f35cd96a03`). Reproduction: `git archive HEAD | ssh intel2 'mkdir -p ~/efs-taskFX/new && tar -x -C ~/efs-taskFX/new'`, build with `make -j8` and `make test-bins tests/faults/efsd`, run the commands in the table; for the base column use `git archive k113-r3-base` and overlay `Makefile`, `tests/test_raft.c`, `tests/test_snap_import_pump.c`, `tests/test_snap_import_host.c`.
+
+Not verified in round 3: the host wiring of the veto (`snap_import_pending` into `efs_raft_set_pressure`) has no test of its own; the core case shows the veto and that the member campaigns again after the install. The production snapshot window, distinct hosts, RDMA. How often a leader has moved on to a newer image while the member imports. Whether the drop fires at all under the K22 load (only the log line `import dropped` in a cluster run would show it). The leader-side resend after a drop (the leader's next InstallSnapshot finds the image applied and truncates).
+
 ## Not verified
 
 - The production snapshot window (512 MiB; the test uses 1 MiB), where an import of ten million keys takes minutes: whether the leader's retained log then covers the import time is open.
