@@ -5,7 +5,7 @@ Generated page: any source change that adds, renames or moves a diagnostic key m
 
 Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`. Recurring failures have a route that says what the line proves: [failure routes](failure-routes.md).
 
-Found: 103 diagnostic keys in 260 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
+Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
 
 ## Error codes
 
@@ -255,6 +255,7 @@ Found: 103 diagnostic keys in 260 (key, function) rows, 29 error codes; 371 `fpr
 | `raft-snap` | `src/server/raft_host.c` | `host_maybe_snapshot` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_export_pass` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_import_pass` | `server/raft_host` |
+| `raft-snap` | `src/server/raft_host.c` | `host_snap_import_pump` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `host_snap_open` | `server/raft_host` |
 | `raft-snap` | `src/server/raft_host.c` | `snap_import_poll` | `server/raft_host` |
 | `raft-status` | `src/mgmt/efs_mgmt.c` | `cmd_raft_status` | `mgmt/efs_mgmt` |
@@ -296,7 +297,10 @@ Found: 103 diagnostic keys in 260 (key, function) rows, 29 error codes; 371 `fpr
 | `stage-evict` | `src/client/stage_evict.c` | `evict_pass` | `client/stage_evict` |
 | `stop-refused` | `src/client/efs_fuse/release.c` | `efs_control_drain` | `client/efs_fuse.release` |
 | `storage-budget` | `src/server/efsd.c` | `main` | `server/efsd` |
+| `storage-fence` | `src/server/raft_host.c` | `host_fence_drain` | `server/raft_host` |
+| `storage-fence` | `src/server/raft_host.c` | `host_fence_record` | `server/raft_host` |
 | `storage-fence` | `src/server/raft_host.c` | `host_storage_fence_members` | `server/raft_host` |
+| `storage-fence` | `src/server/raft_host.c` | `server_raft_host_storage_session_fence` | `server/raft_host` |
 | `storage-inventory` | `src/server/efsd.c` | `main` | `server/efsd` |
 | `sync-write` | `src/client/efs_fuse/write.c` | `efs_fuse_sync_write_result` | `client/efs_fuse.write` |
 | `test-create-adopt-negative-request` | `src/client/inode_rpc.c` | `efs_client_lease_begin` | `client/inode_rpc` |

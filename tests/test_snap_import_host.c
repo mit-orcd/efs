@@ -25,11 +25,13 @@
 /* test_cancel_in_open: cancel the import from inside its open, as a
  * newer InstallSnapshot would while the GC thread scans. */
 static struct efs_raft_host *cancel_host;
+static int import_open_calls;
 int __real_efs_kv_import_open(struct efs_kv *, uint8_t, const char *, const char *,
                               struct efs_kv_import **);
 int __wrap_efs_kv_import_open(struct efs_kv *kv, uint8_t group, const char *in,
                               const char *local, struct efs_kv_import **out)
 {
+    import_open_calls++;
     if (cancel_host) {
         snap_import_cancel(cancel_host, &cancel_host->g[0]);
         cancel_host = NULL;
@@ -127,6 +129,9 @@ static void fixture_make(struct fixture *f)
 
 static void fixture_free(struct fixture *f)
 {
+    for (int i = 0; i < HOST_NGROUPS; i++)
+        if (f->h->g[i].part_fd >= 0)
+            close(f->h->g[i].part_fd);
     free(f->img);
     efs_kv_lsm_close(f->h->kv);
     free(f->h);
