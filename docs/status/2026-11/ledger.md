@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [Wave 78 merge](ledger/20261110-046-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `8457a9664`)**
 - [Failure routes](ledger/20261110-045-failure-routes.md): **PASS, no K row, blocks alpha: no**
 - [K row summaries](ledger/20261110-044-k-row-summaries.md): **PASS, no K row, blocks alpha: no**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
