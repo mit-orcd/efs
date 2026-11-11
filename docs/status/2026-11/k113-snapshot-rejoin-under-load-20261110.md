@@ -105,8 +105,10 @@ Host intel2 (user maik, 8 threads), work under `~/efs-taskFU/`: `fix` is `git ar
 | `scripts/tests_for.py server/raft_host --run`, `scripts/tests_for.py raft --run` | | rc 0, rc 0 |
 | `tests/test_k22_snapshot_import.py` | | rc 0 |
 | `make test` | | rc 0 (the first run failed `tests/test_tmpdir_hygiene.py` on my new pump case, a bare `mkstemp` and a `/tmp` path; fixed by `efs_test_path` and `efs_test_mkstemp`) |
-| `tests/sanitizer_check.sh asan` | | rc 0 on the first run (before the tmpdir fix in the pump test) |
-| `tests/sanitizer_check.sh tsan` | | first run: only `k37_segment_rebuild` failed (the known intermittent, not mine); the rerun after the tmpdir fix did not finish: see "Not verified" |
+| `tests/sanitizer_check.sh asan` | | `VERDICT: PASS (65 run, 0 failed, 500s)` |
+| `tests/sanitizer_check.sh tsan` | | `VERDICT: FAIL (38 run, 1 failed)`: only `k37_segment_rebuild` failed, in both runs (the known intermittent, not mine, not changed) |
+
+Raw output outside Git: `~maik/efs-artifacts/taskFU-20261110/` on intel2 (`SHA256SUMS` hash `611821fa828c8b0e`).
 
 Reproduction: `git archive HEAD | ssh intel2 'mkdir -p ~/efs-taskFU && tar -x -C ~/efs-taskFU'`, then in the tree run the commands in the table. For the base column, replace the three source files with `git show wave77-base:<path>` and build `tests/test_raft` with `-DK113_REFUSE=EFS_ERR_BUSY` (edit the default in the test).
 
@@ -117,7 +119,6 @@ Reproduction: `git archive HEAD | ssh intel2 'mkdir -p ~/efs-taskFU && tar -x -C
 - A second and third import after the member is close to the leader's image (not needed in this test).
 - The leader still re-sends the refused chunk 0 (up to one chunk) every heartbeat while the member imports an older image; unchanged cost, not measured.
 
-- Round 2: the final ASan and TSan rerun on the tree with the pump test's tmpdir fix (intel2 stopped answering SSH during the TSan run). The earlier runs on the tree before that test-only fix: ASan rc 0, TSan only the known `k37_segment_rebuild`.
 - Round 2: no cluster run (the K22 test passes on intel2, where the base passes too); the load that fails the base needs fstor007.
 - Round 2: `efs_raft_snap_imported`'s `incl <= last_applied` refusal has no test of its own (it cannot be reached through the public API without a real apply); the guard cases cover a leader, a wrong index and a second call.
 
