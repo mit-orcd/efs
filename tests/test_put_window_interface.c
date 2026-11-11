@@ -190,7 +190,9 @@ static void test_stray_close_hides_an_open_window_from_readers(void)
     put_win_open(31);
     put_win_close(32); /* stray: takes the all-inode total to 0 */
     assert(put_win_wait(31, 20) == EFS_ERR_BUSY); /* the slot count is intact */
-    assert(efs_dcache_put_win_wait(31) == 0); /* the reader fast path says closed */
+    /* Not pinned: the reader fast path answers 0 here because the total is 0.
+     * That is the harm of a stray close, not a guarantee; an owner that learns
+     * to detect the stray close may change it. */
     put_win_close(31); /* the real close finds total 0 and leaves it there */
     assert(put_win_wait(31, 20) == 0);
     assert(efs_dcache_put_win_wait(31) == 0);

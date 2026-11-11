@@ -968,7 +968,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
-src/client/write.o src/client/put_window.o: src/client/put_window.h
+src/client/write.o src/client/read.o src/client/put_window.o: src/client/put_window.h
 $(CLIENT_OBJS): $(wildcard src/client/efs_fuse/*.h) src/client/reply_buffers.h src/client/stop_control.h
 $(META_APPLY_SRCS:.c=.o): $(wildcard src/meta/meta_apply/*.h)
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
