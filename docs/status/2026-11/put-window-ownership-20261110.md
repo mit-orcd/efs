@@ -1,8 +1,6 @@
 # PUT window ownership (Task U1)
 
-**Merge state (Nov 11):** merged into devel in wave 79 after an independent review that found the moved code identical in behaviour. The merge made `test_close_wakes_wait` independent of thread order (it could fail on a loaded host) and corrected the README claim that the case pins the wake; the two tests are listed under `client/put_window`. Left open: `put_window.h` and `client_internal.h` both declare `efs_dcache_put_win_wait`; some contract clauses have no discriminating case (wakes every waiter, `put_win_total`).
-
-**Status block.** Source commit: devel `67fc3b4a1`; before-half `7a0b1bf19`; ownership `696378a6e`. Verdict: PASS. Remaining failures: none. Active run: none. Next action: coordinator review and merge; `read.c` should include `put_window.h` and drop the duplicate `efs_dcache_put_win_wait` declaration in `client_internal.h` (two files outside this task). Merge state: branch `claude/task-u1-put-window-72984d`, unmerged.
+**Current state (Nov 11):** the PUT-window owner (`put_window.c`, `put_window.h`, `tests/test_put_window_interface.c`) is in devel since wave 79 (`68e2778a4`). Task V1, on branch `claude/task-v1-put-window-2ace19` (not merged), finishes the boundary: `efs_dcache_put_win_wait` is declared once (in `put_window.h`; `read.c` includes it), the header states what a close without an open really does and which locks callers hold, `tests/test_put_window_callers.py` proves that every one of the nine `put_win_close` calls in `write.c` is reached by a scenario and that deleting any one fails it, and the interface test pins the stray-close behaviour. See "Round 2 (Task V1)".
 
 ## Purpose
 
@@ -107,3 +105,53 @@ Reproduce: `git archive <commit> | ssh intel1 'tar -x -C <dir>'`, compile `src/c
 - The sanitizer lanes are the whole lists; failures that are not the new entry are recorded above, not fixed.
 - `screen` on intel1 needed `SCREENDIR=~/efs-taskU1/screens` (`/run/screen` has the wrong mode).
 - Raw output: `~/efs-artifacts/taskU1-20261110/` on intel1 (logs, instruction-count objects' listings, `SHA256SUMS`); not committed.
+
+## Round 2 (Task V1)
+
+**Verdict: PARTIAL** (steps 2 to 7 done and run on intel1 for the build, the caller test and the mutation table; the remaining step 8 commands are NOTRUN, see below). Source commit tested: `09b9fd13a` (on devel `68e2778a4`), `git archive` copy under `~/efs-taskV1/` on intel1 (8 cpus), `make -j8` rc 0. Linux binaries built with the Makefile defaults; the caller test compiles its own binary with `cc -O1 -g` (gcc).
+
+**What changed.**
+
+- `efs_dcache_put_win_wait` is declared once, in `put_window.h`. `client_internal.h` no longer declares it; `read.c` includes `put_window.h`. The tests that stub the name (`test_read_refs_window.py`, `test_read_failure_admission.py`, `test_client_memory.py`) build unchanged.
+- `put_window.h` (comments only): a close without a matching open is a caller error the owner does not detect. With no slot for the inode it decrements the overflow count if that is above 0, and in every case the all-inode total if that is above 0. With another window open the total reaches 0, so `efs_dcache_put_win_wait` returns 0 at once for every inode (a reader can then see a stolen body as a hole), while `put_win_wait` still sees the slot; an overflow window ends early. The lock text now says what callers do: `put_win_open` with `dcache_io_mu` then `dcache_mu` held; `put_win_close` with both held (re-lock after the PUT and the retired branch of the base fetch in `dcache_flush_slot_inner_budgeted`) or with neither (all other sites); `put_win_wait` with none. Item 8 of `write-path-map.md` says the same.
+- `tests/test_put_window_callers.py`: the flusher functions (`dcache_steal_dirty_budgeted`, `dcache_flush_slot_inner_budgeted`, `dcache_fetch_merge_base`, `dcache_flush_keep`, `flush_pipe_drain`, `flush_pipe_add`) cut out of `write.c`, compiled with the real `put_window.c` and about 35 lines of stubs; `put_win_open`/`put_win_close` are counted by wrappers. Scenarios `ok`, `fail`, `retired`, `drain`, plus `nomem`, `fetch`, `fetch_retired` for the exits before the PUT. After each: `put_win_wait(1, 0) == 0`, `efs_dcache_put_win_wait(1) == 0`, opens equal closes and are above 0.
+- `tests/test_put_window_interface.c`: `test_stray_close_with_nothing_open`, `test_stray_close_hides_an_open_window_from_readers` (12 cases; a stray close pinned as behaviour, not as a feature). Not added: a case for "a wait on another inode returns 0" (already `test_other_inode_not_blocked` and `test_reader_wait`).
+- Registered: Makefile fast suite (7 lines), `tests/budgets.tsv` (7 rows, 5 s, tags `client/put_window,client/write`), both lists of `tests/sanitizer_check.sh`, guide in `src/client/README.md`; `scripts/check_guide_counts.py` rc 0.
+- `scripts/put_window_mutation.py` is the reproduction of the table below.
+
+**Note on the count.** `write.c` has nine `put_win_close` calls (and two `put_win_open`), not ten.
+
+**Call-site coverage (mutation proof).** Each call deleted in turn from a copy of `write.c` (`WRITER_TEST_SOURCE`), every scenario run against it; on intel1 and, identically, on the Mac.
+
+| Call (`write.c`) | Exit | Locks held | Scenarios that fail when it is deleted |
+|---|---|---|---|
+| 7023 | `dcache_steal_dirty_budgeted`, base buffer allocation fails | neither | `nomem` |
+| 7042 | `dcache_steal_dirty_budgeted`, merge-base fetch fails | neither | `fetch` |
+| 7183 | `flush_pipe_drain`, inode retired | neither | `retired` |
+| 7190 | `flush_pipe_drain`, normal job end (PUT ok or failed) | neither | `ok`, `fail`, `drain` |
+| 7213 | `flush_pipe_add`, drain of a full pipe fails | neither | `drain` |
+| 7362 | `dcache_flush_slot_inner_budgeted`, base buffer allocation fails | neither | `nomem` |
+| 7374 | `dcache_flush_slot_inner_budgeted`, fetch finds the inode gone | both | `fetch_retired` |
+| 7385 | `dcache_flush_slot_inner_budgeted`, merge-base fetch fails | neither | `fetch` |
+| 7414 | `dcache_flush_slot_inner_budgeted`, after the PUT (ok, failed, retired) | both | `ok`, `fail`, `retired` |
+
+All nine are covered; none survives deletion. Raw output: `~/efs-artifacts/taskV1-20261111/mutation.log` and the per-test logs on intel1 (not committed).
+
+**Results on intel1** (`~/efs-artifacts/taskV1-20261111/*.log`): `make -j8` rc 0; `./tests/test_put_window_interface` rc 0; all seven scenarios rc 0; `test_put_window_deadline.py`, `test_writer_fence_merge.py`, `test_client_memory.py`, `test_read_refs_window.py`, `test_read_failure_admission.py` rc 0.
+
+**Not run (NOTRUN).** After those runs, intel1 refused every ssh connection ("Not allowed at this time" banner from sshd, for the rest of the session; other hosts answered). So on intel1 these were not run: `scripts/tests_for.py client/put_window --run`, `client/write --run`, `make test`, `tests/test_make_test_recipe.py`, `tests/sanitizer_check.sh asan` and `tsan`. The new entries therefore have no sanitizer verdict yet, and the artifacts directory has no `SHA256SUMS`; `~/efs-taskV1` was not removed. The caller test was run without a sanitizer on the Mac only as a cross-check.
+
+**Still not shown.**
+
+- The two `put_win_open` calls are not proved to be matched by the callers of `flush_pipe_add`/`flush_pipe_drain` in the reclaim and REPORT drivers (`write.c` 7600–7627, 8865–8947): the test drives the pipe through one snapshot at a time on a single-slot cache, not through those drivers.
+- Cuts from `write.c` are text splices: a change in the signature or in a helper that the stubs replace (`dcache_put_now`, `put_pool_run`, `dcache_retire_gone`) is not checked here.
+- No test shows that a waiter must hold no cache lock; the lock text is read from the call sites.
+- `EFS_ERR_IO` of the wait still has no test.
+
+## History
+
+**Merge state (Nov 11, wave 79), as it stood before Task V1:**
+merged into devel in wave 79 after an independent review that found the moved code identical in behaviour. The merge made `test_close_wakes_wait` independent of thread order (it could fail on a loaded host) and corrected the README claim that the case pins the wake; the two tests are listed under `client/put_window`. Left open: `put_window.h` and `client_internal.h` both declare `efs_dcache_put_win_wait`; some contract clauses have no discriminating case (wakes every waiter, `put_win_total`).
+
+**Status block (Nov 10), as written when the branch was ready for review:**
+**Status block.** Source commit: devel `67fc3b4a1`; before-half `7a0b1bf19`; ownership `696378a6e`. Verdict: PASS. Remaining failures: none. Active run: none. Next action: coordinator review and merge; `read.c` should include `put_window.h` and drop the duplicate `efs_dcache_put_win_wait` declaration in `client_internal.h` (two files outside this task). Merge state: branch `claude/task-u1-put-window-72984d`, unmerged.
