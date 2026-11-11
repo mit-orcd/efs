@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `fd2a410d83bfc3b032c6aa7970ce8833e6b0f19e`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 19,516 nodes, 82,363 directed typed edges, 651 communities.
+Source base: `87e25c5f068033a565dd46585d3e4014c033836c`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 19,549 nodes, 82,653 directed typed edges, 639 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,25 +19,26 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 28569
+- `answered_by`: 13
+- `calls`: 28581
 - `case_of`: 118
-- `contains`: 28786
+- `contains`: 28798
 - `contract`: 46
-- `defines`: 2073
+- `defines`: 2055
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 181
 - `implemented_by`: 140
-- `imports`: 8509
-- `imports_from`: 1048
-- `indirect_call`: 753
+- `imports`: 8522
+- `imports_from`: 1051
+- `indirect_call`: 754
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 5070
-- `method`: 683
-- `rationale_for`: 1492
+- `mentions_symbol`: 5307
+- `method`: 687
+- `rationale_for`: 1500
 - `references`: 2246
-- `references_path`: 1356
+- `references_path`: 1361
 - `regression_for`: 8
 - `tested_by`: 1142
 - `uses`: 101
@@ -45,12 +46,12 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)
-- warning: 77 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+72 more)
+- warning: 78 code file(s) yielded no symbols (0.26 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+73 more)
 
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1888}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1895}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.
