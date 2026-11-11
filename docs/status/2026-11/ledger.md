@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K106 (a): a request in flight to a member that halts (Task FR)](ledger/20261110-040-k106a-inflight-wait.md): **PASS for the covered paths on a branch, K106 (a) not closed for the uncovered ones**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
 - [Ledger split into one file per entry (Task T2)](ledger/20261110-038-ledger-split.md): **PASS, no K row, blocks alpha: no**
 - [K register split](ledger/20261110-037-k-register-split.md): **PASS except the 170 KB size target, no K row, blocks alpha: no**
