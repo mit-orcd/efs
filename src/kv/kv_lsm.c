@@ -132,12 +132,17 @@ void kv_mtab_clear(struct kv_mtab *m)
  * embedded zeros and different lengths. This is only an in-memory index. */
 static __uint128_t key_pfx(const uint8_t *key, uint32_t klen)
 {
-    __uint128_t v = 0;
+    uint64_t hi = 0, lo = 0;
     uint32_t n = klen < 16 ? klen : 16;
 
-    for (uint32_t i = 0; i < n; i++)
-        v |= (__uint128_t)key[i] << (120 - 8 * i);
-    return v;
+    /* Build each word separately: variable 128-bit shifts need multiple
+     * machine operations on the lookup hot path. Read exactly min(klen,16)
+     * bytes, including unaligned and short keys; ordering is unchanged. */
+    for (uint32_t i = 0; i < n && i < 8; i++)
+        hi |= (uint64_t)key[i] << (56 - 8 * i);
+    for (uint32_t i = 8; i < n; i++)
+        lo |= (uint64_t)key[i] << (120 - 8 * i);
+    return ((__uint128_t)hi << 64) | lo;
 }
 
 /* Index of key, or the insertion point with *found = 0. */
