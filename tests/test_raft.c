@@ -2452,6 +2452,7 @@ static void test_snapshot_imported_without_retry(void)
 #define K113_REFUSE EFS_ERR_AGAIN
 #endif
 struct k113_app { uint64_t busy_for; uint64_t refuse_for; };
+static int k113_from;
 
 static int k113_chunk(void *app_, uint64_t incl, uint64_t incl_term,
                       uint64_t offset, const uint8_t *data, uint32_t len,
@@ -2474,7 +2475,7 @@ static int k113_send(struct efs_raft *r, uint64_t incl, uint64_t off, int done,
 
     memset(buf, 0, 16);
     if (off == 0) wr32_t(buf, voters);
-    m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 1;
+    m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = k113_from; m.to = 1 - k113_from; m.term = 1;
     m.last_log_index = incl; m.last_log_term = 1; m.leader_commit = incl;
     m.prev_index = off; m.success = done; m.nentries = 1;
     m.entries[0].cmd = buf; m.entries[0].clen = off == 0 ? 11 : 3;
@@ -2486,7 +2487,8 @@ static void k113_fixture(struct efs_raft_cfg *cfg, struct efs_raft_store **st,
 {
     memset(cfg, 0, sizeof(*cfg));
     *st = efs_raft_mem_create();
-    cfg->n = n; cfg->id = 1; cfg->voters = n == 1 ? 1 : 7;
+    k113_from = n == 1 ? 1 : 0;
+    cfg->n = n == 1 ? 2 : n; cfg->id = 1 - k113_from; cfg->voters = n == 1 ? 1 : 7;
     cfg->store = *st; cfg->store_ctx = *st; cfg->send = discard_send;
     cfg->apply = apply_cmd; cfg->app = app; cfg->snap_chunk = k113_chunk;
     cfg->election_ticks = 10; cfg->heartbeat_ticks = 2;
