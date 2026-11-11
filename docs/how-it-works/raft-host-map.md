@@ -112,7 +112,7 @@ State: `host_group.ri_begun` (raised under `h->mu` before the core sends), `ri_r
 
 Entry points: none public. In file: `host_read_index` (called by every metadata handler that reads rows), `host_wait_applied_own` (called by the verdict waits).
 
-Functions: `host_read_wait_ready` `host_read_floor_ready` `host_wait_applied` `host_ri_complete` `host_ri_remove` `host_remote_read_index` `host_follower_read_result` `host_read_admit` `host_read_probe_needed` `host_read_note_begin` `host_read_begin_tracked` `host_read_admit_view` `host_read_request` `host_read_start_requested` `host_read_index_admitted` `host_read_index` `host_read_pair_capacity` `host_read_pair_note` `host_read_index_pair` `host_wait_applied_mode` `host_wait_applied_own`
+Functions: `host_read_wait_ready` `host_read_floor_ready` `host_wait_applied` `host_ri_complete` `host_ri_remove` `host_remote_read_index` `host_follower_read_result` `host_read_note_begin` `host_read_begin_tracked` `host_read_admit_view` `host_read_request` `host_read_start_requested` `host_read_index_admitted` `host_read_index` `host_read_pair_capacity` `host_read_pair_note` `host_read_index_pair` `host_wait_applied_mode` `host_wait_applied_own`
 
 Logs: `raft-host` lines from `host_read_index_admitted`
 
