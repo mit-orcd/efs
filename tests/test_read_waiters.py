@@ -28,7 +28,7 @@ static unsigned view_calls;
 static void host_view_get(struct group_views *h,uint8_t group,struct host_view *v){view_calls++;*v=group? h->other_view:h->view;}
 static unsigned signals,broadcasts;
 static struct group_views *registration;
-static int wait_mock(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){(void)end;assert(mu==&registration->cv_mu && cv==&registration->wait_slot[0].cv);struct host_waiter *w=&registration->wait_slot[0];assert(registration->waiter_active[0]==1);assert(w->active && !w->notified && w->any==2 && w->idx==50 && w->round==11 && w->term==9 && w->proof_only);return 0;}
+static int wait_mock(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){(void)end;assert(mu==&registration->cv_mu && cv==&registration->wait_slot[0].cv);struct host_waiter *w=&registration->wait_slot[0];assert(registration->waiter_active[0]==1);assert(w->active && !w->notified && w->any==3 && w->idx==50 && w->round==11 && w->term==9 && w->proof_only);return 0;}
 #define pthread_cond_timedwait wait_mock
 /* Signals go out after cv_mu is released (no wait morphing in glibc). */
 static struct group_views *waker;
@@ -41,11 +41,12 @@ static int broadcast_mock(pthread_cond_t *cv){(void)cv;assert_unlocked();broadca
 ''' + section('static inline int host_view_covers(', 'static inline void host_view_get(') + csrc.group_view_func('host_waiter_sleep') + csrc.group_view_func('host_waiters_wake') + r'''
 static void reset(struct group_views *h){
  h->waiter_active[0]=1;
- h->wait_slot[0]=(struct host_waiter){.active=1,.any=2,.idx=50,.round=11,.term=9};
+ h->wait_slot[0]=(struct host_waiter){.active=1,.any=3,.idx=50,.round=11,.term=9};
  h->view=(struct host_view){.has=1,.role=2,.term=9,.read_pending=1,.read_round=10,.applied=50,.commit=50};
  signals=0;view_calls=0;
 }
 int main(void){
+ (void)host_view_wait_apply;
  static struct group_views h={.cv_mu=PTHREAD_MUTEX_INITIALIZER,.slot={{.v_has=1},{.group=2}}};
  waker=&h;reset(&h);
  for(unsigned i=0;i<1000;i++){h.view.commit++;h.slot[0].v_stamp++;host_waiters_wake(&h);}
@@ -53,7 +54,7 @@ int main(void){
  h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=50;
  for(unsigned i=0;i<1000;i++)host_waiters_wake(&h);
  assert(signals==1); /* no repeated signals before the waiter reacquires cv_mu */
- reset(&h);h.view.read_pending=0;host_waiters_wake(&h);assert(signals==1); /* old round done: start next */
+ reset(&h);h.view.read_pending=0;host_waiters_wake(&h);assert(signals==0); /* old round done: the pump starts the next */
  /* Delegated readers (any=3): the pump starts rounds, so an idle or
   * completed older round is no reason to wake; proof, apply and term or
   * role changes still are. */
@@ -67,16 +68,16 @@ int main(void){
  reset(&h);h.wait_slot[0].any=3;h.view.role=1;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.wait_slot[0].any=3;h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=50;
  host_waiters_wake(&h);assert(signals==1);
- reset(&h);h.view.read_pending=0;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
+ reset(&h);h.view.read_context=7;h.view.read_pending=0;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(signals==0); /* fresh quorum still owes apply */
  h.view.applied=60;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=60;
  h.view.read_pending=0;host_waiters_wake(&h);assert(signals==0);
  h.view.applied=60;host_waiters_wake(&h);assert(signals==1);
  /* The earlier experiment missed this: raw quorum complete but pending
-  * own apply must wake a NEXT-round admission, not wait for the old apply. */
+  * own apply does not wake a NEXT-round admission: the pump starts that round. */
  reset(&h);h.view.read_done=1;h.view.read_round=10;h.view.read_index=60;h.view.applied=40;
- host_waiters_wake(&h);assert(signals==1);
+ host_waiters_wake(&h);assert(signals==0);
  /* Same-round normal data remains apply-fenced, certificate replies do not. */
  reset(&h);h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(signals==0);
@@ -89,20 +90,12 @@ int main(void){
  h.view.read_round=12;h.view.read_index=900;
  h.view.proven_done=1;h.view.proven_round=10;h.view.proven_index=55;h.view.applied=60;
  host_waiters_wake(&h);assert(signals==1 && h.wait_slot[0].floor.index==60);
- assert(host_read_floor_ready(&h.view,&h.wait_slot[0].floor,50,11,9,0,0));
+ assert(host_read_floor_ready(&h.view,&h.wait_slot[0].floor,50,11,9,0));
  reset(&h);h.view.read_context=7;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(!signals && h.wait_slot[0].floor.context==7);
  h.view.read_context=8;host_waiters_wake(&h);assert(signals==1); /* refuse changed cfg */
  reset(&h);h.view.read_context=7;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);h.view.read_context=0;host_waiters_wake(&h);assert(signals==1); /* storage failure */
- /* A scheduling wake for the next round is not completion. Capture its
-  * later eligible proof even if that first signal has not been consumed. */
- reset(&h);h.wait_slot[0].floor.context=7;h.view.read_context=7;
- h.view.read_done=1;host_waiters_wake(&h);assert(signals==1&&!h.wait_slot[0].floor.index);
- h.view.read_round=11;h.view.read_index=60;host_waiters_wake(&h);
- assert(signals==1 && h.wait_slot[0].floor.index==60);
- h.view.read_round=12;h.view.read_index=900;h.view.applied=60;host_waiters_wake(&h);
- assert(signals==1 && h.wait_slot[0].floor.index==60);
  reset(&h);h.view.term++;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.role=1;host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.has=0;host_waiters_wake(&h);assert(signals==1);
@@ -133,7 +126,7 @@ int main(void){
  for(unsigned i=0;i<HOST_WAITERS/64;i++)h.waiter_active[i]=0;
  h.waiter_hint=0;h.wait_slot[0].notified=1;registration=&h;
  struct timespec end={0};pthread_mutex_lock(&h.cv_mu);
- host_waiter_sleep(&h,0,2,50,0,&end,11,9,1,NULL);
+ host_waiter_sleep(&h,0,3,50,0,&end,11,9,1,NULL);
  pthread_mutex_unlock(&h.cv_mu);assert(!h.waiter_active[0]);assert(!h.wait_slot[0].active && !h.wait_slot[0].notified);
  /* Sparse high slots and empty words must not lose wakeups. */
  for(unsigned i=0;i<HOST_WAITERS/64;i++)h.waiter_active[i]=0;

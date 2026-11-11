@@ -17,14 +17,13 @@ code=r'''
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int role,pending,fail,quorum;uint64_t round,term,commit,read_index;};
 struct host_group {uint64_t ri_begun,ri_request;};
-struct server {int unused;};
 /* the owner is stubbed; its struct is the host's first member so a stub can find the host */
 struct group_views {int unused;};
-struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];struct server *s;int absent;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];int absent;};
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->g[group];}
 struct host_read_admission {uint64_t want,round,term;};
 struct host_view {int has,role;uint64_t commit,term,read_round;};
-static int begun,waits,scalar,kicks,published,wait_error;
+static int begun,waits,scalar,kicks,wait_error;
 static uint64_t expected[3],expected_want[3];
 static int late_commit,regressed,view_mode;
 static __thread uint64_t deadline;
@@ -50,8 +49,8 @@ static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
 static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)g;(void)hint;__atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
 static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a,uint64_t *proof,int proof_only){assert(!proof && !proof_only);
  (void)hint;assert(a->round==expected[g]+1 && a->term==h->core[g].term && a->want==expected_want[g]);
- /* Both rounds must already be pending (locked path) or requested from
-  * the pump (server mode) before the first wait. */
+ /* Both rounds must already be requested from
+  * the pump before the first wait. */
  assert(group_slot(h,g)->ri_request>=a->round);
  if(h->core[0].role==2 && h->core[2].role==2)
   assert(h->g[0].ri_request && h->g[2].ri_request);
@@ -65,13 +64,13 @@ static int host_pick_peer(struct efs_raft_host*h,const uint8_t*g,unsigned n,int 
 static void reset(struct efs_raft_host*h){
  h->absent=0;h->core[0]=(struct efs_raft){.role=2,.round=7,.term=11,.commit=40,.read_index=40};
  h->core[2]=(struct efs_raft){.role=2,.round=17,.term=21,.commit=90,.read_index=90};
- expected[0]=7;expected[2]=17;expected_want[0]=40;expected_want[2]=90;late_commit=regressed=view_mode=0;begun=waits=scalar=kicks=published=wait_error=0;
+ expected[0]=7;expected[2]=17;expected_want[0]=40;expected_want[2]=90;late_commit=regressed=view_mode=0;begun=waits=scalar=kicks=wait_error=0;
  memset(h->g,0,sizeof(h->g));
 }
 int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-1;
- /* Server mode: lock-free admission from the view and ri_begun; the pump
+ /* Lock-free admission from the view and ri_begun; the pump
   * starts the requested rounds, so this RPC begins nothing itself. */
- struct server server={1};h.s=&server;reset(&h);
+ reset(&h);
  assert(!host_read_index_pair(&h,0,2,&hint) && waits==2 && !begun && kicks==2);
  assert(h.g[0].ri_request==8 && h.g[2].ri_request==18);
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
@@ -111,8 +110,16 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  reset(&h);h.core[2].role=0;h.core[0].pending=1;
  assert(!host_read_index_pair(&h,0,2,&hint) && !begun && scalar==1 && waits==1);
  assert(host_read_pair_count==0); /* mixed leadership never needs helper capacity */
- /* Server mode, neither group led here: overlapped remote proofs. */
- h.s=&server;
+ /* Mixed leadership with a saturated led group refuses BUSY: nothing requested, no scalar read. */
+ reset(&h);h.core[2].role=0;h.core[0].round=UINT64_MAX;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !begun && !scalar && !waits && !h.g[0].ri_request);
+ /* Group 0 follower, group 2 led: group 0 reads scalar, group 2 waits on its requested round. */
+ reset(&h);h.core[0].role=0;
+ assert(!host_read_index_pair(&h,0,2,&hint) && scalar==1 && waits==1 && !begun && h.g[2].ri_request==18);
+ /* An absent group with a scalar read error returns that error after one scalar read. */
+ reset(&h);h.absent=3;wait_error=EFS_ERR_NOT_PRIMARY;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && scalar==1 && !begun && !waits);
+ /* Neither group led here: overlapped remote proofs. */
  reset(&h);h.core[0].role=h.core[2].role=0;
  assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !begun && !waits);
  reset(&h);view_mode=2;assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !waits);

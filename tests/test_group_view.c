@@ -13,7 +13,7 @@
  * a reader racing a publisher never sees a mixed publish (bounded by a
  * count); the predicates host_view_covers, host_view_quorum_index,
  * host_view_wait_apply and host_read_wait_ready; host_read_floor_ready for
- * the wait modes 2 and 3 (the floor freezes the first proof); the wait
+ * the wait mode 3 (the floor freezes the first proof); the wait
  * bracket with a predicate that is already true; a publish before the
  * bracket is seen by the re-read, so no sleep (lost wakeup); a sleep whose
  * deadline has passed leaves no slot occupied and the floor as it was; a
@@ -220,36 +220,34 @@ static void test_predicates(void)
     assert(host_view_quorum_index(&v, 8, 2, 3, &idx) && idx == 12);
     v.has = 0;
     assert(!host_view_quorum_index(&v, 8, 2, 3, &idx));
-    assert(host_read_wait_ready(&v, 8, 2, 3, 0, 0)); /* no replica: re-check */
+    assert(host_read_wait_ready(&v, 8, 2, 3, 0)); /* no replica: re-check */
     v.has = 1; v.role = 0;
-    assert(host_read_wait_ready(&v, 8, 2, 3, 0, 0)); /* not leader: re-check */
+    assert(host_read_wait_ready(&v, 8, 2, 3, 0)); /* not leader: re-check */
 }
 
-static void test_floor_ready_modes_2_and_3(void)
+static void test_floor_ready_mode_3(void)
 {
     struct host_view v = {.has = 1, .role = EFS_RAFT_LEADER, .term = 3,
                           .read_context = 7};
     struct host_read_floor f = {0, 0};
 
-    /* idle round: mode 2 (not delegated) is ready, mode 3 (delegated) is not */
-    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 0, 0));
+    /* idle round: the pump starts rounds, so an idle round is not ready */
+    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0));
     assert(f.context == 7 && f.index == 0);
-    f = (struct host_read_floor){0, 0};
-    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0, 1));
     /* a proof that owes own apply freezes the floor at its index */
     v.proven_done = 1; v.proven_round = 1; v.proven_index = 6; v.applied = 4;
     f = (struct host_read_floor){0, 0};
-    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0, 0));
+    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0));
     assert(f.index == 6);
     v.proven_index = 9;                      /* a later round does not move it */
-    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0, 0));
+    assert(!host_read_floor_ready(&v, &f, 5, 1, 3, 0));
     assert(f.index == 6);
     v.applied = 6;
-    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 0, 0));
+    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 0));
     v.applied = 4;
-    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 1, 0)); /* proof_only */
+    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 1)); /* proof_only */
     v.read_context = 8;                      /* another context: refuse */
-    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 0, 0));
+    assert(host_read_floor_ready(&v, &f, 5, 1, 3, 0));
 }
 
 static void test_bracket_true_predicate_returns_at_once(void)
@@ -401,7 +399,7 @@ int main(int argc, char **argv)
     RUN(test_unknown_group_reads_as_absent);
     RUN(test_reader_never_sees_a_mixed_publish);
     RUN(test_predicates);
-    RUN(test_floor_ready_modes_2_and_3);
+    RUN(test_floor_ready_mode_3);
     RUN(test_bracket_true_predicate_returns_at_once);
     RUN(test_publish_before_bracket_is_seen_no_sleep);
     RUN(test_passed_deadline_sleep_leaves_no_slot);

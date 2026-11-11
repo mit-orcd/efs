@@ -69,7 +69,7 @@ int main(void){
  halted=0;
 
  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=1000,.applied=900,.proven_done=1,.proven_index=110,.proven_round=11,.read_pending=1};
- assert(host_read_wait_ready(&current,101,11,2,0,0));
+ assert(host_read_wait_ready(&current,101,11,2,0));
  assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_OK&&proof==110); /* concurrent suffix never extends this proof target */
  current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);
  current.proven_round=11;current.proven_done=0;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_BUSY&&proof==0);

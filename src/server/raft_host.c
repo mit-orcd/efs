@@ -5041,7 +5041,7 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
  * queues for the next round if one is pending, and is satisfied by any
  * finished round begun after admission, whose read_index >= want with
  * applied >= read_index. Previously completed rounds cannot cover new reads. It
- * reads all of that from the published view. In server mode the reader
+ * reads all of that from the published view. The reader
  * never takes h->mu: it admits itself from the view and ri_begun, raises
  * ri_request, and the pump (or the read-ACK path, which already holds
  * h->mu) begins that round once the previous one has its quorum. Under the
@@ -5130,7 +5130,6 @@ static void host_read_request(struct efs_raft_host *h,uint8_t group,
 static unsigned host_read_start_requested(struct efs_raft_host *h)
 {
     unsigned started=0;
-    if(!h->s)return 0;
     for(unsigned i=0;i<HOST_NGROUPS;i++){
         struct host_group *g=&h->g[i];
         struct efs_raft *r=g->r;
@@ -5236,7 +5235,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             if (prof) efs_telemetry_log(0,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
         }
-        (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only,1);
+        (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only);
         if(floor.context && v.read_context!=floor.context)return EFS_ERR_NOT_PRIMARY;
         if(floor.index) {
             if(proof_only || v.applied>=floor.index) {
@@ -5275,7 +5274,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         /* Registration and wake use the same predicate inside the wait bracket. A
          * quorum arriving just before registration must not park an already
          * satisfied proof RPC until another pump/view change. */
-        if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only, 1)) {
+        if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only)) {
             int waiting_apply = prof && host_view_wait_apply(&v, want, round, admitted_term);
             uint64_t sleep_begin = prof ? efs_batch_obs_now_us() : 0;
             uint64_t s0 = now_us_();
@@ -5324,7 +5323,7 @@ static void host_read_pair_note(int parallel)
 
 /* Overlap two independent hosted-leader read rounds. Both admissions are
  * captured before either probe is sent. A pending older round cannot cover
- * either admission; the existing waiter starts its next round as needed.
+ * either admission; the pump starts the rounds both requests asked for.
  * Different hosted leaders use bounded independent proofs; unhosted groups
  * retain ordinary scalar routing. Neither path shares coverage across RPCs. */
 static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
@@ -8283,7 +8282,6 @@ static void host_pending_reads(struct efs_raft_host *h)
 {
     struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
     struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
-    if(!h->s)return;
     pthread_mutex_lock(&h->inbox_mu);
     for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
         struct host_inbox_item *item=&h->inbox[i];
@@ -8448,7 +8446,7 @@ static void *host_pump(void *arg)
                 host_publish_group(h, dg->group);
             }
         }
-        host_stop_leading(h, h->s && server_stop_requested());
+        host_stop_leading(h, server_stop_requested());
         host_pending_reads(h);
         /* Readers queued for a fresh round since the last cycle. */
         (void)host_read_start_requested(h);
@@ -8488,7 +8486,7 @@ static void *host_pump(void *arg)
         drain_inbox(h);
         host_snap_import_pump(h);
         /* In-flight membership/apply work may have changed policy or role. */
-        host_stop_leading(h, h->s && server_stop_requested());
+        host_stop_leading(h, server_stop_requested());
         /* Network trylocks can fail while this bounded drain holds h->mu.
          * Account eligible new read-only votes before the KV durability
          * tail; their unchanged core checks do not apply replication work.
@@ -13909,8 +13907,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    int fresh_probe=h->s &&
-        msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
+    int fresh_probe=msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
     {
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
@@ -13928,7 +13925,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
             !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
             !msg.match_index && !msg.last_log_term && !msg.nentries;
         if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ && !pure_probe)handled=2;
-        if(handled && h->s && BO_ON() &&
+        if(handled && BO_ON() &&
            outbox_pure_read_control(p,n))
             BO_COUNT(msg.type==EFS_RAFT_MSG_AE_REQ ? BO_READ_REQ_INLINE : BO_READ_REPLY_INLINE);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
@@ -16988,7 +16985,7 @@ int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t le
 static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
 static int host_read_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
-    return h->s ? host_namespace_leader_hint(h,group) : -1;
+    return host_namespace_leader_hint(h,group);
 }
 
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)

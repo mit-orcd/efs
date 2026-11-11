@@ -19,7 +19,7 @@ struct host_waiter {
     pthread_cond_t cv;
     uint64_t idx;   /* wake once the group's applied >= idx */
     uint64_t seen;  /* any=1: wake once the group's view stamp != seen */
-    uint64_t round, term; /* any=2: request-scoped fresh read */
+    uint64_t round, term; /* any=3: request-scoped fresh read */
     struct host_read_floor floor; /* first sufficient proof for this sleeper */
     uint8_t notified, proof_only;
     uint8_t group;
@@ -113,11 +113,12 @@ static inline int host_view_wait_apply(const struct host_view *v, uint64_t want,
           v->read_index >= want && v->applied < v->read_index));
 }
 
-/* delegated: the pump starts rounds (host_read_start_requested), so an
- * idle round is not a reason to wake this reader. */
+/* The pump starts rounds (host_read_start_requested), so an idle round is
+ * not a reason to wake this reader: only a proof, a covering round or a
+ * change of role, term or replica is. */
 static inline int host_read_wait_ready(const struct host_view *v,
                                  uint64_t want, uint64_t round, uint64_t term,
-                                 int proof_only, int delegated)
+                                 int proof_only)
 {
     uint64_t proof;
     if (!v->has || v->role != EFS_RAFT_LEADER || v->term != term)
@@ -127,10 +128,7 @@ static inline int host_read_wait_ready(const struct host_view *v,
         return 1;
     if (host_view_covers(v, want, round, term))
         return 1;
-    /* A future admission can start after the old quorum completes even if
-     * that old round still awaits own apply. Its data rows remain fenced. */
-    return !delegated && (!v->read_pending || v->read_done) &&
-           !host_view_wait_apply(v, want, round, term);
+    return 0;
 }
 
 /* Freeze the first eligible quorum while it still owes own apply. Later
@@ -139,7 +137,7 @@ static inline int host_read_wait_ready(const struct host_view *v,
 static inline int host_read_floor_ready(const struct host_view *v,
                                  struct host_read_floor *floor,
                                  uint64_t want,uint64_t round,uint64_t term,
-                                 int proof_only,int delegated)
+                                 int proof_only)
 {
     if(floor->context && v->read_context!=floor->context)return 1;
     if(!floor->context)floor->context=v->read_context;
@@ -149,7 +147,7 @@ static inline int host_read_floor_ready(const struct host_view *v,
         return !v->has || v->role!=EFS_RAFT_LEADER || v->term!=term ||
                v->read_context!=floor->context || proof_only ||
                v->applied>=floor->index;
-    return host_read_wait_ready(v,want,round,term,proof_only,delegated);
+    return host_read_wait_ready(v,want,round,term,proof_only);
 }
 
 

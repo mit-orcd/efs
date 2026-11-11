@@ -125,9 +125,9 @@ void host_publish_view(struct group_views *gv, int gi, struct efs_raft *r)
  * predicate false (that order is what rules out a lost wakeup). any=0:
  * wake when the group's applied >= idx (or the replica goes away); any=1:
  * wake when the group's view stamp moves past `seen`. Falls back to the
- * shared applied_cv when all slots are busy. any=2 wakes for actionable
- * fresh proof progress; any=3 is the same for a reader whose rounds the
- * pump starts (never woken just because no round is pending). Returns with cv_mu held. */
+ * shared applied_cv when all slots are busy. any=3 wakes for actionable
+ * fresh proof progress of a reader whose rounds the pump starts (never woken
+ * just because no round is pending); there is no any=2 (removed with the direct mode). Returns with cv_mu held. */
 void host_waiter_sleep(struct group_views *gv, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
                               const struct timespec *end, uint64_t round, uint64_t term,
@@ -206,14 +206,14 @@ void host_waiters_wake(struct group_views *gv)
         g = group_view_slot(gv, w->group);
         if (!g || !V_LOAD(g->v_has))
             wake = 1;
-        else if (w->any >= 2) {
+        else if (w->any == 3) {
             unsigned gi = (unsigned)(g - gv->slot);
             if (!(loaded & (1u << gi))) {
                 host_view_get(gv, w->group, &view[gi]);
                 loaded |= (uint8_t)(1u << gi);
             }
             wake = host_read_floor_ready(&view[gi], &w->floor, w->idx, w->round, w->term,
-                                         w->proof_only, w->any == 3);
+                                         w->proof_only);
         } else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
