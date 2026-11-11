@@ -11,7 +11,8 @@ Now the server names the wait and the client repeats the step within its
 20 s per-shard budget:
 
 1. The primary's append stays OPEN for HOLD_S after the peer's unmount
-   begins: the peer waits for it and exits 0 (revoke rc=0, >= HOLD_S).
+   begins: the peer's DONE rows lie below the frontier (K112), are retired
+   while that append is held, and the peer exits 0 well before HOLD_S.
 2. A foreign OPEN past the budget (the hook's "cleanup" mode answers that
    wait for every append cleanup step; a real writer's REPORT bound and the
    server resolve an OPEN in about 16 s): the peer fails closed, exit 1, its
@@ -127,11 +128,13 @@ def main():
             c.wait_log(i, r'raft-host: formed: 3 members', timeout=60)
         primary = Mount(c, 1, 'primary')
 
-        # 1. A foreign OPEN shorter than the budget: the peer waits, exit 0.
+        # 1. A foreign OPEN shorter than the budget: the peer's rows below the
+        #    frontier are retired while the OPEN append is held (K112), exit 0.
         rc, rev, revoke_s, _ = peer_round(c, primary, hold, 'peer1', HOLD_S)
         assert rc == 0 and ' rc=0 ' in rev, rev
-        assert revoke_s >= HOLD_S - 0.5, (revoke_s, rev)
-        print(f'1. peer waited on the OPEN append: revoke {revoke_s:.1f} s, exit 0 PASS', flush=True)
+        assert revoke_s < HOLD_S - 0.5, (revoke_s, rev)
+        print(f'1. peer rows below the frontier retired while the OPEN append is held: '
+              f'revoke {revoke_s:.2f} s < {HOLD_S - 0.5:.1f} s, exit 0 PASS', flush=True)
 
         # 2. Past the budget: fail closed with shard and reason, resumable.
         rc, rev, revoke_s, lines = peer_round(c, primary, hold, 'peer2', BUDGET_S + 6, cleanup=True)
@@ -155,7 +158,7 @@ def main():
             subprocess.run(['rm', '-rf', str(work)])
         else:
             print(f'kept {work}', flush=True)
-    print('K42 peer stop with a foreign OPEN append: waits within budget, fails closed with reason PASS')
+    print('K42 peer stop with a foreign OPEN append: rows below the frontier retire at once (K112), past the budget fails closed with reason PASS')
     return 0
 
 

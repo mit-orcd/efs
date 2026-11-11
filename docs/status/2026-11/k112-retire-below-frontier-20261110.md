@@ -70,6 +70,45 @@ also ran other work in the Task FQ loops; not measured here).
 The RDMA five-member loop is owed. The merge of devel (wave 76) was made after the amd runs, so the gates above did not
 run on the merged tree. The aborted-PREPARE retries (cursor churn by the live writer) are not addressed.
 
+## Round 2 (Task FV)
+
+An independent review found the floor rule correct and three defects around it. Repaired in this round; the floor rule,
+`prune_capture` and `prune_row` are unchanged.
+
+- **F1, `tests/test_k42_peer_stop_open.py` step 1 asserted the old wait.** It required `revoke_s >= HOLD_S - 0.5` (the peer
+  waits about 3 s on the primary's held OPEN append). Measured on amd with the Task FS tree before any change: the test
+  failed there with `revoke_s = 0.01` s and `rc=0`, as predicted: the peer's two rows lie below the frontier (the primary
+  reserves after them), so they are retired at once. Step 1 now asserts exit 0, `rc=0` and `revoke_s < HOLD_S - 0.5`; its
+  text says the rows below the frontier are retired while the OPEN append is held. Step 2 (past the budget, fail closed with
+  `reason=append-open-by-other-session`) and the budget row are unchanged.
+- **F2, second read of inode and cursor.** `retire_below_floor` read both again through the capture; if the live writer
+  changed the cursor between the two reads, `finish_record` answered BUSY with no wait reason, so the stop was refused as
+  uncertified where devel answered a certified WAIT_OPEN. The caller now reads the frontier in the same
+  `efs_meta_apply_append_state` call that captured the cursor, and `retire_below_floor` takes the inode from the images
+  already captured (`captured_get`), so nothing is read twice. BUSY paths of `efs_meta_retire_append_session` after the
+  change: WAIT_OPEN (rows remain above the floor, nothing removed); WAIT_FRONTIER (no row removed, receipt row selected,
+  as devel); ABORTED (a refused PREPARE, as devel); BUSY without a reason only from `finish_record` "source moved while
+  collecting", which devel has in the same places (the capture reads and `prune_row`), and which `floor_row` shares.
+- **F3, tests did not pin the rule.** New cases in `tests/test_append_cleanup.c`: another session's row and the same uuid at
+  another epoch below the floor stay; a row between base_size and a higher frontier stays, and a row between a lower
+  frontier and base_size stays; a row straddling the floor stays and a row ending exactly at it is retired; 12 rows below the
+  floor plus one more are retired in pages of 8 (8, then 5, with the rows left counted after each call). The stale comment
+  before `foreign_open_wait` is rewritten.
+
+Mutation proof (amd, one at a time, each reverted): dropping the uuid filter, dropping the uuid and epoch filters, replacing
+the minimum by base_size, replacing it by the frontier, and retiring a straddling row each make `test_append_cleanup`
+abort (rc 134). Outputs: `mutation-*.txt` in the artifacts. The owner-filter mutations fail in the older
+`foreign_open_wait` too (the foreign OPEN row is counted as remaining); the new `floor_owner_filter` is what pins a foreign
+DONE row.
+
+Gates (amd, Task FS tree plus these changes): `make`, `test_append_cleanup`, `tests_for.py meta/append_plan --run`, `make test`, `test_k42_fixture_cleanup.py`, `test_k42_reap_owed.py`: rc 0; `test_k42_peer_stop_open.py` three times: rc 0 (revoke 0.01, 0.17, 0.01 s); `sanitizer_check.sh asan`: PASS (65 run, 0 failed). Raw output: `~maik/efs-artifacts/taskFV-20261110/` on amd, with `SHA256SUMS`.
+
+Review notes, not changed here:
+
+- The branch "rows remain above the floor" can be reached when the same uuid appears at a higher epoch (a row of the same
+  client at another epoch is not retired). Whether a client reuses its uuid across epochs is not verified.
+- The cleanup holds the inode and cursor intents while a writer is live, so the writer can see a short BUSY.
+
 ## Reproduction and raw output
 
 On a built tree (`make`, `make tests/faults/efsd`): `python3 tests/live/e2_peer_stop_loop.py --runs 20 --keep --leaders 0:1,2:4`

@@ -251,12 +251,12 @@ static void live_owner_untouched(void)
  efs_kv_mem_free(kv);
 }
 
-/* K42 (Task A candidate D): a revoked session's append receipt sits on an
- * inode another live session is appending to. Its retirement waits on that
- * OPEN reservation and names the wait (OPEN), a PREPARE that loses its lock
- * aborts and names ABORTED, and once the foreign close REPORT lands the same
- * step retires everything and the shard is idle. Nothing is committed while
- * a wait is named; the foreign append is never discarded. */
+/* K42 (Task A candidate D), changed by K112: a revoked session's append
+ * receipt sits on an inode another live session is appending to. Its DONE rows
+ * wholly below min(base_size, frontier) are retired while that reservation is
+ * OPEN; rows above the floor answer BUSY with WAIT_OPEN. A PREPARE that loses
+ * its lock aborts and names ABORTED. Nothing is committed while a wait is
+ * named; the foreign append is never discarded. */
 static int prepare_locked(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
                           const struct efs_meta_append_image *q)
 {(void)ctx;(void)t;(void)p;(void)q;return EFS_ERR_BUSY;}
@@ -348,6 +348,113 @@ static void floor_split(void)
  } while(progress);
  assert(efs_meta_append_session_idle(kv,shard,a1.id.client_uuid,1,&idle)==EFS_OK && idle);
  state(kv,ino,&open,&size);assert(!open && size==224);
+ efs_kv_mem_free(kv);
+}
+
+/* K112 floor rule. Baseline: A (uuid 42) has a DONE row at 200, B (uuid 43)
+ * holds an OPEN row at 208, so base_size = frontier = 208 = the floor. A is
+ * fenced (epoch 1 revoked). Rows are planted by copying A's row. */
+static void plant(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,const uint8_t tmpl[48],
+                  uint64_t off,uint64_t len,unsigned char owner,uint32_t epoch)
+{
+ uint8_t key[EFS_KV_KEY_MAX],val[48];uint32_t kl;memcpy(val,tmpl,48);
+ for(unsigned i=0;i<8;i++){val[i]=(uint8_t)(off>>(56-8*i));val[8+i]=(uint8_t)(len>>(56-8*i));}
+ val[16]=owner;for(unsigned i=0;i<4;i++)val[32+i]=(uint8_t)(epoch>>(24-8*i));
+ assert(efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,gen,off,key,&kl)==EFS_OK);
+ assert(efs_kv_put(kv,key,kl,val,48)==EFS_OK);
+}
+static int row_exists(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint64_t off)
+{
+ uint8_t key[EFS_KV_KEY_MAX],val[48];uint32_t kl,vl=sizeof(val);
+ assert(efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,gen,off,key,&kl)==EFS_OK);
+ int rc=efs_kv_get(kv,key,kl,val,&vl);assert(rc==EFS_OK || rc==EFS_ERR_NOT_FOUND);
+ return rc==EFS_OK;
+}
+static void set_frontier(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint64_t frontier)
+{
+ uint8_t key[EFS_KV_KEY_MAX],val[32];uint32_t kl,vl=sizeof(val);
+ assert(efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,gen,key,&kl)==EFS_OK);
+ assert(efs_kv_get(kv,key,kl,val,&vl)==EFS_OK && vl==24);
+ for(unsigned i=0;i<8;i++)val[8+i]=(uint8_t)(frontier>>(56-8*i));
+ assert(efs_kv_put(kv,key,kl,val,vl)==EFS_OK);
+}
+static struct efs_kv *floor_fixture(efs_ino_t *ino,uint64_t *gen,uint8_t tmpl[48])
+{
+ struct efs_kv *kv=fixture(ino,gen);
+ uint32_t shard=efs_kv_inode_shard(*ino),vl=48;uint8_t key[EFS_KV_KEY_MAX];uint32_t kl;
+ struct efs_opid_req a=identity(42,1,0),b=identity(43,1,0);
+ uint64_t o1=grant(kv,*ino,&a);assert(o1==200 && complete(kv,*ino,o1,&a)==EFS_OK);
+ assert(grant(kv,*ino,&b)==208);
+ assert(efs_kv_key_append_rsv(shard,*ino,*gen,o1,key,&kl)==EFS_OK && efs_kv_get(kv,key,kl,tmpl,&vl)==EFS_OK && vl==48);
+ assert(efs_session_fence_local(kv,shard,a.id.client_uuid,2)==EFS_OK);
+ return kv;
+}
+/* One cleanup step of A (epoch 1): returns its rc, sets progress and wait. */
+static int retire_a(struct efs_kv *kv,efs_ino_t ino,unsigned *progress)
+{
+ struct efs_txid t=next_tx();append_wait=99;uint8_t u[16]={42};
+ return efs_meta_retire_append_session(kv,efs_kv_inode_shard(ino),u,1,&t,&ops,kv,progress,&append_wait);
+}
+static void drain_a(struct efs_kv *kv,efs_ino_t ino)
+{
+ unsigned progress=9,steps=0;int idle=7;uint8_t u[16]={42};
+ do {assert(retire_a(kv,ino,&progress)==EFS_OK && ++steps<16);} while(progress);
+ assert(efs_meta_append_session_idle(kv,efs_kv_inode_shard(ino),u,1,&idle)==EFS_OK && idle);
+}
+
+/* Another session's DONE row below the floor, and the same uuid at another
+ * epoch, are not this session's rows: they stay. */
+static void floor_owner_filter(void)
+{
+ efs_ino_t ino;uint64_t gen;uint8_t tmpl[48];struct efs_kv *kv=floor_fixture(&ino,&gen,tmpl);
+ plant(kv,ino,gen,tmpl,184,8,44,1); /* other uuid, same epoch */
+ plant(kv,ino,gen,tmpl,192,8,42,2); /* same uuid, other epoch */
+ drain_a(kv,ino);
+ assert(!row_exists(kv,ino,gen,200) && row_exists(kv,ino,gen,184) && row_exists(kv,ino,gen,192));
+ efs_kv_mem_free(kv);
+}
+/* The floor is min(base_size, frontier): a row between the two stays, in both orders. */
+static void floor_is_min(void)
+{
+ efs_ino_t ino;uint64_t gen;uint8_t tmpl[48];unsigned progress=9;
+ struct efs_kv *kv=floor_fixture(&ino,&gen,tmpl);
+ set_frontier(kv,ino,gen,232); /* frontier above base_size 208 */
+ plant(kv,ino,gen,tmpl,216,8,42,1);
+ assert(retire_a(kv,ino,&progress)==EFS_OK && progress==1 && !row_exists(kv,ino,gen,200));
+ assert(retire_a(kv,ino,&progress)==EFS_ERR_BUSY && !progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
+ assert(row_exists(kv,ino,gen,216));
+ efs_kv_mem_free(kv);
+ kv=floor_fixture(&ino,&gen,tmpl);
+ set_frontier(kv,ino,gen,200); /* frontier below base_size 208 */
+ assert(retire_a(kv,ino,&progress)==EFS_ERR_BUSY && !progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
+ assert(row_exists(kv,ino,gen,200));
+ efs_kv_mem_free(kv);
+}
+/* A row straddling the floor stays; a row ending exactly at it goes. */
+static void floor_straddle(void)
+{
+ efs_ino_t ino;uint64_t gen;uint8_t tmpl[48];unsigned progress=9;
+ struct efs_kv *kv=floor_fixture(&ino,&gen,tmpl);
+ plant(kv,ino,gen,tmpl,204,8,42,1); /* 204..212 across the floor 208 */
+ assert(retire_a(kv,ino,&progress)==EFS_OK && progress==1);
+ assert(!row_exists(kv,ino,gen,200) && row_exists(kv,ino,gen,204));
+ assert(retire_a(kv,ino,&progress)==EFS_ERR_BUSY && !progress && append_wait==EFS_META_APPEND_WAIT_OPEN);
+ assert(row_exists(kv,ino,gen,204));
+ efs_kv_mem_free(kv);
+}
+/* More rows below the floor than one page (8): each call retires one page. */
+static void floor_pages(void)
+{
+ efs_ino_t ino;uint64_t gen;uint8_t tmpl[48];unsigned progress=9,left;
+ struct efs_kv *kv=floor_fixture(&ino,&gen,tmpl);
+ for(uint64_t off=0;off<96;off+=8)plant(kv,ino,gen,tmpl,off,8,42,1); /* 12 + the row at 200 */
+ const unsigned got[]={8,5},after[]={5,0};
+ for(unsigned call=0;call<2;call++) {
+  assert(retire_a(kv,ino,&progress)==EFS_OK && progress==got[call] && append_wait==EFS_META_APPEND_WAIT_NONE);
+  left=row_exists(kv,ino,gen,200);for(uint64_t off=0;off<96;off+=8)left+=row_exists(kv,ino,gen,off);
+  assert(left==after[call]);
+ }
+ drain_a(kv,ino);
  efs_kv_mem_free(kv);
 }
 
@@ -451,9 +558,14 @@ int main(void)
  foreign_open_wait();
  hole_row_kept();
  floor_split();
+ floor_owner_filter();
+ floor_is_min();
+ floor_straddle();
+ floor_pages();
  dead_inode_retired();
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
  puts("append cleanup (K42 reopened): a dead inode's rows of the revoked session are deleted by the step itself, not left to the reaper; the other session's rows and the reap completion stay PASS");
+ puts("append cleanup (K112): rows of the revoked session wholly below min(base_size, frontier) retire under a foreign OPEN; other sessions, other epochs, straddling and higher rows stay; pages of 8 PASS");
  puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide), retired after the foreign REPORT PASS");
  return 0;
 }

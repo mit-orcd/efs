@@ -752,14 +752,30 @@ static int floor_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *va
     s->capture->images[slot].op=EFS_TXN_DEL;s->capture->images[slot].new_len=0;
     return ++s->count==APPEND_PRUNE_PAGE;
 }
-static int retire_below_floor(struct efs_kv *kv,struct efs_kv *capture,struct finish_capture *c,
-    efs_ino_t ino,const uint8_t *uuid,uint32_t epoch,unsigned *removed,int *remaining)
+/* Reads only the images the caller already captured: no second read of the
+ * inode, so a writer's append cannot move a source between the two. */
+static int captured_get(void *ctx,const uint8_t *key,uint32_t n,uint8_t *value,uint32_t *length)
 {
-    uint8_t key[EFS_KV_KEY_MAX];uint32_t kl;uint64_t frontier=0;struct efs_meta_row row;
+    const struct finish_capture *c=ctx;
+    for(uint32_t i=0;i<c->count;++i) {
+        const struct finish_image *im=&c->images[i];
+        if(im->klen!=n || memcmp(im->key,key,n))continue;
+        if(im->expected_len==EFS_TXN_ABSENT)return EFS_ERR_NOT_FOUND;
+        if(*length<im->expected_len){*length=im->expected_len;return EFS_ERR_OVERFLOW;}
+        if(im->expected_len)memcpy(value,im->expected,im->expected_len);
+        *length=im->expected_len;return EFS_OK;
+    }
+    return EFS_ERR_PROTO;
+}
+static int retire_below_floor(struct efs_kv *kv,struct finish_capture *c,efs_ino_t ino,
+    uint64_t frontier,const uint8_t *uuid,uint32_t epoch,unsigned *removed,int *remaining)
+{
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t kl;struct efs_meta_row row;
     struct floor_scan scan={.capture=c,.uuid=uuid,.epoch=epoch};
+    const struct efs_kv_ops image_ops={.get=captured_get};
+    struct efs_kv images={.ops=&image_ops,.ctx=c};
     *removed=0;*remaining=0;
-    int rc=efs_meta_apply_get_inode(capture,ino,&row);
-    if(rc==EFS_OK)rc=efs_meta_apply_append_state(capture,ino,NULL,&frontier,NULL);
+    int rc=efs_meta_apply_get_inode(&images,ino,&row);
     if(rc!=EFS_OK)return rc;
     scan.floor=row.base_size<frontier?row.base_size:frontier;
     rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,row.generation,key,&kl);
@@ -802,11 +818,12 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     struct finish_capture c={.base=kv};
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
-    rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
+    uint64_t frontier=0;
+    rc=efs_meta_apply_append_state(&capture,ino,NULL,&frontier,&open);
     unsigned removed=0;
     if(rc==EFS_OK && open) {
         int remaining;
-        rc=retire_below_floor(kv,&capture,&c,ino,uuid,epoch,&removed,&remaining);
+        rc=retire_below_floor(kv,&c,ino,frontier,uuid,epoch,&removed,&remaining);
         if(rc==EFS_OK && !removed && remaining){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_OPEN;}
     } else if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed,0);
     if(rc==EFS_OK && !removed && selected.kl==27){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_FRONTIER;}
