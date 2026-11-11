@@ -295,6 +295,7 @@ struct host_group {
     uint64_t import_t0_us;   /* import start (pass), for the applied line */
     uint64_t import_step_max_us; /* longest efs_kv_import_step + sync */
     uint32_t import_steps;
+    int import_stall;            /* last step was refused by the KV (BUSY): the pump waits its normal cycle */
     uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     /* W127: a committed entry this build cannot apply. Sticky until restart
@@ -3930,6 +3931,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         pthread_mutex_lock(&h->snap_mu);
         g->import_applying = 0;
         g->import_steps++;
+        g->import_stall = *rc == EFS_ERR_BUSY;
         if (step_us > g->import_step_max_us)
             g->import_step_max_us = step_us;
         if (g->import_state != SNAP_IMP_APPLY) {
@@ -4080,6 +4082,7 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     g->import_incl = incl;
     g->import_term = incl_term;
     snprintf(g->import_path, sizeof(g->import_path), "%s", g->part_path);
+    g->import_stall = 0;
     g->import_state = SNAP_IMP_QUEUED;
     pthread_mutex_unlock(&h->snap_mu);
     return EFS_ERR_BUSY;
@@ -7859,7 +7862,8 @@ static int host_pump_poll_timeout(struct efs_raft_host *h)
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
     for (int i = 0; !pending && i < HOST_NGROUPS; i++)
-        pending = __atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE;
+        pending = __atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE &&
+                  !__atomic_load_n(&h->g[i].import_stall, __ATOMIC_RELAXED);
     return pending ? 0 : HOST_TICK_US/1000;
 }
 
