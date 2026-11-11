@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `b35ab8dd2c8f17359edb39afd5a41c68ffeb39b4`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 19,176 nodes, 80,860 directed typed edges, 637 communities.
+Source base: `d68381c29b9f2de85e60fce28f2b6535585d27e8`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 19,201 nodes, 80,989 directed typed edges, 623 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,33 +19,33 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 28142
+- `calls`: 28179
 - `case_of`: 118
-- `contains`: 28284
-- `contract`: 44
+- `contains`: 28321
+- `contract`: 45
 - `defines`: 2010
 - `documents_finding`: 8
 - `exercises`: 7
-- `guided_by`: 179
-- `implemented_by`: 138
-- `imports`: 8377
+- `guided_by`: 180
+- `implemented_by`: 139
+- `imports`: 8392
 - `imports_from`: 1031
 - `indirect_call`: 752
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 4853
+- `mentions_symbol`: 4878
 - `method`: 679
 - `rationale_for`: 1466
 - `references`: 2233
-- `references_path`: 1291
+- `references_path`: 1302
 - `regression_for`: 8
-- `tested_by`: 1115
+- `tested_by`: 1116
 - `uses`: 98
 
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)
-- warning: 76 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+71 more)
+- warning: 77 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+72 more)
 
 ## Limits
 
