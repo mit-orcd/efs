@@ -222,7 +222,7 @@ State: `h->wait_head`, `wait_tail` and each `host_lock_wait` under `h->wait_mu` 
 
 Entry points: `server_raft_host_storage_session_fence` `server_raft_host_storage_session_learn` `server_raft_host_hold` `server_raft_host_flock`
 
-Functions: `host_lock_wait_drop_session` `host_lease_close_effects` `host_session_register_active_proof` `host_session_register_apply` `host_session_combined_group` `host_sess_gate` `host_session_get_covered` `host_session_get` `host_session_establish_admit_covered` `host_session_establish_admit` `host_session_cleanup_admit` `host_pack_session_cleanup` `host_lease_edge_result` `host_lease_submission_result` `host_storage_fence_members` `server_raft_host_storage_session_fence` `server_raft_host_storage_session_learn` `server_raft_host_hold` `lock_wait_queued_locked` `lock_wait_is_head_locked` `lock_wait_signal_locked` `lock_wait_unlink_locked` `host_lock_wait` `server_raft_host_flock` `host_namespace_session_command` `host_namespace_session_prepare_owner` `host_namespace_session_admit_covered` `host_namespace_session_admit_after_group` `host_namespace_session_admit_with_owner` `host_namespace_session_admit` `host_report_session_worker` `host_report_session_admit` `host_session_cleanup_probe`
+Functions: `host_lock_wait_drop_session` `host_lease_close_effects` `host_session_register_active_proof` `host_session_register_apply` `host_session_combined_group` `host_sess_gate` `host_session_get_covered` `host_session_get` `host_session_establish_admit_covered` `host_session_establish_admit` `host_session_cleanup_admit` `host_pack_session_cleanup` `host_lease_edge_result` `host_lease_submission_result` `host_storage_fence_members` `server_raft_host_storage_session_fence` `server_raft_host_storage_session_learn` `server_raft_host_hold` `lock_wait_queued_locked` `lock_wait_is_head_locked` `lock_wait_signal_locked` `lock_wait_unlink_locked` `host_lock_wait` `server_raft_host_flock` `host_namespace_session_command` `host_namespace_session_prepare_owner` `host_namespace_session_admit_covered` `host_namespace_session_admit_after_group` `host_namespace_session_admit_with_owner` `host_namespace_session_admit` `host_report_session_worker` `host_report_session_admit` `host_session_cleanup_probe` `host_fence_arm` `host_fence_claim` `host_fence_class` `host_fence_disarm` `host_fence_drain` `host_fence_record` `host_fence_release` `host_fence_resume` `host_fence_rpc` `host_fence_unref` `host_fence_worker` `server_raft_host_fence_wake`
 
 Logs: `storage-fence` (host_storage_fence_members)
 
@@ -426,15 +426,15 @@ Tests: `tests/test_k35_fsync_degraded.py` `tests/test_k35_placement.py` `tests/t
 
 ## Snapshots
 
-Does: Raft snapshots of the KV: the pump pins a view and the GC thread writes the `.kvx` file (`host_snap_export_pass`); the sender reads it in chunks; a follower writes a `.part` file, queues the import, and the GC thread diffs it (`host_snap_import_pass`) before the pump batches the diff in the ack. `host_maybe_snapshot` decides when.
+Does: Raft snapshots of the KV: the pump pins a view and the GC thread writes the `.kvx` file (`host_snap_export_pass`); the sender reads it in chunks; a follower writes a `.part` file, queues the import, and the GC thread diffs it (`host_snap_import_pass`) before the pump batches the diff in the ack. While an import is queued, running or being applied, a chunk at offset 0 of any snapshot is answered BUSY (`snap_import_active`), and the pump steps the finished import once per cycle and installs it in the Raft core (`host_snap_import_pump`, `efs_raft_snap_imported`) even when the leader no longer retries that image. `host_maybe_snapshot` decides when.
 
 State: `host_group.snap_*`, `part_*`, `import_*` under `h->snap_mu`; `import_block` makes `host_apply` of that group return BUSY while a diff is in flight.
 
 Entry points: none public. In file: `host_snap_open`, `host_snap_read`, `host_snap_close` (raft core callbacks), `snap_import_poll`.
 
-Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_poll` `host_snap_chunk` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
+Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_active` `snap_import_poll` `host_snap_chunk` `host_snap_import_pump` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
 
-Logs: `raft-snap` (host_snap_open, host_maybe_snapshot, host_snap_export_pass, host_snap_import_pass); `raft-host` lines from `snap_import_poll`
+Logs: `raft-snap` (host_snap_open, host_maybe_snapshot, host_snap_export_pass, host_snap_import_pass, host_snap_import_pump); `raft-host` lines from `snap_import_poll`
 
 Tests: `tests/test_k22_snapshot_import.py` `tests/test_query_snapshot_failover.py` `tests/test_kv_snapshot_tail.c`
 

@@ -168,7 +168,7 @@ TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_
 TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c
 TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import tests/test_kv_manifest_order tests/test_kv_fold_reopen
-TEST_BINS += tests/test_snap_import_host
+TEST_BINS += tests/test_snap_import_host tests/test_snap_import_pump
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -874,6 +874,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_kv_seg_stdio
 	./tests/test_kv_snap_import
 	./tests/test_snap_import_host
+	./tests/test_snap_import_pump
 	./tests/test_kv_compact_manifest_view
 	./tests/test_kv_manifest_order
 	./tests/test_kv_fold_reopen
@@ -1295,6 +1296,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py
+	python3 tests/test_k109_stalled_member_unmount.py
 	python3 tests/test_k38_shared_chunk_pressure.py
 	python3 tests/test_stop_progress.py
 	python3 tests/test_operator_workflows.py
@@ -1411,6 +1413,9 @@ tests/test_kv_seg_stdio: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=setvbu
 tests/test_kv_snap_import: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
 # Compiles the real raft_host.c in this TU, like tests/decoders/apply; --wrap lets the
 # test cancel an import from inside its open and see that the pass takes h->mu before its export.
+tests/test_snap_import_pump: override LDFLAGS += -Wl,--wrap=efs_kv_import_step -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=efs_raft_snap_imported -Wl,--wrap=efs_raft_request_resync
+tests/test_snap_import_pump: tests/test_snap_import_pump.c tests/test_snap_import_host.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_snap_import_pump.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)
 tests/test_snap_import_host: override LDFLAGS += -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock
 tests/test_snap_import_host: tests/test_snap_import_host.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_snap_import_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)

@@ -215,15 +215,25 @@ static void peer_reap_idle_locked(struct peer_slot *p, uint64_t now)
     }
 }
 
-static struct efs_conn *peer_connect(const char *host, uint16_t port)
+/* AR (optional): arm(fd) is called once the socket is connected, before the
+ * handshake, and disarm() before the socket is closed or the connection is
+ * handed back, so the caller can wake a handshake that waits on a stalled
+ * peer. A nonzero arm() abandons the connection. */
+static struct efs_conn *peer_connect(const char *host, uint16_t port, const struct server_peer_arm *ar)
 {
     int fd = efs_connect_tcp(host, port);
     if (fd < 0)
         return NULL;
+    if (ar && ar->arm(fd, ar->ctx)) {
+        close(fd);
+        return NULL;
+    }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
     struct efs_conn *nc = efs_conn_wrap_tcp(fd, 0);
     if (!nc) {
+        if (ar)
+            ar->disarm(ar->ctx);
         close(fd);
         return NULL;
     }
@@ -231,12 +241,16 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
      * forwards, segments) declares the protocol like any client, before
      * the RDMA upgrade; the peer's HELLO/build-id gate follows. */
     if (efs_conn_declare(nc) != EFS_OK) {
+        if (ar)
+            ar->disarm(ar->ctx);
         efs_conn_destroy(nc);
         return NULL;
     }
     int urc;
     if (efs_rdma_available() && (urc = efs_rdma_client_upgrade(nc)) != 0) {
         if (urc == EFS_RDMA_UPGRADE_BROKEN || efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+            if (ar)
+                ar->disarm(ar->ctx);
             efs_conn_destroy(nc);
             return NULL;
         }
@@ -246,6 +260,8 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
             efs_telemetry_log(0, "efsd: transport auto: RDMA upgrade to %s:%u failed; "
                     "this peer connection uses tcp\n", host, port);
     }
+    if (ar)
+        ar->disarm(ar->ctx);
     return nc;
 }
 
@@ -257,12 +273,17 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
  * group lost its leader, the forwards then waited for a leader and the
  * pool never drained (group 0 term 911 -> 1783 in 15 min, Sep 21).
  * Consensus traffic must not share a bounded pool with client work. */
-struct efs_conn *server_peer_conn_new(const char *host, uint16_t port)
+struct efs_conn *server_peer_conn_new_armed(const char *host, uint16_t port, const struct server_peer_arm *ar)
 {
     struct in_addr a;
     if (!host || inet_pton(AF_INET, host, &a) != 1 || port == 0)
         return NULL;
-    return peer_connect(host, port);
+    return peer_connect(host, port, ar);
+}
+
+struct efs_conn *server_peer_conn_new(const char *host, uint16_t port)
+{
+    return server_peer_conn_new_armed(host, port, NULL);
 }
 
 static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
@@ -332,7 +353,7 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int cls)
             uint64_t setup_dl = peer_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000;
             if (caller_dl && caller_dl < setup_dl)
                 efs_net_set_deadline_ms(setup_dl);
-            struct efs_conn *nc = peer_connect(h, pt);
+            struct efs_conn *nc = peer_connect(h, pt, NULL);
             efs_net_set_deadline_ms(caller_dl);
             if (!nc) {
                 pthread_mutex_lock(&p->lock);

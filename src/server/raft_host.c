@@ -295,6 +295,7 @@ struct host_group {
     uint64_t import_t0_us;   /* import start (pass), for the applied line */
     uint64_t import_step_max_us; /* longest efs_kv_import_step + sync */
     uint32_t import_steps;
+    int import_stall;            /* last step was refused by the KV (BUSY): the pump waits its normal cycle */
     uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
     /* W127: a committed entry this build cannot apply. Sticky until restart
@@ -3874,6 +3875,18 @@ static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
     pthread_mutex_unlock(&h->snap_mu);
 }
 
+/* 1 while an import is queued, running, or being applied. snap_mu. */
+static int snap_import_active(struct efs_raft_host *h, struct host_group *g)
+{
+    int st;
+
+    pthread_mutex_lock(&h->snap_mu);
+    st = g->import_state;
+    pthread_mutex_unlock(&h->snap_mu);
+    return st == SNAP_IMP_QUEUED || st == SNAP_IMP_RUN ||
+           st == SNAP_IMP_DONE || st == SNAP_IMP_APPLY;
+}
+
 /* 1 if this incl already has an import queued, running, or finished.
  * *rc is BUSY, OK, or the import error. */
 static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
@@ -3918,15 +3931,9 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         pthread_mutex_lock(&h->snap_mu);
         g->import_applying = 0;
         g->import_steps++;
+        g->import_stall = *rc == EFS_ERR_BUSY;
         if (step_us > g->import_step_max_us)
             g->import_step_max_us = step_us;
-        if (g->import_state != SNAP_IMP_APPLY) {
-            snap_import_free_diff(g);
-            __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
-            pthread_mutex_unlock(&h->snap_mu);
-            *rc = EFS_ERR_BUSY;
-            return 1;
-        }
         if (*rc == EFS_ERR_BUSY) { /* batch refused for now: same batch again */
             g->import_state = SNAP_IMP_DONE;
             pthread_mutex_unlock(&h->snap_mu);
@@ -4014,6 +4021,12 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
      * in the .part; the GC thread is diffing them into the KV. */
     if (done && snap_import_poll(h, g, incl, incl_term, &rc))
         return rc;
+    if (offset == 0 && snap_import_active(h, g))
+        /* An image is being imported: a chunk of any snapshot at offset 0
+         * would throw that work away. Refuse it (the leader retries) until
+         * the import is installed; no byte of the newer image is kept. The
+         * core must tell this from BUSY, which queued a closing chunk. */
+        return EFS_ERR_AGAIN;
     if (offset == 0) {
         snap_import_cancel(h, g);
         if (g->part_fd >= 0) {
@@ -4063,9 +4076,60 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     g->import_incl = incl;
     g->import_term = incl_term;
     snprintf(g->import_path, sizeof(g->import_path), "%s", g->part_path);
+    g->import_stall = 0;
     g->import_state = SNAP_IMP_QUEUED;
     pthread_mutex_unlock(&h->snap_mu);
     return EFS_ERR_BUSY;
+}
+
+static void host_pump_kick(struct efs_raft_host *h);
+
+/* Pump, h->mu held: one bounded import step per group per cycle, whether or
+ * not the leader still asks for that image. A finished import is installed in
+ * the Raft core here (the leader may have moved on to a newer image that
+ * host_snap_chunk refuses until this one is in). */
+static void host_snap_import_pump(struct efs_raft_host *h)
+{
+    for (int gi = 0; gi < HOST_NGROUPS; gi++) {
+        struct host_group *g = &h->g[gi];
+        uint64_t incl, term;
+        int st, rc = EFS_OK;
+
+        if (!g->r)
+            continue;
+        pthread_mutex_lock(&h->snap_mu);
+        st = g->import_state;
+        incl = g->import_incl;
+        term = g->import_term;
+        pthread_mutex_unlock(&h->snap_mu);
+        if (st != SNAP_IMP_DONE || !snap_import_poll(h, g, incl, term, &rc))
+            continue;
+        if (rc != EFS_OK && rc != EFS_ERR_BUSY) {
+            /* Hard error: the importer is dropped and the state is IDLE, so
+             * the next chunk at offset 0 starts afresh. The KV may hold part
+             * of the image: ask the leader for a new one. */
+            efs_telemetry_log(0, "raft-snap: import failed group=%u "
+                    "incl=%llu rc=%d\n", g->group, (unsigned long long)incl,
+                    rc);
+            (void)efs_raft_request_resync(g->r);
+            continue;
+        }
+        if (rc != EFS_OK) {
+            /* More to do and the KV accepted the batch: the next step runs
+             * on the next cycle without the timer wait. A refused batch
+             * (import_stall, an L0 stall) keeps the normal wait. */
+            pthread_mutex_lock(&h->snap_mu);
+            if (g->import_state == SNAP_IMP_DONE && !g->import_stall)
+                host_pump_kick(h);
+            pthread_mutex_unlock(&h->snap_mu);
+            continue;
+        }
+        rc = efs_raft_snap_imported(g->r, incl, term);
+        efs_telemetry_log(0, "raft-snap: import installed group=%u incl=%llu "
+                "rc=%d\n", g->group, (unsigned long long)incl, rc);
+        if (rc != EFS_OK)
+            (void)efs_raft_request_resync(g->r); /* KV is at incl, Raft is not */
+    }
 }
 
 static uint64_t host_snap_window_bytes(void)
@@ -8926,6 +8990,7 @@ static void *host_pump(void *arg)
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h);
+        host_snap_import_pump(h);
         /* In-flight membership/apply work may have changed policy or role. */
         host_stop_leading(h, h->s && server_stop_requested());
         /* Network trylocks can fail while this bounded drain holds h->mu.
@@ -14198,6 +14263,9 @@ static void host_stop_senders(struct efs_raft_host *h)
     }
 }
 
+static void host_fence_drain(void);
+static void host_fence_resume(void);
+
 void server_raft_host_stop(void)
 {
     struct efs_raft_host *h = g_host;
@@ -14206,6 +14274,7 @@ void server_raft_host_stop(void)
 
     if (!h)
         return;
+    host_fence_drain();
     __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
     if (h->query_started) pthread_join(h->query_tid,NULL);
     query_page_sweep(1);
@@ -14305,6 +14374,7 @@ void server_raft_host_stop(void)
         close(h->pump_efd);
     __atomic_store_n(&g_host, NULL, __ATOMIC_RELEASE);
     free(h);
+    host_fence_resume();
 }
 
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
@@ -15339,16 +15409,223 @@ static int host_lease_submission_result(struct efs_raft_host *h,const uint8_t *c
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
+/* Fence workers ask a member over a private connection (server_peer_conn_new_armed),
+ * never over the shared pool: the pool is destroyed after the host stops, so a
+ * worker parked in a receive on a pooled connection would use one that
+ * server_peer_pool_shutdown already freed. A worker lists its socket from the
+ * connect to the end of the exchange (the handshake with a stalled member waits
+ * too); server_raft_host_stop calls host_fence_drain first, which refuses new
+ * exchanges, shuts the listed sockets down (a TCP wait returns at once) and waits
+ * until no worker is left. The handler drain wakes them first
+ * (server_raft_host_fence_wake, from server_handlers_begin_stop), because an
+ * unmount handler waits for its workers and the drain waits for the handler.
+ * On RDMA the sends, credit waits and receives of the exchange poll the control
+ * socket (message_pause in rdma.c), so the same shutdown wakes them. The connect
+ * itself (a member that does not answer SYN) is not woken and ends at its own
+ * bound. */
+/* The socket is listed from before the handshake until the exchange ends; both
+ * run with the lock, so a listed fd is open. Refused once the stop began. */
+struct host_fence_conn{int fd;int woken;struct host_fence_conn *next;};
+static pthread_mutex_t g_fence_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_fence_cv=PTHREAD_COND_INITIALIZER;
+static struct host_fence_conn *g_fence_conns;
+static unsigned g_fence_active,g_fence_woken;
+static int g_fence_stopping;
+
+static int host_fence_arm(int fd,void *ctx)
+{
+    struct host_fence_conn *reg=ctx;int rc=-1;
+    pthread_mutex_lock(&g_fence_mu);
+    if(!g_fence_stopping){reg->fd=fd;reg->woken=0;reg->next=g_fence_conns;g_fence_conns=reg;rc=0;}
+    pthread_mutex_unlock(&g_fence_mu);
+    return rc;
+}
+
+static void host_fence_disarm(void *ctx)
+{
+    struct host_fence_conn *reg=ctx;
+    pthread_mutex_lock(&g_fence_mu);
+    for(struct host_fence_conn **pp=&g_fence_conns;*pp;pp=&(*pp)->next)
+        if(*pp==reg){*pp=reg->next;break;}
+    reg->fd=-1;
+    pthread_mutex_unlock(&g_fence_mu);
+}
+
+static int host_fence_rpc(const char *host,uint16_t port,const void *req,uint32_t reqlen,void *out,uint32_t outlen)
+{
+    struct host_fence_conn reg={-1,0,NULL};
+    const struct server_peer_arm ar={host_fence_arm,host_fence_disarm,&reg};
+    uint8_t rtype=0;void *reply=NULL;uint32_t rlen=0;int rc=-1;
+    pthread_mutex_lock(&g_fence_mu);
+    if(g_fence_stopping){pthread_mutex_unlock(&g_fence_mu);return -1;}
+    g_fence_active++;
+    pthread_mutex_unlock(&g_fence_mu);
+    struct efs_conn *c=server_peer_conn_new_armed(host,port,&ar);
+    if(c){
+        if(host_fence_arm(c->fd,&reg)==0 &&
+           efs_conn_send_msg(c,EFS_MSG_STORAGE_SESSION_FENCE,req,reqlen)==0 &&
+           efs_conn_recv_msg(c,&rtype,&reply,&rlen)==0 &&
+           rtype==EFS_MSG_STORAGE_SESSION_FENCE_REPLY && rlen==outlen){
+            memcpy(out,reply,outlen);rc=0;
+        }
+        free(reply);
+        host_fence_disarm(&reg);
+        efs_conn_destroy(c);
+    }
+    pthread_mutex_lock(&g_fence_mu);
+    if(--g_fence_active==0)pthread_cond_broadcast(&g_fence_cv);
+    pthread_mutex_unlock(&g_fence_mu);
+    return rc;
+}
+
+/* Refuses new exchanges and shuts down the sockets of the workers now waiting
+ * on a member; does not wait for them. The handler drain calls it first
+ * (server_handlers_begin_stop): an unmount handler waits for its workers, and
+ * the stop would wait for that handler. */
+void server_raft_host_fence_wake(void)
+{
+    pthread_mutex_lock(&g_fence_mu);
+    g_fence_stopping=1;
+    for(struct host_fence_conn *x=g_fence_conns;x;x=x->next)
+        if(!x->woken){x->woken=1;g_fence_woken++;shutdown(x->fd,SHUT_RDWR);}
+    pthread_mutex_unlock(&g_fence_mu);
+}
+
+static void host_fence_drain(void)
+{
+    server_raft_host_fence_wake();
+    pthread_mutex_lock(&g_fence_mu);
+    while(g_fence_active)pthread_cond_wait(&g_fence_cv,&g_fence_mu);
+    unsigned woken=g_fence_woken;
+    pthread_mutex_unlock(&g_fence_mu);
+    if(woken)efs_telemetry_log(0,"storage-fence: stop woke %u worker(s) waiting on a member\n",woken);
+}
+
+/* A host started again after a stop (test harnesses) asks members again. */
+static void host_fence_resume(void)
+{
+    pthread_mutex_lock(&g_fence_mu);g_fence_stopping=0;g_fence_woken=0;pthread_mutex_unlock(&g_fence_mu);
+}
+
 /* A metadata quorum is not a storage-member acknowledgement. Every
- * configured member that answers (including a non-hosting replica) must seal
- * or prove its certificate, and a strict majority of the configured members
- * must have done so (K54, D46 item 6): one member that is down no longer
- * fails a clean unmount. The epoch it missed is committed in the session
- * shard log by BEGIN/FENCE_LOC/FINISH, and every storage admission of that
- * member needs a fresh lane-leader STATUS proof against that log
- * (server_put_upload), so a returning member refuses the revoked epoch
- * before it could seal. A reach below a majority stays BUSY. No server lock
- * is held over network/disk I/O. */
+ * configured member is asked at once (a non-hosting replica too), and a strict
+ * majority of the configured members must seal or prove its certificate
+ * (K54, D46 item 6; K109). The call returns as soon as a majority sealed, a
+ * member refused, or every member has answered; it never waits for the rest.
+ *
+ * A member counts as sealed only on rc OK. An unreachable member, and a member
+ * that answered it did not seal (its metadata read failed or its certificate
+ * could not be written: NOT_PRIMARY, BUSY, IO, ...), count alike: neither is
+ * inferred sealed and neither fails the call while the others are a majority.
+ * A refusal fails it when it arrives before a majority sealed: STALE (the
+ * session is no longer at this floor or no longer active), INVAL (the request
+ * is invalid) and PROTO (the reply names another UUID or floor). One that
+ * arrives later is not seen; the epoch-bound FINISH (efs_session_finish_fence_epoch)
+ * is the authority that rejects a session that has moved on.
+ * The epoch a member missed is committed in the session shard log by
+ * BEGIN/FENCE_LOC/FINISH, and every storage admission of that member needs a
+ * fresh lane-leader STATUS proof against that log (server_put_upload), so a
+ * returning member refuses the revoked epoch before it could seal. A reach
+ * below a majority returns the first non-sealing reply code in member order,
+ * else BUSY. No server lock is held over network/disk I/O.
+ *
+ * A remote answer is awaited by a detached worker that owns a copy of the
+ * endpoint and shares only the refcounted round, so the caller can return
+ * while a slow member's worker still waits; the host stop wakes and joins
+ * the workers first (host_fence_drain). That member's late seal is harmless:
+ * its certificate only moves up. A member that already has
+ * HOST_FENCE_MAX_INFLIGHT exchanges waiting is not asked again: it counts as
+ * unreached at once. */
+enum {FENCE_PENDING,FENCE_SEALED,FENCE_UNREACHED,FENCE_NOT_SEALED,FENCE_REFUSED};
+/* How an exchange ended (host_fence_record): answered, failed on the wire, or never started. */
+enum {FENCE_ANSWERED,FENCE_TRANSPORT,FENCE_CAPPED};
+/* Private connections have no pool to cap them, so the exchanges waiting on one
+ * member are capped here, at the peer pool's size per member (EFS_PEER_DATA_CONNS).
+ * At the cap a round counts that member unreached at once and starts no worker: a
+ * member that never answers holds at most this many threads and sockets however
+ * many unmounts arrive. It is more than one because concurrent unmounts each ask
+ * the same healthy member, and one exchange at a time would count that member
+ * unreached for all but one of them. A slot is held from before the worker starts
+ * until its exchange ended. */
+#define HOST_FENCE_MAX_INFLIGHT 32
+static pthread_mutex_t g_fence_slots_mu=PTHREAD_MUTEX_INITIALIZER;
+static unsigned g_fence_slots[EFS_MAX_NODES+1];
+static int host_fence_claim(uint32_t id)
+{
+    pthread_mutex_lock(&g_fence_slots_mu);
+    int ok=g_fence_slots[id]<HOST_FENCE_MAX_INFLIGHT;
+    if(ok)g_fence_slots[id]++;
+    pthread_mutex_unlock(&g_fence_slots_mu);
+    return ok;
+}
+static void host_fence_release(uint32_t id)
+{
+    pthread_mutex_lock(&g_fence_slots_mu);g_fence_slots[id]--;pthread_mutex_unlock(&g_fence_slots_mu);
+}
+struct host_fence_round;
+struct host_fence_member {
+    struct host_fence_round *round;
+    uint32_t id;uint16_t port;char host[64];
+    uint8_t state;int rc;
+    struct efs_msg_storage_session_fence request;
+};
+struct host_fence_round {
+    pthread_mutex_t mu;pthread_cond_t cv;
+    unsigned refs;uint32_t count,pending,sealed;int refused;
+    struct host_fence_member m[EFS_MAX_NODES];
+};
+
+/* How one member's answer counts; `transport` is a failed or skipped exchange (FENCE_TRANSPORT, FENCE_CAPPED). */
+static int host_fence_class(int transport,const struct efs_msg_storage_session_fence *q,
+    const struct efs_msg_storage_session_fence_reply *p,int *rc)
+{
+    *rc=EFS_OK;
+    if(transport)return FENCE_UNREACHED;
+    if(memcmp(p->uuid,q->uuid,16) || p->floor!=q->floor){*rc=EFS_ERR_PROTO;return FENCE_REFUSED;}
+    *rc=p->rc;
+    if(p->rc==EFS_OK)return FENCE_SEALED;
+    return p->rc==EFS_ERR_STALE || p->rc==EFS_ERR_INVAL?FENCE_REFUSED:FENCE_NOT_SEALED;
+}
+
+/* Called with r->mu held; unlocks it, and frees the round with its last reference. */
+static void host_fence_unref(struct host_fence_round *r)
+{
+    int last=--r->refs==0;
+    pthread_mutex_unlock(&r->mu);
+    if(last){pthread_cond_destroy(&r->cv);pthread_mutex_destroy(&r->mu);free(r);}
+}
+
+static void host_fence_record(struct host_fence_member *m,int transport,
+    const struct efs_msg_storage_session_fence_reply *reply,int drop_ref)
+{
+    struct host_fence_round *r=m->round;
+    uint32_t id=m->id,floor=m->request.floor;int check=(int)m->request.check_only;
+    int rc,state=host_fence_class(transport,&m->request,reply,&rc);
+    pthread_mutex_lock(&r->mu);
+    m->state=(uint8_t)state;m->rc=rc;r->pending--;
+    if(state==FENCE_SEALED)r->sealed++;
+    if(state==FENCE_REFUSED)r->refused=1;
+    pthread_cond_broadcast(&r->cv);
+    if(drop_ref)host_fence_unref(r);else pthread_mutex_unlock(&r->mu);
+    if(transport==FENCE_CAPPED){ /* bounded: a flood of rounds against one parked member logs its first ten and every thousandth */
+        static unsigned capped;unsigned n=__atomic_add_fetch(&capped,1,__ATOMIC_RELAXED);
+        if(n<=10 || !(n%1000))efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d not asked: %d exchanges already wait on it (%u so far)\n",
+                id,floor,check,HOST_FENCE_MAX_INFLIGHT,n);
+    }
+    else if(transport)efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",id,floor,check);
+    else if(rc!=EFS_OK)efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d rc=%d\n",id,floor,check,rc);
+}
+
+static void *host_fence_worker(void *arg)
+{
+    struct host_fence_member *m=arg;
+    struct efs_msg_storage_session_fence_reply reply={0};
+    int failed=host_fence_rpc(m->host,m->port,&m->request,sizeof(m->request),&reply,sizeof(reply));
+    host_fence_release(m->id);
+    host_fence_record(m,failed!=0?FENCE_TRANSPORT:FENCE_ANSWERED,&reply,1);
+    return NULL;
+}
+
 static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid[16],
                                       uint32_t floor,int check_only)
 {
@@ -15358,32 +15635,57 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
     if(count<=EFS_MAX_NODES)memcpy(members,h->s->nodes,count*sizeof(*members));
     pthread_mutex_unlock(&h->s->lock);
     if(count<EFS_NUM_FRAGMENTS || count>EFS_MAX_NODES)return EFS_ERR_BUSY;
-    uint32_t reached=0,missed=0;
     for(uint32_t i=0;i<count;i++){
         if(!members[i].id || members[i].id>EFS_MAX_NODES)return EFS_ERR_INVAL;
         for(uint32_t j=0;j<i;j++)if(members[j].id==members[i].id)return EFS_ERR_INVAL;
-        struct efs_msg_storage_session_fence request={.floor=floor,.check_only=(uint32_t)check_only};
-        struct efs_msg_storage_session_fence_reply reply={0};memcpy(request.uuid,uuid,16);
-        if(members[i].id==h->s->id)server_raft_host_storage_session_fence(&request,&reply);
-        else if(host_inode_rpc_peer(h,(int)members[i].id-1,EFS_MSG_STORAGE_SESSION_FENCE,
-                    &request,sizeof(request),EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply))){
-            efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d transport unavailable\n",members[i].id,floor,check_only);
-            missed|=1u<<(members[i].id-1);continue;
-        }
-        if(memcmp(reply.uuid,uuid,16) || reply.floor!=floor)return EFS_ERR_PROTO;
-        if(reply.rc!=EFS_OK){
-            efs_telemetry_log(0,"storage-fence: member=%u floor=%u check=%d rc=%d\n",members[i].id,floor,check_only,reply.rc);
-            return reply.rc;
-        }
-        reached++;
     }
-    if(reached*2<=count){
-        efs_telemetry_log(0,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
-                floor,check_only,reached,count,missed);
-        return EFS_ERR_BUSY;
+    struct host_fence_round *r=calloc(1,sizeof(*r));
+    if(!r)return EFS_ERR_BUSY;
+    pthread_mutex_init(&r->mu,NULL);pthread_cond_init(&r->cv,NULL);
+    r->refs=1;r->count=r->pending=count;
+    struct host_fence_member *own=NULL;
+    for(uint32_t i=0;i<count;i++){
+        struct host_fence_member *m=&r->m[i];
+        m->round=r;m->id=members[i].id;
+        m->request.floor=floor;m->request.check_only=(uint32_t)check_only;memcpy(m->request.uuid,uuid,16);
+        if(members[i].id==h->s->id){own=m;continue;}
+        if(!host_fence_claim(m->id)){
+            struct efs_msg_storage_session_fence_reply none={0};
+            host_fence_record(m,FENCE_CAPPED,&none,0);
+            continue;
+        }
+        snprintf(m->host,sizeof(m->host),"%s",members[i].addr);m->port=members[i].port;
+        pthread_mutex_lock(&r->mu);r->refs++;pthread_mutex_unlock(&r->mu);
+        pthread_t tid;
+        if(efsd_pthread_create(&tid,host_fence_worker,m)==0)pthread_detach(tid);
+        else host_fence_worker(m); /* no thread: ask inline, as before */
     }
+    if(own){
+        struct efs_msg_storage_session_fence_reply reply={0};
+        server_raft_host_storage_session_fence(&own->request,&reply);
+        host_fence_record(own,FENCE_ANSWERED,&reply,0);
+    }
+    pthread_mutex_lock(&r->mu);
+    while(!r->refused && r->sealed*2<=count && r->pending)pthread_cond_wait(&r->cv,&r->mu);
+    int rc=EFS_OK,refused=r->refused;uint32_t sealed=r->sealed,missed=0;
+    for(uint32_t i=0;i<count;i++)if(r->m[i].state!=FENCE_SEALED)missed|=1u<<(r->m[i].id-1);
+    if(refused || sealed*2<=count){
+        rc=EFS_ERR_BUSY;int first=0;
+        for(uint32_t i=0;i<count;i++){
+            const struct host_fence_member *m=&r->m[i];
+            if(refused && m->state==FENCE_REFUSED){rc=m->rc;break;}
+            if(!refused && !first && m->state==FENCE_NOT_SEALED){rc=m->rc;first=1;}
+        }
+    }
+    host_fence_unref(r);
+    if(rc!=EFS_OK){
+        if(!refused)efs_telemetry_log(0,"storage-fence: floor=%u check=%d reached %u of %u members, no majority (unreached mask 0x%x)\n",
+                floor,check_only,sealed,count,missed);
+        return rc;
+    }
+    /* mask: members not proven sealed when the majority was (unreached, did not seal, or still answering) */
     if(missed)efs_telemetry_log(0,"storage-fence: floor=%u check=%d sealed %u of %u members, unreached mask 0x%x\n",
-                      floor,check_only,reached,count,missed);
+                      floor,check_only,sealed,count,missed);
     int same=1;pthread_mutex_lock(&h->s->lock);
     if(h->s->node_count!=count)same=0;
     for(uint32_t i=0;i<count && same;i++){
@@ -16175,8 +16477,19 @@ void server_raft_host_storage_session_fence(const struct efs_msg_storage_session
     struct efs_msg_storage_session_fence_reply *out)
 {
     memset(out,0,sizeof(*out));out->rc=EFS_ERR_INVAL;
-    if(!request || !g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE) || request->floor<2 || request->check_only>1)return;
+    if(!request)return;
     memcpy(out->uuid,request->uuid,16);out->floor=request->floor;
+#if EFS_FAULTS
+    /* Test-only (K109): EFS_FAULT_FENCE_PARK=1 never answers a storage fence, as a member whose handler hangs
+     * while the node stays reachable for everything else. */
+    if(getenv("EFS_FAULT_FENCE_PARK")){
+        efs_telemetry_log(0,"storage-fence: parked by EFS_FAULT_FENCE_PARK floor=%u check=%d\n",request->floor,(int)request->check_only);
+        for(;;)sleep(60); /* sync: test-only fault hook */
+    }
+#endif
+    /* A host that is not (or no longer) running has not sealed: BUSY, not a refusal (K109). */
+    if(!g_host || !__atomic_load_n(&g_host->running, __ATOMIC_ACQUIRE)){out->rc=EFS_ERR_BUSY;return;}
+    if(request->floor<2 || request->check_only>1)return;
     unsigned nonzero=0;for(unsigned i=0;i<16;i++)nonzero|=request->uuid[i];if(!nonzero)return;
     uint32_t ssh=efs_kv_session_shard(request->uuid);
     uint8_t query[1+HOST_SESS_CREATE_LEN]={0};query[0]=efs_raft_shard_group(ssh);query[1]=EFS_MD_CMD_SESSION;
