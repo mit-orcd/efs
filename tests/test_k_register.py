@@ -14,8 +14,18 @@ checker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checker)
 
 
-def row(n, state='FIXED', title='item'):
-    return f'# K{n}: {title}\n\n- State: {state}\n- Blocks alpha: no\n- Kind: kind\n\n## Item\n\nx\n'
+LABELS = ('Cause', 'Owners', 'Reproducer', 'Invariant', 'Owed')
+
+
+def summary(skip=None, long=False):
+    lines = [f'- {k}: {"x" * (216 if long and k == "Cause" else 1)}' for k in LABELS if k != skip]
+    return '## Summary\n\n' + '\n'.join(lines) + '\n\n'
+
+
+def row(n, state='FIXED', title='item', section=None):
+    if section is None:
+        section = summary() if state in ('OPEN', 'VERIFY') else ''
+    return f'# K{n}: {title}\n\n- State: {state}\n- Blocks alpha: no\n- Kind: kind\n\n{section}## Item\n\nx\n'
 
 
 def run(path, *args):
@@ -78,6 +88,30 @@ class RegisterTests(unittest.TestCase):
 
     def test_pipe_in_title_stays_one_cell(self):
         self.assertEqual(checker.generate({1: ('a|b', 'k|k', 'OPEN', 'no')}).splitlines()[2].count('|'), 7)
+
+    def check(self, state, section):
+        path = self.tree()
+        (self.tmp / 'k/K002.md').write_text(row(2, state, section=section))
+        run(path, '--write')
+        return run(path)
+
+    def test_summary_required_for_open_and_verify(self):
+        p = self.check('OPEN', '')
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('missing "## Summary"', p.stdout)
+        p = self.check('VERIFY', summary(skip='Owners'))
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('exactly the lines', p.stdout)
+
+    def test_summary_line_too_long(self):
+        self.assertEqual(len('- Cause: ' + 'x' * 216), 225)
+        p = self.check('VERIFY', summary(long=True))
+        self.assertEqual(p.returncode, 1)
+        self.assertIn('220', p.stdout)
+
+    def test_summary_not_required_for_fixed(self):
+        p = self.check('FIXED', '')
+        self.assertEqual(p.returncode, 0, p.stdout)
 
     def test_json(self):
         p = run(self.tree(), '--json')
