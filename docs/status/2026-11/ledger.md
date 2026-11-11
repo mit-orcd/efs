@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [PUT window Task V1](ledger/20261111-002-put-window-ownership.md): **branch claude/task-v1-put-window-2ace19, not merged, Nov 11**
 - [Wave 79 merge](ledger/20261111-001-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `c518bc8d4`)**
 - [W123 branch review and second set of ports](ledger/20261110-048-w123-ports.md): **PASS on the port branch, no K row yet for three devel defects, blocks alpha: coordinator to rule**
 - [PUT-window ownership](ledger/20261110-047-put-window-ownership.md): **PASS, no K row, blocks alpha: no**

@@ -1,4 +1,5 @@
 #include "client_internal.h"
+#include "put_window.h"
 #include "read_peer_order.h"
 #include "efs/protocol.h"
 #include "efs/network.h"

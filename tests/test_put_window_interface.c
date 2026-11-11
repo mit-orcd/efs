@@ -10,7 +10,9 @@
  * at its own bound and at the caller's RPC deadline and releases the mutex;
  * the reader wait is the same wait with an 8 s bound; more inodes than slots
  * (the overflow count makes every inode busy until it is closed); threads
- * opening and closing concurrently end closed (TSan entry). */
+ * opening and closing concurrently end closed (TSan entry); a close without
+ * an open (nothing open: no underflow; another window open: readers see
+ * closed, the slot count stays). */
 #include "put_window.h"
 #include <assert.h>
 #include <pthread.h>
@@ -167,6 +169,33 @@ static void test_more_inodes_than_slots(void)
         assert(put_win_wait(i, 20) == 0);
 }
 
+/* put_window.h: a close without a matching open is a caller error the owner
+ * does not detect. Pinned here as what happens, not as a feature. */
+static void test_stray_close_with_nothing_open(void)
+{
+    uint64_t t0 = now_ms();
+
+    put_win_close(30); /* no slot, no overflow, total already 0: nothing to decrement */
+    assert(put_win_wait(30, 20) == 0);
+    put_win_open(30); /* the count did not go below 0: one open still blocks */
+    __atomic_store_n(&rpc_deadline, t0 + 30, __ATOMIC_RELEASE);
+    assert(efs_dcache_put_win_wait(30) == EFS_ERR_BUSY);
+    __atomic_store_n(&rpc_deadline, 0, __ATOMIC_RELEASE);
+    put_win_close(30);
+    assert(efs_dcache_put_win_wait(30) == 0);
+}
+
+static void test_stray_close_hides_an_open_window_from_readers(void)
+{
+    put_win_open(31);
+    put_win_close(32); /* stray: takes the all-inode total to 0 */
+    assert(put_win_wait(31, 20) == EFS_ERR_BUSY); /* the slot count is intact */
+    assert(efs_dcache_put_win_wait(31) == 0); /* the reader fast path says closed */
+    put_win_close(31); /* the real close finds total 0 and leaves it there */
+    assert(put_win_wait(31, 20) == 0);
+    assert(efs_dcache_put_win_wait(31) == 0);
+}
+
 #define CHURN_THREADS 4
 #define CHURN_ROUNDS 20000
 
@@ -236,6 +265,8 @@ int main(int argc, char **argv)
     RUN(test_rpc_deadline_caps_the_wait);
     RUN(test_reader_wait);
     RUN(test_more_inodes_than_slots);
+    RUN(test_stray_close_with_nothing_open);
+    RUN(test_stray_close_hides_an_open_window_from_readers);
     RUN(test_concurrent_open_close_ends_closed);
     if (g_list)
         return 0;
