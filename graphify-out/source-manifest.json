@@ -1603,7 +1603,7 @@
     "docs/status/2026-10/d39-consolidated-model-20261023.md": "68211f94877f2acbf05645ba2ef455c9f320cde460e821371b534451284f8bcc",
     "docs/status/2026-10/graph-defects-20261028.md": "31623e048ee8241bd7d4bc8ab0884358f64ee17dd33b7b5c6445086a67406de3",
     "docs/status/2026-10/w100-eof-contract-20261013.md": "f8d0ef05a9b9d02a7118405d4bce0d6c4dbe4975b5138880b74a7cd995c2190c",
-    "docs/status/alpha-1.0-2plus1-checklist.md": "a17ee184c31459bbbfe26b1a68f2495975f753cd218a444335b0c788c2ac4a9e",
+    "docs/status/alpha-1.0-2plus1-checklist.md": "a7f903a5303a0472899e58aeb2fd0ed93b67d6300d5135d07849e07b5ea017f6",
     "docs/status/alpha-1.1-consolidation.md": "c24210e5af50ff0c1d9f0fea74efb982947486c547230718a00b59f6c6d106a2",
     "docs/status/decisions.md": "6baf8c8751f29439569ddbdb2543d9a5f9568a1a89861455c1962f242493725d",
     "docs/using/alpha-1.0-guide.md": "67cf180c2b33fd14127d44aeb7aa878852906e516b02e2126d4199b5ad3e2c10",
@@ -3204,5 +3204,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "f709d4ebb325d5c3b125aa70762f0c98b694c472"
+  "source_commit": "ddf3a5d2281290c7b6832016d2f586722feee367"
 }
