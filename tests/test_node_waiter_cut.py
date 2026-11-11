@@ -44,8 +44,11 @@ struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)server;return (struc
 void efs_conn_destroy(struct efs_conn *c){close((int)(intptr_t)c-1);close(peer[1]);}
 uint64_t efs_net_deadline_ms(void){return 0;}
 int efs_net_remaining_ms(int cap){if(silent_once){silent_once=0;return 0;}return cap;}
-int efs_conn_declare(struct efs_conn *c){(void)c;__atomic_fetch_add(&declares,1,__ATOMIC_SEQ_CST);if(delay_ms)usleep(delay_ms*1000);
- if(mode==ANSWER)return EFS_OK;silent_once=1;return EFS_ERR_NET;}
+int efs_conn_declare(struct efs_conn *c){
+ (void)c;__atomic_fetch_add(&declares,1,__ATOMIC_SEQ_CST);
+ if(delay_ms){usleep(delay_ms*1000);}
+ if(mode==ANSWER)return EFS_OK;
+ silent_once=1;return EFS_ERR_NET;}
 uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){(void)d;}
 int node_index_for_id(efs_node_id_t id){(void)id;return 0;}
