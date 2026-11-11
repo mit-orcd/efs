@@ -92,18 +92,16 @@ with tempfile.TemporaryDirectory(prefix='efs-read-admit-') as d:
  p=Path(d)/'test.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror',*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=60)
-# Server-mode readers never take h->mu to admit or begin; the locked
-# begin remains only for the !h->s harness path. Final authority predicates
-# are unchanged.
+# The direct (!h->s) mode is gone: readers never take h->mu to admit or begin, there is
+# no locked scalar admission and no locked begin in the waiter. Final authority
+# predicates are unchanged.
 a=s.index('static int host_read_index_admitted(');body=s[a:s.index('\n}',a)]
-adm=body[body.index('if(delegated) {'):body.index('} else {',body.index('if(delegated) {'))]
-assert 'host_read_admit_view(' in adm and 'pthread_mutex_lock' not in adm
-assert '!delegated && !floor.index' in body
+assert 'host_read_admit_view(' in body and 'pthread_mutex_lock' not in body and 'delegated' not in body
+assert 'host_read_admit(' not in s and 'host_read_probe_needed' not in s
 assert 'host_view_covers(&v, want, round, admitted_term)' in body
 assert 'if (v.term != admitted_term)' in body
 a=s.index('static int host_read_index_pair(');pair=s[a:s.index('\n}',a)]
-fast=pair[pair.index('if(h->s) {'):pair.index('pthread_mutex_lock(&h->mu);')]
-assert 'host_read_admit_view(' in fast and 'return EFS_OK;' in fast
+assert 'host_read_admit_view(' in pair and 'pthread_mutex_lock' not in pair and 'h->s' not in pair
 a=s.index('static void host_read_note_begin(');begin=s[a:s.index('static int host_read_admit_view(',a)]
 assert begin.index('host_read_note_begin(h,group,r);')<begin.index('return efs_raft_read_begin(r);')
-print('raft read admission: no h->mu on the server-mode reader path; ri_begun raised before read_begin PASS')
+print('raft read admission: no h->mu on the reader path and no direct mode; ri_begun raised before read_begin PASS')
