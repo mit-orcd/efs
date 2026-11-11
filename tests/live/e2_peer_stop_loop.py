@@ -2,7 +2,7 @@
 """E2 clean stop of a loaded peer client on a healthy cluster (K42/W164).
 
 Usage: python3 tests/live/e2_peer_stop_loop.py [--runs N] [--until-fail]
-           [--members 5] [--port-base 18500] [--suite] [--keep]
+           [--members 5] [--port-base 18500] [--suite] [--keep] [--leaders 0:1,2:4]
 
 Run from the root of a built tree (make, make tests/faults/efsd). Starts
 --members private efsd daemons on 127.0.0.1 ports PORT_BASE+1.. (discovery
@@ -21,7 +21,7 @@ and client logs, for the evidence summary). Needs fusermount3.
 import argparse, errno, os, re, shutil, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from k33_daemons import Cluster, Mount, payload  # noqa: E402
+from k33_daemons import Cluster, Mount, payload, place_leaders  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,6 +62,7 @@ def main():
     ap.add_argument('--load-s', type=float, default=8.0)
     ap.add_argument('--suite', action='store_true', help='also run posix_2client.py each run')
     ap.add_argument('--keep', action='store_true')
+    ap.add_argument('--leaders', default='', help='GROUP:NODE,... leaders placed before the loop (K112: 0:1,2:4)')
     a = ap.parse_args()
     work = Path(tempfile.mkdtemp(prefix='efs-e2-peer-', dir=os.environ.get('TMPDIR')))
     env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_')}
@@ -81,6 +82,9 @@ def main():
         for i in ids:
             c.wait_log(i, r'(formed: %d members|n=%d formed|membership revision \d+: %d members)'
                        % (a.members, a.members, a.members), timeout=120, run=False)
+        for g, n in (x.split(':') for x in a.leaders.split(',') if x):
+            place_leaders(c, int(n), groups=(int(g),))
+        print(f'leaders {a.leaders or "unplaced"}', flush=True)
         primary = Mount(c, 1, 'primary')
         shared = primary.path / 'shared'
         shared.mkdir()
