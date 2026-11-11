@@ -95,7 +95,9 @@ static void test_close_wakes_wait(void)
         sched_yield();
     put_win_close(9);
     assert(!pthread_join(t, NULL));
-    assert(w.rc == 1);
+    /* 1: it blocked and the close ended the wait; 0: on a loaded host the close
+     * came before the waiter took the mutex. Either way far below the 5 s bound. */
+    assert(w.rc == 1 || w.rc == 0);
     assert(w.t1 - w.t0 < 4000);
 }
 

@@ -1,5 +1,7 @@
 # PUT window ownership (Task U1)
 
+**Merge state (Nov 11):** merged into devel in wave 79 after an independent review that found the moved code identical in behaviour. The merge made `test_close_wakes_wait` independent of thread order (it could fail on a loaded host) and corrected the README claim that the case pins the wake; the two tests are listed under `client/put_window`. Left open: `put_window.h` and `client_internal.h` both declare `efs_dcache_put_win_wait`; some contract clauses have no discriminating case (wakes every waiter, `put_win_total`).
+
 **Status block.** Source commit: devel `67fc3b4a1`; before-half `7a0b1bf19`; ownership `696378a6e`. Verdict: PASS. Remaining failures: none. Active run: none. Next action: coordinator review and merge; `read.c` should include `put_window.h` and drop the duplicate `efs_dcache_put_win_wait` declaration in `client_internal.h` (two files outside this task). Merge state: branch `claude/task-u1-put-window-72984d`, unmerged.
 
 ## Purpose

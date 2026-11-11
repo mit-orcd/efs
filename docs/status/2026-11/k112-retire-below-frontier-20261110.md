@@ -1,5 +1,7 @@
 # K112: a clean stop retires the revoked session's rows below the frontier (Task FS)
 
+**Merge state (Nov 11):** merged into devel in wave 79 with its second round (Task FV). The merge replaced the time threshold in step 1 of `tests/test_k42_peer_stop_open.py` by an ordering check (the peer must exit while the OPEN append is still held). K112 is VERIFY; the RDMA five-member stop loop is owed.
+
 **Status (Nov 10):** source commits `4c70e2542` (change), `b63cf2750` (test), `af776509c` (loop option), branch
 `claude/intelligent-shirley-a21c12`, **unmerged**, not pushed. **Verdict: PASS for the unit tests, `make test` and ASan; TSan has one failure that also fails on devel (`reclaim`); the stop is only partly faster (see the loop table), so K112 is not shown closed.** Remaining: the RDMA five-member
 loop, a look at the aborted-PREPARE retries (below). Next action: the coordinator decides at the merge.

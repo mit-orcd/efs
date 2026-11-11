@@ -4,9 +4,13 @@
 
 ## Recent evidence and remaining acceptance
 
+- [W123 branch review and second set of ports](ledger/20261110-048-w123-ports.md): **PASS on the port branch, no K row yet for three devel defects, blocks alpha: coordinator to rule**
+- [PUT-window ownership](ledger/20261110-047-put-window-ownership.md): **PASS, no K row, blocks alpha: no**
 - [Wave 78 merge](ledger/20261110-046-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `8457a9664`)**
 - [Failure routes](ledger/20261110-045-failure-routes.md): **PASS, no K row, blocks alpha: no**
 - [K row summaries](ledger/20261110-044-k-row-summaries.md): **PASS, no K row, blocks alpha: no**
+- [K106 (a): a request in flight to a member that halts (Task FR)](ledger/20261110-043-k106a-inflight-wait.md): **PASS for the covered paths on a branch, K106 (a) not closed for the uncovered ones**
+- [K112 retire below the frontier (Task FS)](ledger/20261110-042-k112-retire-below-frontier.md): **change committed on a task branch (unmerged); unit tests fail on devel and pass, 120 of 120 clean stops pass, WAIT_OPEN replies 0 (devel 86 to 103 in slow loops), maximum revoke 3.5 to 4.7 s against 6.4 to 7.4 s on devel, not back to the 0.3 s of a conflict-free loop; K112 not shown closed**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
 - [Ledger split into one file per entry (Task T2)](ledger/20261110-038-ledger-split.md): **PASS, no K row, blocks alpha: no**
 - [K register split](ledger/20261110-037-k-register-split.md): **PASS except the 170 KB size target, no K row, blocks alpha: no**
