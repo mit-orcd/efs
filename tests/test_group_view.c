@@ -19,13 +19,18 @@
  * deadline has passed leaves no slot occupied and the floor as it was; a
  * wake with no sleeper changes nothing.
  *
- * Not covered (they need to know that another thread is blocked, which cannot
- * be known without polling or a sleep): the wake of a blocked sleeper in
- * modes 0 and 1, the signal after the wait lock is released, and the fall-back to the
- * shared condition variable when all HOST_WAITERS slots are busy. */
+ * A blocked mode-0 sleeper is counted by group_view_waiting and woken by a
+ * publish that satisfies it (the main thread knows the sleeper is inside its
+ * condition wait because it can take the wait lock only then).
+ *
+ * Not covered: the wake of a blocked sleeper in mode 1, the signal after the
+ * wait lock is released, and the fall-back to the shared condition variable
+ * when all HOST_WAITERS slots are busy. */
 #include "group_view.h"
 #include <assert.h>
 #include <pthread.h>
+#include <semaphore.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -314,6 +319,53 @@ static void test_wake_without_sleeper_changes_nothing(void)
     free_views(gv);
 }
 
+struct sleeper {
+    struct group_views *gv;
+    sem_t locked;
+    struct timespec end;
+};
+
+static void *sleeper_thread(void *p)
+{
+    struct sleeper *s = p;
+
+    group_view_wait_lock(s->gv);
+    sem_post(&s->locked);
+    host_waiter_sleep(s->gv, GROUP, 0, 9, 0, &s->end, 0, 0, 0, NULL); /* mode 0: until applied >= 9 */
+    group_view_wait_unlock(s->gv);
+    return NULL;
+}
+
+static void test_blocked_sleeper_is_counted_and_woken(void)
+{
+    struct group_views *gv = new_views();
+    struct efs_raft c = leader_core(4);
+    struct sleeper s = {.gv = gv};
+    struct timespec now;
+    pthread_t t;
+
+    host_publish_view(gv, 1, &c);
+    assert(!sem_init(&s.locked, 0, 0));
+    clock_gettime(CLOCK_REALTIME, &s.end);
+    s.end.tv_sec += 30; /* a failure bound for the sleeper, never reached when the wake works */
+    assert(!pthread_create(&t, NULL, sleeper_thread, &s));
+    sem_wait(&s.locked);
+    /* The sleeper holds the wait lock until its condition wait releases it, so
+     * this lock is granted only once the sleeper is registered and asleep. */
+    group_view_wait_lock(gv);
+    group_view_wait_unlock(gv);
+    assert(group_view_waiting(gv) == 1); /* the reaper's yield test sees it */
+    c = leader_core(9);
+    host_publish_view(gv, 1, &c);
+    host_waiters_wake(gv);
+    assert(!pthread_join(t, NULL));
+    clock_gettime(CLOCK_REALTIME, &now);
+    assert(now.tv_sec < s.end.tv_sec - 10); /* woken by the publish, not by its bound */
+    assert(!group_view_waiting(gv));
+    sem_destroy(&s.locked);
+    free_views(gv);
+}
+
 static int g_argc, g_list;
 static char **g_argv;
 static char *g_used;
@@ -354,6 +406,7 @@ int main(int argc, char **argv)
     RUN(test_publish_before_bracket_is_seen_no_sleep);
     RUN(test_passed_deadline_sleep_leaves_no_slot);
     RUN(test_wake_without_sleeper_changes_nothing);
+    RUN(test_blocked_sleeper_is_counted_and_woken);
     if (g_list)
         return 0;
     for (int i = 1; i < argc; i++)

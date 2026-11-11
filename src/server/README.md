@@ -86,7 +86,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 | `host_publish_view` with an unchanged core leaves the stamp (and the sequence) alone | `test_unchanged_publish_keeps_stamp` | `make tests/test_group_view && ./tests/test_group_view test_unchanged_publish_keeps_stamp` |
 | A changed publish is seen whole with every field, and moves the stamp once | `test_changed_publish_moves_stamp_and_shows_fields` | `make tests/test_group_view && ./tests/test_group_view test_changed_publish_moves_stamp_and_shows_fields` |
 | An absent replica (NULL core) clears `has` and the proof fields; the stamp moves only if `has` was set | `test_absent_replica_clears_has_and_proof` | `make tests/test_group_view && ./tests/test_group_view test_absent_replica_clears_has_and_proof` |
-| An unknown or never-published group reads as absent with leader -1 | `test_unknown_group_reads_as_absent` | `make tests/test_group_view && ./tests/test_group_view test_unknown_group_reads_as_absent` |
+| An unknown group reads as absent with leader -1; a never-published group reads as absent (test `has` before `leader`) | `test_unknown_group_reads_as_absent` | `make tests/test_group_view && ./tests/test_group_view test_unknown_group_reads_as_absent` |
 | `host_view_get` racing a publisher never returns a mixed round, term and completion (count-bounded) | `test_reader_never_sees_a_mixed_publish` | `make tests/test_group_view && ./tests/test_group_view test_reader_never_sees_a_mixed_publish` |
 | The pure predicates `host_view_covers`, `host_view_wait_apply`, `host_view_quorum_index`, `host_read_wait_ready` | `test_predicates` | `make tests/test_group_view && ./tests/test_group_view test_predicates` |
 | `host_read_floor_ready` for wait modes 2 and 3: the floor freezes the first proof; a changed context refuses; an idle round wakes mode 2 and not mode 3 | `test_floor_ready_modes_2_and_3` | `make tests/test_group_view && ./tests/test_group_view test_floor_ready_modes_2_and_3` |
@@ -94,6 +94,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 | A publish before the bracket is seen by the re-read under the lock (no lost wakeup, single-threaded) | `test_publish_before_bracket_is_seen_no_sleep` | `make tests/test_group_view && ./tests/test_group_view test_publish_before_bracket_is_seen_no_sleep` |
 | `host_waiter_sleep` with a passed deadline leaves no slot occupied and the floor as it was | `test_passed_deadline_sleep_leaves_no_slot` | `make tests/test_group_view && ./tests/test_group_view test_passed_deadline_sleep_leaves_no_slot` |
 | `host_waiters_wake` with no sleeper changes nothing | `test_wake_without_sleeper_changes_nothing` | `make tests/test_group_view && ./tests/test_group_view test_wake_without_sleeper_changes_nothing` |
+| A blocked mode-0 sleeper is counted by `group_view_waiting` (the reaper's yield test) and woken by a publish that satisfies it | `test_blocked_sleeper_is_counted_and_woken` | `make tests/test_group_view && ./tests/test_group_view test_blocked_sleeper_is_counted_and_woken` |
 | The wake of a blocked sleeper (modes 0 and 1), the signal after `cv_mu` is released, the fall-back to `applied_cv` when all 512 slots are busy | none (needs another thread known to be blocked) | `python3 scripts/tests_for.py server/group_view` |
 
 ## Open findings

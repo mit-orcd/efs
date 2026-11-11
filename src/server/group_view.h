@@ -52,18 +52,22 @@
  *                            core, or NULL when there is none. The owner
  *                            reads the core getters and stores a new view
  *                            only if a field changed; an unchanged state
- *                            leaves the sequence and the stamp alone. A
- *                            NULL core clears has and every proof field and
- *                            bumps the stamp if has was set. It takes
- *                            view_mu only to store. Returns nothing.
+ *                            of a present core leaves the sequence and the
+ *                            stamp alone. A NULL core clears has and every
+ *                            proof field and bumps the stamp if has was set
+ *                            (it moves the sequence each time, and stores
+ *                            the stamp first); it does not touch leader.
+ *                            It takes view_mu only to store. Returns nothing.
  *   host_view_get(gv, group, &v)
  *                            any lock state, no lock held on return. v is
  *                            a coherent copy of exactly one publish (round,
  *                            term and completion belong together). An
- *                            unknown group, or a group with no replica,
- *                            gives has = 0 and leader = -1. After
- *                            HOST_VIEW_TRIES (64) odd sequence loads in a row
- *                            the reader waits on view_mu instead of
+ *                            unknown group gives has = 0 and leader = -1.
+ *                            A known group with no replica gives has = 0;
+ *                            its leader is then the last one published (0
+ *                            if none was), so test has before leader. After
+ *                            HOST_VIEW_TRIES (64) odd sequence loads in one
+ *                            call the reader waits on view_mu instead of
  *                            spinning, so a preempted publisher is never
  *                            starved (K107). static inline: it runs on every
  *                            metadata request.
@@ -94,8 +98,8 @@
  *   after it finds the sleeper registered, because the wake scans under
  *   the same lock. Between lock and unlock a caller may call host_view_get,
  *   test its own predicate, call host_waiter_sleep, read the clock and log.
- *   It must not take any other lock, make an RPC, or return without the
- *   unlock. A caller holds h->mu either not at all or before the lock
+ *   It must not take any other lock (the logger's own try-lock aside), make
+ *   an RPC, or return without the unlock. A caller holds h->mu either not at all or before the lock
  *   (h->mu, then cv_mu); none holds cv_mu or view_mu outside the bracket.
  *   host_waiter_sleep modes (any): 0 wakes when applied >= idx or the
  *   replica goes away; 1 when the view stamp moves past `seen`; 2 when
@@ -109,7 +113,8 @@
  * What a reader may assume. A struct host_view from host_view_get is
  *   coherent and owned by the caller; nothing is held. It may be stale the
  *   moment it is returned. stamp moves after every other field of a changed
- *   publish, so a waiter that saw the new stamp has the new fields. */
+ *   publish of a present core, so a waiter that saw the new stamp has the
+ *   new fields. */
 
 #define GROUP_VIEW_NGROUPS 2
 #define HOST_WAITERS 512
