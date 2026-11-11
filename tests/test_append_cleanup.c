@@ -566,6 +566,6 @@ int main(void)
  puts("append cleanup (K15/W64): lost reply retired by fence or abandon, frontier advances, late completion/replay refused, completion never overtaken, live owner untouched PASS");
  puts("append cleanup (K42 reopened): a dead inode's rows of the revoked session are deleted by the step itself, not left to the reaper; the other session's rows and the reap completion stay PASS");
  puts("append cleanup (K112): rows of the revoked session wholly below min(base_size, frontier) retire under a foreign OPEN; other sessions, other epochs, straddling and higher rows stay; pages of 8 PASS");
- puts("append cleanup (K42): revoked receipt waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide), retired after the foreign REPORT PASS");
+ puts("append cleanup (K42): a row of the revoked session above the floor waits on a foreign OPEN (named), aborted PREPARE named (also with a failed ABORT decide) PASS");
  return 0;
 }

@@ -1054,7 +1054,10 @@ void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn)
         int remaining = efs_net_remaining_ms(INT_MAX);
         int64_t now = monotonic_ms();
         if (unbounded && now - start >= bound) {
+            pthread_mutex_lock(&g_client.conn_lock[idx]);
             shutdown(conn->fd, SHUT_RDWR);
+            g_client.conn_wait[idx][slot] = CONN_WAIT_CUT; /* a late reply must not put it back in the pool */
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
             break;
         }
         if (!remaining)

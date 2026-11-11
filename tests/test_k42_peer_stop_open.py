@@ -2,17 +2,17 @@
 """K42/W164: a clean unmount on a healthy cluster while another client holds
 an OPEN append on a file this client appended to (Task A candidate D).
 
-The stopping client's revoke must retire its append receipt on that inode;
-the server refuses while the other session's OPEN reservation stands (its
-REPORT resolves it). The fault hook EFS_FAULT_APPEND_HOLD_FILE (faults efsd)
-holds that REPORT, so the OPEN stands as long as the test needs. Before K42 the refusal was a bare
-BUSY and the unmount failed at once: `revoke rc=-13 phase=cleanup`, exit 1.
-Now the server names the wait and the client repeats the step within its
-20 s per-shard budget:
+The stopping client's revoke must retire its append receipt on that inode.
+The fault hook EFS_FAULT_APPEND_HOLD_FILE (faults efsd) holds the other
+session's REPORT, so its OPEN reservation stands as long as the test needs.
+Before K42 the server answered a bare BUSY and the unmount failed at once
+(`revoke rc=-13 phase=cleanup`, exit 1); K42 named the wait and the client
+repeated the step within its 20 s per-shard budget; since K112 the stop's
+own retirement removes the rows below the frontier while the OPEN stands:
 
-1. The primary's append stays OPEN for HOLD_S after the peer's unmount
-   begins: the peer's DONE rows lie below the frontier (K112), are retired
-   while that append is held, and the peer exits 0 well before HOLD_S.
+1. The primary's append is OPEN and held: the peer's DONE rows lie below
+   the frontier (K112), are retired, and the peer exits 0 while the append
+   is still held (the hold is released only after the peer has exited).
 2. A foreign OPEN past the budget (the hook's "cleanup" mode answers that
    wait for every append cleanup step; a real writer's REPORT bound and the
    server resolve an OPEN in about 16 s): the peer fails closed, exit 1, its
@@ -69,10 +69,11 @@ def held(c, ino, timeout=30):
     raise AssertionError(f'append of ino {ino} never held')
 
 
-def peer_round(c, primary, hold, name, hold_s, cleanup=False):
+def peer_round(c, primary, hold, name, hold_s, cleanup=False, early=False):
     """Peer appends to a fresh file; the primary's append to it stays OPEN
     for hold_s while the peer unmounts (cleanup: the hook answers the OPEN
-    wait instead). Returns the peer's results."""
+    wait instead; early: the peer must exit while the OPEN is still held,
+    so the hold is released only after it has). Returns the peer's results."""
     peer = Mount(c, 2, name)
     writer = None
     try:
@@ -87,13 +88,18 @@ def peer_round(c, primary, hold, name, hold_s, cleanup=False):
             held(c, ino)  # the primary's reservation is OPEN, its REPORT held
         t0 = time.monotonic()
         unmount(peer)
-        remaining = hold_s - (time.monotonic() - t0)
-        if remaining > 0:
-            time.sleep(remaining)
+        if early:
+            rc, rev, revoke_s, lines = finish(peer)
+            assert writer.is_alive() and hold.exists(), 'the OPEN append was not held when the peer exited'
+        else:
+            remaining = hold_s - (time.monotonic() - t0)
+            if remaining > 0:
+                time.sleep(remaining)
         hold.unlink()
         writer.join(timeout=60)
         assert not writer.is_alive(), 'primary append still blocked after the hold'
-        rc, rev, revoke_s, lines = finish(peer)
+        if not early:
+            rc, rev, revoke_s, lines = finish(peer)
         data = (primary.path / f).read_text()
         assert data.count('\n') == 3 and 'primary held' in data, data
         return rc, rev, revoke_s, lines
@@ -130,11 +136,10 @@ def main():
 
         # 1. A foreign OPEN shorter than the budget: the peer's rows below the
         #    frontier are retired while the OPEN append is held (K112), exit 0.
-        rc, rev, revoke_s, _ = peer_round(c, primary, hold, 'peer1', HOLD_S)
+        rc, rev, revoke_s, _ = peer_round(c, primary, hold, 'peer1', HOLD_S, early=True)
         assert rc == 0 and ' rc=0 ' in rev, rev
-        assert revoke_s < HOLD_S - 0.5, (revoke_s, rev)
         print(f'1. peer rows below the frontier retired while the OPEN append is held: '
-              f'revoke {revoke_s:.2f} s < {HOLD_S - 0.5:.1f} s, exit 0 PASS', flush=True)
+              f'revoke {revoke_s:.2f} s, exit 0 before the hold was released PASS', flush=True)
 
         # 2. Past the budget: fail closed with shard and reason, resumable.
         rc, rev, revoke_s, lines = peer_round(c, primary, hold, 'peer2', BUDGET_S + 6, cleanup=True)

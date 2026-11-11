@@ -175,7 +175,9 @@ int main(int argc,char **argv){
   /* A live member that answers every declaration but never sends the reply, no operation deadline: the wait ends
    * at the conn's recv bound with the conn shut down, no cut verdict, the member not marked down. */
   mode=ANSWER;start(&w[0],0);pthread_join(w[0].t,NULL);
-  assert(recv(w[0].sv[0],&x,1,MSG_DONTWAIT)==0&&!g_client.node_down_until_ms[0]&&!g_client.node_mute[0]);finish(&w[0],0);
+  assert(recv(w[0].sv[0],&x,1,MSG_DONTWAIT)==0&&!g_client.node_down_until_ms[0]&&!g_client.node_mute[0]);
+  assert(g_client.conn_wait[0][0]==CONN_WAIT_CUT);               /* shut down at the bound: release would destroy it */
+  finish(&w[0],0);
  }
  puts("client waiter cut: scenario PASS");
  return 0;
