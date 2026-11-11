@@ -422,6 +422,10 @@ python3 tests/test_write_queue.py	30	1	fast suite, 30 s ceiling	test	client/efs_
 python3 tests/test_conn_checkout_budget.py	30	1	fast suite, 30 s ceiling	test	client/node_cache	Production pool checkout includes spurious wakeups and late connects in one budget
 python3 tests/test_node_reprobe.py	30	1	fast suite, 30 s ceiling	test	client/node_cache	A peer in client cooldown is reprobed in the background, never by the caller
 python3 tests/test_node_probe_exchange.py	30	1	fast suite, 30 s ceiling	test	client/node_cache	A down mark ends only when the peer answers the protocol declaration; shutdown waits for the probe
+python3 tests/test_node_waiter_cut.py halted	5	1	1.25 x slowest of three solo runs, rounded up to 5 s	test	client/node_cache	A request waiting on a halted member is cut once the exchange finds it silent
+python3 tests/test_node_waiter_cut.py slow	5	1	1.25 x slowest of three solo runs, rounded up to 5 s	test	client/node_cache	A request waiting on a slow but live member is not cut and completes
+python3 tests/test_node_waiter_cut.py two	5	1	1.25 x slowest of three solo runs, rounded up to 5 s	test	client/node_cache	Two waiters on one node run one exchange and both get the verdict
+python3 tests/test_node_waiter_cut.py noreply	5	1	1.25 x slowest of three solo runs, rounded up to 5 s	test	client/node_cache	A live member that never sends the reply ends the wait at the conn bound, conn shut down
 python3 tests/test_pack_budget.py	30	1	fast suite, 30 s ceiling	test	server/packer	Packer busy rate: the floor until space pressure (unpacked bytes or quota usage), then linear to the idle rate
 python3 tests/test_pack_compact_schedule.py	30	1	fast suite, 30 s ceiling	test	server/packer	Compaction is scheduled maintenance: idle batches and a daily window, never while busy
 python3 tests/test_pack_base_reads.py	30	1	fast suite, 30 s ceiling	test	server/packer,common/checksum,common/pack_ledger,common/packed_segment,data	Packed bases are read a segment at a time: files whose base records share a segment cost one segment read and

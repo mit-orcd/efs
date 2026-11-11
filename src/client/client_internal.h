@@ -148,6 +148,11 @@ struct efs_client {
     int node_probe_fd[EFS_MAX_NODES]; /* the running probe's socket, -1 none: shutdown cuts it short */
     int node_probe_stop; /* shutdown began: no probe starts or re-arms (atomic) */
     int node_mute[EFS_MAX_NODES]; /* last contact: TCP accepted, declaration unanswered */
+    /* K106 (a): conns whose owner waits for a replay-safe reply (a verdict may
+     * cut them), the one waiter running the exchange, and when the last ended. */
+    int conn_wait[EFS_MAX_NODES][EFS_CLIENT_CONNS_PER_NODE];
+    int node_exch_busy[EFS_MAX_NODES];
+    int64_t node_exch_end_ms[EFS_MAX_NODES];
 
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on
@@ -790,6 +795,9 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id);
 
 /* Return a healthy connection to the pool. */
 void efs_client_conn_release(efs_node_id_t node_id, struct efs_conn *conn);
+/* Before a replay-safe reply wait on a TCP conn: returns when the reply is
+ * readable, the thread's deadline is out, or the conn was cut (K106 a). */
+void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn);
 
 /* Close a broken connection and free its pool slot. Also closes other
  * idle pooled conns to the same node (they are often stale after an

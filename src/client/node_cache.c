@@ -1011,6 +1011,102 @@ void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+/* K106 (a): a request waiting for its reply from a member that halted (SIGSTOP,
+ * a hung host) would wait the whole 30 s transport timeout. A waiter that has
+ * heard nothing for EFS_NODE_PROBE_MS runs one real exchange on its own thread
+ * (it is waiting anyway); one waiter per node at a time, the others keep
+ * polling their own conn. An answer means the member is alive and the request
+ * merely slow: keep waiting. Silence for the whole local bound marks the member
+ * down and shuts down every conn whose owner waits here, so those recv calls
+ * fail and take the callers' existing retry. The waiter's own deadline still
+ * ends the wait as before. Only TCP conns (RDMA is left waiting as today). */
+void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0 || !conn || conn->rc || conn->fd < 0)
+        return;
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int slot = slot_for_conn((uint32_t)idx, conn);
+    if (slot >= 0)
+        g_client.conn_wait[idx][slot] = 1;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    if (slot < 0)
+        return;
+    /* No operation deadline: the conn's recv timeout bounded this wait before
+     * and bounds it still; at that bound the conn is shut down so the recv
+     * fails at once instead of waiting a second time. */
+    int unbounded = efs_net_deadline_ms() == 0;
+    int bound = conn->recv_timeout_ms ? conn->recv_timeout_ms : EFS_IO_TIMEOUT_MS;
+    int64_t start = monotonic_ms(), last = start;
+    for (;;) {
+        int remaining = efs_net_remaining_ms(INT_MAX);
+        int64_t now = monotonic_ms();
+        if (unbounded && now - start >= bound) {
+            shutdown(conn->fd, SHUT_RDWR);
+            break;
+        }
+        if (!remaining)
+            break;
+        if (now - last >= EFS_NODE_PROBE_MS) {
+            char host[64] = {0};
+            uint16_t port;
+            pthread_mutex_lock(&g_client.conn_lock[idx]);
+            int64_t from = g_client.node_exch_end_ms[idx] > last ? g_client.node_exch_end_ms[idx] : last;
+            int run = now - from >= EFS_NODE_PROBE_MS && !g_client.node_exch_busy[idx];
+            port = g_client.nodes[idx].port;
+            if (run) {
+                g_client.node_exch_busy[idx] = 1;
+                strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+            }
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
+            last = now; /* not run: another waiter's exchange is the verdict to wait for */
+            if (run) {
+                int verdict = node_exchange(host, port, idx, 0);
+                now = monotonic_ms();
+                int cut = 0;
+                pthread_mutex_lock(&g_client.conn_lock[idx]);
+                g_client.node_exch_busy[idx] = 0;
+                g_client.node_exch_end_ms[idx] = now;
+                if (verdict == NODE_EX_SILENT) {
+                    g_client.node_fail_streak[idx] = EFS_NODE_DOWN_FAILS;
+                    g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+                    int n = pool_size();
+                    for (int s = 0; s < n; s++) {
+                        if (g_client.conn_wait[idx][s] && g_client.conn[idx][s]) {
+                            shutdown(g_client.conn[idx][s]->fd, SHUT_RDWR);
+                            cut++;
+                        }
+                    }
+                }
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                if (cut)
+                    fprintf(stderr, "node-waiter-cut: node=%u conns=%d silent for the whole exchange bound\n",
+                            (unsigned)node_id, cut);
+                last = now;
+            }
+            remaining = efs_net_remaining_ms(INT_MAX);
+            if (!remaining)
+                break;
+        }
+        int64_t wait = last + EFS_NODE_PROBE_MS - monotonic_ms();
+        if (wait < 1)
+            wait = 1;
+        if (wait > remaining)
+            wait = remaining;
+        if (unbounded && wait > start + bound - now)
+            wait = start + bound - now;
+        if (wait < 1)
+            wait = 1;
+        struct pollfd pfd = {.fd = conn->fd, .events = POLLIN};
+        int ready = poll(&pfd, 1, (int)wait);
+        if (ready > 0 || (ready < 0 && errno != EINTR))
+            break;
+    }
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    g_client.conn_wait[idx][slot] = 0;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+}
+
 static char g_shutdown_reason[192];
 
 const char *efs_client_shutdown_reason(void)

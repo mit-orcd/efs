@@ -131,6 +131,10 @@ heartbeat_shutdown|tests/test_heartbeat_shutdown.py
 revoke_parallel|tests/test_session_revoke_parallel.py
 receipt_table|tests/test_w155_receipt_table.py
 put_ticket_batch|tests/test_put_ticket_batch.py
+waiter_cut_halted|tests/test_node_waiter_cut.py halted
+waiter_cut_slow|tests/test_node_waiter_cut.py slow
+waiter_cut_two|tests/test_node_waiter_cut.py two
+waiter_cut_noreply|tests/test_node_waiter_cut.py noreply
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
 # client read and write paths through efs-fuse under load (D4, short), and
 # the K38 swept-hint STALE replay through efs-fuse, and the K88 per-chunk
