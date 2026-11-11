@@ -20,9 +20,12 @@ code=r'''
 #define BO_COUNT(key) ((void)0)
 #define HOST_APPLIED_MAX_TAIL 1024ull
 struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;uint64_t cursor_durable;};
-struct efs_raft_host {struct group g[2];uint64_t applied_persist_us;};
+struct efs_raft_host;
+/* the owner is stubbed: the view answers from the host's own group table */
+struct group_views {struct efs_raft_host *host;};
+struct efs_raft_host {struct group g[2];uint64_t applied_persist_us;struct group_views gv;};
 struct host_view {int has;};
-static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){v->has=h->g[group>>1].hosted && h->g[group>>1].r!=NULL;}
+static void host_view_get(struct group_views *gv,uint8_t group,struct host_view *v){struct efs_raft_host *h=gv->host;v->has=h->g[group>>1].hosted && h->g[group>>1].r!=NULL;}
 static int writes,syncs,fail_open,fail_write,fail_sync,closes;
 static uint8_t record[16];
 #define O_RDWR 2
@@ -41,7 +44,7 @@ int main(void){
  for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);i++)assert(host_applied_interval(bad[i],&us)==EFS_ERR_INVAL);
  assert(host_applied_interval("1000",&us)==EFS_OK&&us==1000000);
  assert(host_applied_interval("100",&us)==EFS_OK&&us==100000);
- struct efs_raft_host h={0};h.applied_persist_us=us;h.g[0]=(struct group){1,&h,10,100000,3,0,0};
+ struct efs_raft_host h={0};h.gv.host=&h;h.applied_persist_us=us;h.g[0]=(struct group){1,&h,10,100000,3,0,0};
  assert(persist_applied(&h,0,11,150000,0)==EFS_OK&&!writes);
  assert(persist_applied(&h,0,12,200000,0)==EFS_OK&&writes==1&&syncs==1);
  assert(h.g[0].applied_saved==12&&h.g[0].applied_saved_us==200000);

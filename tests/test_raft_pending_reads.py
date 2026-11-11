@@ -23,7 +23,9 @@ int efs_batch_obs_on;
 void efs_batch_obs_count(enum efs_batch_counter c){(void)c;}
 struct server{int unused;};
 struct host_inbox_item{uint8_t*buf;uint32_t len;uint64_t queued_us;int read_noted;};
-struct efs_raft_host{struct server*s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host{struct group_views gv;struct server*s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
 static struct efs_raft_host *current;
 static int calls,decoded,published,woken,expected_result,forced_result=-1,append_race;
 static struct host_inbox_item arrival;
@@ -36,7 +38,7 @@ int efs_wire_raft_decode(const uint8_t*p,uint32_t n,struct efs_raft_msg*m,uint8_
 static struct efs_raft*group_raft(struct efs_raft_host*h,uint8_t g){(void)h;return (struct efs_raft*)(uintptr_t)(g+1);}
 int efs_raft_read_control(struct efs_raft*r,const struct efs_raft_msg*m){(void)r;(void)m;assert(!pthread_mutex_trylock(&current->inbox_mu));pthread_mutex_unlock(&current->inbox_mu);if(append_race){pthread_mutex_lock(&current->inbox_mu);current->inbox[current->inbox_n++]=arrival;current->inbox_bytes+=arrival.len;pthread_mutex_unlock(&current->inbox_mu);append_race=0;}calls++;return expected_result;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){assert(h==current&&g==2);published++;}
-static void host_waiters_wake(struct efs_raft_host*h){assert(h==current);woken++;}
+static void host_waiters_wake(struct group_views*gv){assert((void*)gv==(void*)current);woken++;}
 '''+s[pure:pure_end]+s[a:b]+r'''
 int main(int argc,char **argv){
  struct server s={argc>1?atoi(argv[1]):0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572};current=&h;h.g[1].group=2;

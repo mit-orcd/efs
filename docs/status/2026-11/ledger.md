@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [Group view ownership Task V3](ledger/20261111-005-group-view-ownership.md): **branch claude/task-v3-group-view-ceb2d8, not merged, Nov 11**
 - [K114 uncovered-waits design](ledger/20261111-004-k114-uncovered-waits-design.md): **design study, Nov 11 (Task FY), no code changed**
 - [Raft host lifecycle inventory](ledger/20261111-003-raft-host-lifecycle-inventory.md): **PASS, no K row, blocks alpha: no**
 - [PUT window Task V1](ledger/20261111-002-put-window-ownership.md): **branch claude/task-v1-put-window-2ace19, not merged, Nov 11**

@@ -18,9 +18,11 @@ code=r'''
 #define EFS_META_LANES 64
 typedef uint64_t efs_ino_t;
 struct efs_meta_row {unsigned mode,layout;uint64_t used_shards,active_lanes;};
-struct efs_raft_host {void *kv;};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;void *kv;};
 struct host_view {int has,leader;};
-static inline void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){(void)h;v->has=1;v->leader=group+1;}
+static inline void host_view_get(struct group_views *gv,uint8_t group,struct host_view *v){(void)gv;v->has=1;v->leader=group+1;}
 
 static struct efs_meta_row row;
 static unsigned reads[3],inode_reads,unhosted;
@@ -40,7 +42,7 @@ static void host_need_both(uint8_t need[2]){need[0]=0;need[1]=2;}
 static int host_pick_peer(struct efs_raft_host *h,uint8_t *need,int n,int skip){(void)h;assert(need[0]==0&&need[1]==2&&n==2&&skip==-1);return 4;}
 ''' + s[a:b] + r'''
 static void reset(void){reads[0]=reads[2]=inode_reads=unhosted=0;read_error=inode_error=coordinator_unhosted=hint_error=pair_error=0;row=(struct efs_meta_row){.mode=S_IFDIR,.layout=1,.used_shards=15};scheduling_hint=row;}
-int main(void){struct efs_raft_host h={0};int hint;struct host_view view;host_view_get(&h,0,&view);assert(view.leader==1);
+int main(void){struct efs_raft_host h={0};int hint;struct host_view view;host_view_get(&h.gv,0,&view);assert(view.leader==1);
  reset();hint=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&reads[2]==1&&inode_reads==1);
  reset();hint=1;row.used_shards=1;assert(!host_read_inode_lanes_covered(&h,1,&hint,1));assert(!reads[0]&&!reads[2]&&inode_reads==1&&hint==1);
  reset();assert(!host_read_inode_lanes_covered(&h,2,&hint,1));assert(reads[2]==1&&!reads[0]&&inode_reads==1);

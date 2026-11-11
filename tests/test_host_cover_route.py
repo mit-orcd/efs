@@ -21,7 +21,9 @@ code=r"""
 #include <stdio.h>
 #define HOST_NGROUPS 2
 struct host_group {struct efs_raft *r;uint32_t voters;int retired;};
-struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group g[2];};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;int n,raft_id;struct host_group g[2];};
 struct host_view {int has,leader;uint32_t voters;};
 static int leaders[2];static uint32_t masks[2];
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){return g==0||g==2?&h->g[g/2]:NULL;}
@@ -30,7 +32,8 @@ static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&
 enum{WP_COVER};static int write_prof_on(void){return 0;}static uint64_t wprof_now(void){return 0;}static void wprof_add(int p,uint64_t us){(void)p;(void)us;}
 /* The published routing snapshot: a local replica's leader and committed
  * voters (has=0 without one). */
-static void host_view_get(struct efs_raft_host*h,uint8_t group,struct host_view*v){
+static void host_view_get(struct group_views*gv,uint8_t group,struct host_view*v){
+ struct efs_raft_host*h=(struct efs_raft_host*)gv;
  struct host_group*s=group_slot(h,group);v->has=s&&s->r;
  v->leader=v->has?leaders[(uintptr_t)s->r-1]:-1;v->voters=v->has?masks[(uintptr_t)s->r-1]:0;}
 /* Routing must never take the host mutex. */

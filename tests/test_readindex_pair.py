@@ -18,7 +18,9 @@ code=r'''
 struct efs_raft {int role,pending,fail,quorum;uint64_t round,term,commit,read_index;};
 struct host_group {uint64_t ri_begun,ri_request;};
 struct server {int unused;};
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];struct server *s;int absent;};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];struct server *s;int absent;};
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->g[group];}
 struct host_read_admission {uint64_t want,round,term;};
 struct host_view {int has,role;uint64_t commit,term,read_round;};
@@ -39,7 +41,8 @@ static int efs_raft_read_pending(struct efs_raft*r){return r->pending;}
 static int efs_raft_read_quorum(struct efs_raft*r){return r->quorum;}
 static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->read_index=r->commit;r->round++;r->pending=1;r->quorum=0;return 0;}
 static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,struct efs_raft *r);
-static void host_view_get(struct efs_raft_host *h,uint8_t g,struct host_view *v){
+static void host_view_get(struct group_views *gv,uint8_t g,struct host_view *v){
+ struct efs_raft_host *h=(struct efs_raft_host *)gv;
  v->has=h->absent!=g+1;v->role=h->core[g].role;v->term=h->core[g].term;v->commit=h->core[g].commit;v->read_round=h->core[g].round;
  if(g==2 && late_commit){
   assert(!host_read_begin_tracked(h,0,&h->core[0]));assert(!host_read_begin_tracked(h,2,&h->core[2]));

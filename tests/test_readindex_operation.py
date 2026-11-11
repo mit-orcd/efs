@@ -14,9 +14,11 @@ code = r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-struct efs_raft_host {struct efs_kv *kv;};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;struct efs_kv *kv;};
 struct host_view {int has,leader;};
-static void host_view_get(struct efs_raft_host *h,uint8_t g,struct host_view *v){(void)h;v->has=1;v->leader=g+1;}
+static void host_view_get(struct group_views *gv,uint8_t g,struct host_view *v){(void)gv;v->has=1;v->leader=g+1;}
 
 struct host_txn_read_context {struct efs_raft_host *host;int unhosted_coordinator;uint8_t covered;};
 static struct efs_meta_row row;

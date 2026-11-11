@@ -24,7 +24,9 @@ code=r'''
 struct efs_raft {uint64_t round,term;int role,pending,quorum;};
 struct host_group {uint64_t ri_begun,ri_request;struct efs_raft *r;int hosted;uint8_t group;};
 struct server {int unused;};
-struct efs_raft_host {pthread_mutex_t mu;struct server *s;struct host_group g[HOST_NGROUPS];};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;struct server *s;struct host_group g[HOST_NGROUPS];};
 struct host_view {int has,role;uint64_t commit,term,read_round;};
 struct host_read_admission {uint64_t want,round,term;};
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){return g==0?&h->g[0]:0;}
@@ -41,7 +43,7 @@ static int efs_raft_read_begin(struct efs_raft*r){
  return 0;
 }
 static void host_pump_kick(struct efs_raft_host*h){(void)h;}
-static void host_publish_view(struct efs_raft_host*h,int i){(void)h;(void)i;}
+static void host_publish_view(struct group_views*gv,int i,struct efs_raft*r){(void)gv;(void)i;(void)r;}
 '''+s[a:b]+r'''
 static struct efs_raft_host H;static struct efs_raft core={.round=0,.term=5,.role=EFS_RAFT_LEADER};
 static int stop;

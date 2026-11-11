@@ -14,9 +14,11 @@ code=r'''
 #include <string.h>
 #include <unistd.h>
 #define HOST_NGROUPS 2
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;} g[2];unsigned acks[2],votes[2],applies[2],published,woken,read_votes;int fail_read_vote;uint64_t published_commit[2];};
-static void host_publish_view(struct efs_raft_host*h,int i){h->published++;h->published_commit[i]=efs_raft_commit(h->r[i]);}
-static void host_waiters_wake(struct efs_raft_host*h){h->woken++;}
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;struct efs_raft *r;} g[2];unsigned acks[2],votes[2],applies[2],published,woken,read_votes;int fail_read_vote;uint64_t published_commit[2];};
+static void host_publish_view(struct group_views*gv,int i,struct efs_raft*r){struct efs_raft_host*h=(struct efs_raft_host*)gv;h->published++;h->published_commit[i]=efs_raft_commit(r);}
+static void host_waiters_wake(struct group_views*gv){((struct efs_raft_host*)gv)->woken++;}
 '''+hook+r'''
 struct gate {struct efs_raft_store *mem,ops;int enabled,started,release,fail;uint64_t durable;};
 static struct gate gates[2];
@@ -70,7 +72,7 @@ int main(void){for(int mode=0;mode<5;mode++)for(int failure=0;failure<2;failure+
  for(int i=0;i<2;i++){
   gates[i].mem=efs_raft_mem_create();assert(gates[i].mem);gates[i].ops=*gates[i].mem;gates[i].ops.batch_begin=begin;gates[i].ops.batch_end=end;
   struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=i?2:0;cfg.store=&gates[i].ops;cfg.store_ctx=gates[i].mem;cfg.send=send;cfg.net=&h;cfg.recv_persist=host_receive_persist;
-  apps[i]=(struct app){&h,i};cfg.apply=apply;cfg.app=&apps[i];h.r[i]=efs_raft_new(&cfg);assert(h.r[i]);h.g[i].hosted=1;
+  apps[i]=(struct app){&h,i};cfg.apply=apply;cfg.app=&apps[i];h.r[i]=efs_raft_new(&cfg);assert(h.r[i]);h.g[i].hosted=1;h.g[i].r=h.r[i];
   struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_AE_REQ;m.from=0;m.to=1;m.term=2;m.boot_id=9;m.group=cfg.group;
   pthread_mutex_lock(&h.mu);assert(efs_raft_recv(h.r[i],&m)==EFS_OK);pthread_mutex_unlock(&h.mu);
   if(!i)for(int j=0;j<2;j++){x.m[j]=m;x.m[j].prev_index=j;x.m[j].prev_term=j?2:0;x.m[j].nentries=1;x.m[j].entries[0]=(struct efs_raft_entry){2,1,(uint8_t*)"x"};x.m[j].leader_commit=j+1;x.m[j].last_log_index=10+j;}

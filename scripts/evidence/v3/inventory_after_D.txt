@@ -1,0 +1,55 @@
+# Task V3 after: D part of lifecycle_inventory.py on raft_host.c + group_view.h + group_view.c concatenated (the script reads one file)
+# note: section f (tests) is not meaningful on a concatenation; D fields now in struct group_views, not host/host_group
+=== Candidate D_view: 17 functions, 322 lines ===
+b. fields used: 9 (host: 5, group: 4; 0 have an ambiguous name); used only inside: 0
+   refs inside 26 of 997 = 3% (refined: ambiguous names counted only when the base is a known host or group expression)
+   without hub fields (>= 100 references in the file; 4 of the used fields dropped): fields 5, private 0, refs inside 12 of 232 = 5%
+   raw name match, no refinement: inside 26 of 997 = 3%
+   only inside: 
+   field: inside/outside (* = ambiguous name, refined count)
+       mu: 6/199
+       gv: 5/56
+       group: 4/154
+       g: 3/270
+       running: 3/71
+       raft_id: 2/49
+       hosted: 1/30
+       r: 1/128
+       voters: 1/14
+b2. file-scope variables used: 1; only inside: 0; refs inside 3 of 86
+     g_host:3/83
+c. locks and atomics (19 total):
+        5  __atomic_load_n
+        4  __atomic_add_fetch
+        3  pthread_mutex_lock(mu)
+        3  pthread_mutex_lock(view_mu)
+        2  pthread_cond_timedwait
+        1  __atomic_thread_fence
+        1  pthread_mutex_lock(cv_mu)
+d. outside callers: 28 distinct callers; 13 of 17 functions have one; non-static entry points 7 (named in other src files: 0)
+     host_publish_view (L26704): 5 calls from 5: attach_replica x1, host_inbox_batch_handoff x1, host_pump x1, host_read_start_requested x1, host_receive_persist x1 [first L5189]
+     host_publish_group (L4371): 13 calls from 8: host_propose_impl x4, host_read_index_admitted x2, host_read_index_pair x2, host_pending_reads x1, host_publication_committed x1, host_pump x1 +2 more [first L5277]
+     host_view_get (L26592): 33 calls from 11: server_raft_host_submit x13, host_read_index_admitted x6, host_publication_committed x3, host_wait_applied_mode x3, host_leader_cover_pick x2, host_expiry_switch_authority x1 +5 more [first L4511]
+     host_halted_hint (L4380): 4 calls from 3: host_read_index_admitted x2, host_propose_impl x1, server_raft_host_submit x1 [first L5214]
+     host_view_covers (L26513): 2 calls from 2: host_read_index_admitted x1, host_read_wait_ready x1 [first L5313]
+     host_view_quorum_index (L26526): 3 calls from 3: host_read_floor_ready x1, host_read_index_admitted x1, host_read_wait_ready x1 [first L5306]
+     host_view_wait_apply (L26542): 3 calls from 2: host_read_index_admitted x2, host_read_wait_ready x1 [first L5324]
+     host_waiter_sleep (L26787): 3 calls from 3: host_publication_committed x1, host_read_index_admitted x1, host_wait_applied_mode x1 [first L5367]
+     host_waiters_wake (L26840): 5 calls from 5: host_inbox_batch_handoff x1, host_pending_reads x1, host_pump x1, host_read_control x1, host_receive_persist x1 [first L7552]
+     host_local_leader (L4670): 6 calls from 5: host_namespace_leader_hint x2, host_auto_form x1, host_fwd_leader_pick x1, host_member_thread x1, host_remote_cmd_impl x1 [first L4451]
+     host_local_view (L4679): 1 calls from 1: host_remote_cmd_impl x1 [first L4713]
+     host_is_leader (L17271): 1 calls from 1: host_lock_wait x1 [first L17386]
+     host_leader_hint (L17280): 1 calls from 1: host_lock_wait x1 [first L17402]
+   functions with no outside caller: server_raft_host_active server_raft_host_formed server_raft_host_unresponsive_voters server_raft_host_group_commit
+   non-static entry points named in other src files: host_publish_view(0), host_waiter_sleep(0), host_waiters_wake(0), server_raft_host_active(0), server_raft_host_formed(0), server_raft_host_unresponsive_voters(0), server_raft_host_group_commit(0)
+e. outside static callees: 5 distinct (9 calls)
+     group_raft(3) group_view_slot(2) host_group_retired(2) host_read_floor_ready(1) membership_copy(1)
+f. tests: 0 files name at least one function; 17 of 17 functions are named by no test
+   no test names: host_publish_view host_publish_group host_view_get host_halted_hint host_view_covers host_view_quorum_index host_view_wait_apply host_waiter_sleep host_waiters_wake host_local_leader host_local_view server_raft_host_active server_raft_host_formed server_raft_host_unresponsive_voters server_raft_host_group_commit host_is_leader host_leader_hint
+   of those, 0 files also read raft_host.c as text or include it (they break when a function moves): 
+
+| candidate | functions | lines | fields used | only inside | file-scope vars | vars only inside | refs inside % | refs inside % raw | fields w/o hubs | private w/o hubs | refs inside % w/o hubs | outside callers | fns with outside caller | outside callees | test files | fns no test | lock calls | atomics |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| D_view | 17 | 322 | 9 | 0 | 1 | 0 | 3 | 3 | 5 | 0 | 5 | 28 | 13 | 5 | 0 | 17 | 7 | 10 |
+
+raft_host.c lines:    26314; group_view.c:      233; group_view.h:      342
