@@ -240,8 +240,10 @@ Historical October 22 legend (retained):
 | K118 | Local fragment rebuild skipped the degraded-mark check and retire mark | server / rebuild onto the rebuilding node (rest of K61) | VERIFY | no | [K118](k/K118.md) |
 | K119 | A failed snapshot import blocks the member until a leader sends an image | server / Raft snapshot import, failed state | OPEN | no | [K119](k/K119.md) |
 | K120 | A blocking FLOCK that is sent again queues a second waiter | client, metadata / file locks under retry | OPEN | no | [K120](k/K120.md) |
+| K121 | A mutation the caller gave up on can still be applied later | client, metadata / late execution after a failed retry | OPEN | yes | [K121](k/K121.md) |
+| K122 | A late REPORT copy can publish a superseded object over a newer one | client, metadata / publication under retry | OPEN | yes | [K122](k/K122.md) |
 
-Current counts: 45 FIXED / 21 VERIFIED / 42 VERIFY / 3 CLOSED / 4 DECIDED / 5 OPEN (120 rows).
+Current counts: 45 FIXED / 21 VERIFIED / 42 VERIFY / 3 CLOSED / 4 DECIDED / 7 OPEN (122 rows).
 <!-- K-REGISTER:END -->
 
 

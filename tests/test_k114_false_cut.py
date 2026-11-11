@@ -4,7 +4,7 @@ probe=0, REPORT with a publication id) is in flight to a member that is stopped 
 member silent, cuts the wait and sends the request again to another member. The stopped member is then resumed and the
 first copy, which it was holding, runs late. Nothing may be done twice, undone or left half done.
 
-Usage: test_k114_false_cut.py [truncate|append|create|report] (one scenario each, no argument runs all four; make test-long)
+Usage: test_k114_false_cut.py [truncate|append|create] (one scenario each, no argument runs all three; make test-long)
 
 Three loopback daemons (tests/k33_daemons.py, the EFS_FAULTS efsd), one efs-fuse mount. Both Raft groups are led by node 3.
 The first copy is held on the server by EFS_FAULT_HOLD_REQUEST_FILE (a fifo the test opens when it wants the copy to run;
@@ -17,18 +17,15 @@ is there exactly once, size, mtime and bytes read through a fresh mount are the 
 mount that talks to the resumed member reads the same bytes.
   truncate  truncate to 50000 bytes, then 10000 bytes written after it: a late truncate would cut them off;
   append    O_APPEND write, then a second append: a late reserve would add the first one's bytes again;
-  create    create a name, then unlink it and create it again with other content: a late create would resurrect or double;
-  report    write and close (the REPORT carries a publication id), then overwrite with a shorter file: a late REPORT would
-            restore the old data or the old size.
-The truncate, append and create requests go to the leader (node 3, mount on node 1); the REPORT goes to the first dual voter
-(node 1, mount on node 2)."""
+  create    create a name, then unlink it and create it again with other content: a late create would resurrect or double.
+The requests go to the leader (node 3, mount on node 1). A REPORT is not cut (K122), so it has no scenario."""
 import os, signal, subprocess, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import k33_daemons as k  # noqa: E402
 
 root = Path(__file__).resolve().parents[1]
-KINDS = ('truncate', 'append', 'create', 'report')
+KINDS = ('truncate', 'append', 'create')
 kind = sys.argv[1] if len(sys.argv) > 1 else ''
 if not kind:
     for kd in KINDS:
@@ -37,7 +34,7 @@ if not kind:
             sys.exit(rc)
     sys.exit(0)
 assert kind in KINDS, kind
-HOLD_NODE, MOUNT_NODE = (1, 2) if kind == 'report' else (3, 1)
+HOLD_NODE, MOUNT_NODE = 3, 1
 
 
 def layout(work):
@@ -63,8 +60,7 @@ def main():
     os.mkfifo(fifo)
     spec = {'truncate': f"{L['setattr']} {L['mask_off']} {L['size_mtime']} {fifo}",
             'append': f"{L['append']} -1 0 {fifo}",
-            'create': f"{L['create']} {L['probe_off']} 0 {fifo}",
-            'report': f"{L['report']} -1 0 {fifo}"}[kind]
+            'create': f"{L['create']} {L['probe_off']} 0 {fifo}"}[kind]
     env = {x: v for x, v in os.environ.items() if not x.startswith('EFS_FAULT_')}
     env['EFS_TRANSPORT'] = 'tcp'
     c = k.Cluster(work, 'c', (1, 2, 3), env)
@@ -112,8 +108,7 @@ def main():
         def release(paths):
             """Let the held first copy run now, on a leader, and return the (size, mtime_ns, bytes) of paths read
             through fresh mounts before and after it ran."""
-            if kind != 'report':
-                k.place_leaders(c, HOLD_NODE, groups=(0, 2), timeout=30)
+            k.place_leaders(c, HOLD_NODE, groups=(0, 2), timeout=30)
             pre = k.Mount(c, MOUNT_NODE, 'pre')
             before = {p: snap(pre.path / p.relative_to(m.path)) for p in paths}
             fd = os.open(fifo, os.O_WRONLY)
@@ -158,7 +153,7 @@ def main():
             want = b'B' * 1000 + b'C' * 777 + b'D' * 100
             before = release([f])
             files = {f: want}
-        elif kind == 'create':
+        else:
             def op():
                 fd = os.open(d / 'new', os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
                 try:
@@ -175,16 +170,8 @@ def main():
             files = {d / 'new': b'M' * 5}
             out['names'] = sorted(os.listdir(d))
             assert out['names'] == ['new'], out
-        else:
-            data = os.urandom(300000)
-            run_op(lambda: f.write_bytes(data))
-            assert f.stat().st_size == len(data) and read(f) == data
-            data2 = os.urandom(120000)
-            f.write_bytes(data2)
-            before = release([f])
-            files = {f: data2}
         # The late copy has run. Same bytes through this mount and through one that talks to the resumed member.
-        c.leader_placement(2 if HOLD_NODE == 1 else 1)
+        c.leader_placement(1)
         m2 = k.Mount(c, HOLD_NODE, 'mnt2')
         for p, want in files.items():
             q = m2.path / p.relative_to(m.path)

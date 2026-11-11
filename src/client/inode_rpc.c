@@ -895,9 +895,10 @@ static int rpc_type_mutates(uint8_t type, const void *req, uint32_t req_len)
 /* K106 (a), K114 fix 1: 1 when a silent member's verdict may cut the wait for this reply:
  * a read, or a mutation whose identity makes a second execution harmless: a directory op with
  * its op-id, a truncate (SETATTR with mask SIZE or SIZE|MTIME and its op-id: the truncate receipt), an APPEND with
- * its ack suffix (append receipt), CREATE_RETAINED with probe=0 (directory op-id window), a
- * REPORT_CHUNKS with its publication id (session receipt; sent through the dual path).
- * chmod, chown, utimens, XATTR, HOLD and FLOCK carry no such record and are never cut. */
+ * its ack suffix (append receipt), CREATE_RETAINED with probe=0 (directory op-id window).
+ * chmod, chown, utimens, XATTR, HOLD and FLOCK carry no such record and are never cut. A REPORT is
+ * not cut either: its records are guarded by their PUT tickets only, and a late first copy can
+ * meet a superseded ticket that is not settled yet (K122). */
 static int rpc_reply_wait_cut(uint8_t type, const void *req, uint32_t req_len)
 {
     if (!rpc_type_mutates(type, req, req_len) || rpc_identified(type, req_len))
@@ -910,9 +911,6 @@ static int rpc_reply_wait_cut(uint8_t type, const void *req, uint32_t req_len)
         return req_len == sizeof(struct efs_msg_inode_append) + EFS_APPEND_ACK_LEN;
     case EFS_MSG_CREATE_RETAINED:
         return req_len == sizeof(struct efs_msg_create_retained);
-    case EFS_MSG_REPORT_CHUNKS:
-        return req && req_len >= sizeof(struct efs_msg_report_chunks) &&
-               (((const struct efs_msg_report_chunks *)req)->sync & EFS_REPORT_F_PUBID);
     default:
         return 0;
     }
@@ -3296,9 +3294,6 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         if (recv_ms > 0)
             efs_conn_set_recv_timeout(conn, recv_ms);
         unsigned long long t_recv = rpc_prof_now_us();
-        /* K114 fix 1: only a REPORT with its publication id; other dual requests keep waiting. */
-        if (type == EFS_MSG_REPORT_CHUNKS && rpc_reply_wait_cut(type, req, req_len))
-            efs_client_conn_await_reply(nid, conn);
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {

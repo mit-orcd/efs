@@ -18,8 +18,8 @@ Usage: test_node_waiter_cut.py halted|slow|two|noreply|deadline|race|gating (one
  race     two waiters, the exchange runs, one reply is readable before the cut: that waiter is not shut down and
           keeps its pool slot; the other is cut and its conn does not return to the pool;
  gating   which request types reach the hook: reads, the four directory mutations with an op-id, a truncate SETATTR with
-          its op-id, an APPEND with its ack suffix, CREATE_RETAINED probe=0 and a REPORT with a publication id; chmod,
-          chown, utimens, XATTR, HOLD and FLOCK (non-GETLK) are never cut."""
+          its op-id, an APPEND with its ack suffix and CREATE_RETAINED probe=0; chmod, chown, utimens, XATTR, HOLD,
+          FLOCK (non-GETLK) and REPORT (with or without a publication id, K122) are never cut."""
 from pathlib import Path
 import os,shlex,subprocess,sys,tempfile
 sys.path.insert(0,str(Path(__file__).resolve().parent));from sanitize_env import cflags,wrap
@@ -83,11 +83,11 @@ int main(void){
  assert(!rpc_reply_wait_cut(EFS_MSG_INODE_APPEND,buf,sizeof(struct efs_msg_inode_append)));
  /* HOLD in every length: never */
  for(uint32_t n=0;n<200;n++)assert(!rpc_reply_wait_cut(EFS_MSG_INODE_HOLD,buf,n));
- /* REPORT: only with a publication id */
+ /* REPORT: never, with or without a publication id (K122) */
  struct efs_msg_report_chunks rp;memset(&rp,0,sizeof rp);
  rp.sync=EFS_REPORT_F_SESSION;assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
  rp.sync=EFS_REPORT_F_SESSION|EFS_REPORT_F_SYNC;assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
- rp.sync=EFS_REPORT_F_SESSION|EFS_REPORT_F_PUBID;assert(rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
+ rp.sync=EFS_REPORT_F_SESSION|EFS_REPORT_F_PUBID;assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
  assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp-1));
  puts("client waiter cut: scenario PASS");return 0;}
 '''

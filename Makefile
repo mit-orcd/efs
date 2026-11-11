@@ -1313,7 +1313,6 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k114_false_cut.py truncate
 	python3 tests/test_k114_false_cut.py append
 	python3 tests/test_k114_false_cut.py create
-	python3 tests/test_k114_false_cut.py report
 	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py

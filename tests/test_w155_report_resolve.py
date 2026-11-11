@@ -222,8 +222,6 @@ static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *n,efs_node_id_t skip
  *n=0;return NULL;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;c->have=0;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
-static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
-static int rpc_reply_wait_cut(uint8_t t,const void *r,uint32_t l){(void)t;(void)r;(void)l;return 0;}
 static void efs_conn_set_recv_timeout(struct efs_conn *c,int ms){(void)c;(void)ms;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n){
  assert(type==EFS_MSG_REPORT_CHUNKS);int node=(int)(c-conns);c->node=node;
