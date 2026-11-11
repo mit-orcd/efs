@@ -11,19 +11,19 @@ Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fpr
 
 | rc | Name | Meaning |
 |---|---|---|
-| -1 | `EFS_ERR_IO` | local file or storage I/O failed, or stored data unreadable |
+| -1 | `EFS_ERR_IO` | local file or storage I/O failed, stored data unreadable, or a request's outcome is unknown |
 | -2 | `EFS_ERR_NOMEM` | allocation or table growth failed; whether a retry helps is not determined |
 | -3 | `EFS_ERR_NOT_FOUND` | the looked-up key, inode or entry is absent (or only a tombstone) |
 | -4 | `EFS_ERR_EXIST` | target already exists (name taken or identity already abandoned) |
 | -5 | `EFS_ERR_INVAL` | argument or request rejected as invalid; the operation did not proceed |
 | -6 | `EFS_ERR_NET` | no connection, or send/receive to a peer failed; peer state unknown |
-| -7 | `EFS_ERR_PROTO` | received or supplied bytes violate the expected format or protocol rules |
-| -8 | `EFS_ERR_NO_QUORUM` | peers reachable but no majority answered; callers wait or retry as for BUSY |
+| -7 | `EFS_ERR_PROTO` | bytes violate the expected format or protocol rules, or a different decision is already recorded |
+| -8 | `EFS_ERR_NO_QUORUM` | no majority answered, or too few live or distinct nodes for the operation; callers wait or retry |
 | -9 | `EFS_ERR_DECODE` | encoded bytes or an erasure-decoded segment could not be decoded |
 | -10 | `EFS_ERR_CHECKSUM` | computed hash differs from the recorded one: content mismatch |
-| -11 | `EFS_ERR_QUOTA` | a configured quota or aggregate size limit would be exceeded |
+| -11 | `EFS_ERR_QUOTA` | a configured quota or size limit would be exceeded, or a member has no physical free space |
 | -12 | `EFS_ERR_NOT_EMPTY` | directory still has children; removal or replace refused |
-| -13 | `EFS_ERR_BUSY` | not determined: byte or size limit reached vs queue/resource still in use |
+| -13 | `EFS_ERR_BUSY` | not now, retry: a limit, lock, queue or resource is in use |
 | -14 | `EFS_ERR_STALE` | request's expected state, epoch or revision no longer matches current state |
 | -15 | `EFS_ERR_NOT_PRIMARY` | this node does not lead the group; the caller must re-resolve the leader |
 | -16 | `EFS_ERR_ACCES` | EACCES (search/execute denied) |
@@ -37,7 +37,7 @@ Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fpr
 | -24 | `EFS_ERR_UNSUPPORTED` | log entry or command this build cannot apply (unknown tag or bad length) |
 | -25 | `EFS_ERR_FRAG_FORMAT` | fragment record format unknown or older; the record is not served |
 | -26 | `EFS_ERR_FRAG_IDENTITY` | fragment record names a different object than requested; not served |
-| -27 | `EFS_ERR_FENCED` | not determined: epoch below the session floor vs data-commit reply not OK |
+| -27 | `EFS_ERR_FENCED` | refused by a fence: session epoch below the floor, or a membership or store-identity mismatch |
 | -28 | `EFS_ERR_UNREGISTERED` | request has no valid or established session identity (uuid, epoch) |
 | -29 | `EFS_ERR_UNFORMED` | cluster formation membership not committed yet; no client metadata served |
 

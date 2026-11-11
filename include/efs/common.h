@@ -108,19 +108,19 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
 #define EFS_INO_PATH_SEGS    5
 
 #define EFS_OK               0
-#define EFS_ERR_IO          -1 /* local file or storage I/O failed, or stored data unreadable */
+#define EFS_ERR_IO          -1 /* local file or storage I/O failed, stored data unreadable, or a request's outcome is unknown */
 #define EFS_ERR_NOMEM       -2 /* allocation or table growth failed; whether a retry helps is not determined */
 #define EFS_ERR_NOT_FOUND   -3 /* the looked-up key, inode or entry is absent (or only a tombstone) */
 #define EFS_ERR_EXIST       -4 /* target already exists (name taken or identity already abandoned) */
 #define EFS_ERR_INVAL       -5 /* argument or request rejected as invalid; the operation did not proceed */
 #define EFS_ERR_NET         -6 /* no connection, or send/receive to a peer failed; peer state unknown */
-#define EFS_ERR_PROTO       -7 /* received or supplied bytes violate the expected format or protocol rules */
-#define EFS_ERR_NO_QUORUM   -8 /* peers reachable but no majority answered; callers wait or retry as for BUSY */
+#define EFS_ERR_PROTO       -7 /* bytes violate the expected format or protocol rules, or a different decision is already recorded */
+#define EFS_ERR_NO_QUORUM   -8 /* no majority answered, or too few live or distinct nodes for the operation; callers wait or retry */
 #define EFS_ERR_DECODE      -9 /* encoded bytes or an erasure-decoded segment could not be decoded */
 #define EFS_ERR_CHECKSUM   -10 /* computed hash differs from the recorded one: content mismatch */
-#define EFS_ERR_QUOTA      -11 /* a configured quota or aggregate size limit would be exceeded */
+#define EFS_ERR_QUOTA      -11 /* a configured quota or size limit would be exceeded, or a member has no physical free space */
 #define EFS_ERR_NOT_EMPTY  -12 /* directory still has children; removal or replace refused */
-#define EFS_ERR_BUSY       -13 /* not determined: byte or size limit reached vs queue/resource still in use */
+#define EFS_ERR_BUSY       -13 /* not now, retry: a limit, lock, queue or resource is in use */
 #define EFS_ERR_STALE      -14 /* request's expected state, epoch or revision no longer matches current state */
 /* Phase 2b: a metadata mutation was sent to a non-primary node; the client
  * should re-resolve the primary and retry. */
@@ -148,7 +148,7 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
  * must stop mutating and never resend under that epoch. UNREGISTERED: the
  * shard has no established row for this (uuid, epoch); the client admits
  * the shard (REGISTER + ESTABLISH) and resends the same identity. */
-#define EFS_ERR_FENCED      -27 /* not determined: epoch below the session floor vs data-commit reply not OK */
+#define EFS_ERR_FENCED      -27 /* refused by a fence: session epoch below the floor, or a membership or store-identity mismatch */
 #define EFS_ERR_UNREGISTERED -28 /* request has no valid or established session identity (uuid, epoch) */
 /* W153: the cluster has not committed its formation membership yet
  * (efs-mgmt raft-mkfs); no client metadata is served before it. */

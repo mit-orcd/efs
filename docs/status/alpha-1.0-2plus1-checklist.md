@@ -125,7 +125,7 @@ Historical October 22 legend (retained):
 | K3 | W132 `NODE_LEFT` from any connection drops a node | safety | VERIFIED | unstated | [K003](k/K003.md) |
 | K4 | Client protocol declaration gate accepts undeclared clients | correctness | VERIFY | unstated | [K004](k/K004.md) |
 | K5 | Unregistered session identities bypass fencing | correctness | VERIFY | unstated | [K005](k/K005.md) |
-| K6 | Metadata apply must fail closed on undecodable entries (W127-W131) | correctness | VERIFY | unstated | [K006](k/K006.md) |
+| K6 | Metadata apply is not fail-closed (W127-W131) | correctness | VERIFY | unstated | [K006](k/K006.md) |
 | K7 | W83 transaction decision records are never retired | lifecycle / growth | VERIFIED | unstated | [K007](k/K007.md) |
 | K8 | W148 modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file | data correctness | VERIFIED | unstated | [K008](k/K008.md) |
 | K9 | W87 buffered concurrent append loses records under load | data correctness | CLOSED | unstated | [K009](k/K009.md) |
@@ -136,8 +136,8 @@ Historical October 22 legend (retained):
 | K14 | Multi-chunk publication is not atomic (torn reads, W77) | integration gap | VERIFY | unstated | [K014](k/K014.md) |
 | K15 | Append reservation replay across leader changes; slow REPORT (W64, W52) | correctness | VERIFY | yes | [K015](k/K015.md) |
 | K16 | Fragment integrity is not bound to identity (W75) | integrity | VERIFY | unstated | [K016](k/K016.md) |
-| K17 | STALE replay does not converge on separate hosts (0a, D27) | correctness | VERIFY | unstated | [K017](k/K017.md) |
-| K18 | Fold and GC data loss on distinct RDMA hosts (W54, W38) | correctness | VERIFY | unstated | [K018](k/K018.md) |
+| K17 | STALE replay convergence: C1 passed, pub-stale criterion open (0a, D27) | correctness | VERIFY | unstated | [K017](k/K017.md) |
+| K18 | Fold/GC data loss (W54, W38): distinct-host RDMA gate not run | correctness | VERIFY | unstated | [K018](k/K018.md) |
 | K19 | GC final drain and lost-ledger reconciliation (W61, W62, W63) | reclaim correctness | VERIFY | unstated | [K019](k/K019.md) |
 | K20 | Capacity reporting wrong on any node count; silent protection debt (W42) | correctness | VERIFY | unstated | [K020](k/K020.md) |
 | K21 | Concurrent RDMA failures and blocked clean stop (W119, W65) | correctness / liveness | VERIFY | unstated | [K021](k/K021.md) |
@@ -167,7 +167,7 @@ Historical October 22 legend (retained):
 | K45 | A follower that had installed a snapshot received a delayed AppendEntries whose previous index lay b | Raft safety / availability | FIXED | yes | [K045](k/K045.md) |
 | K46 | A replica with `raft-resync` requested could still win an election | Raft safety | FIXED | yes | [K046](k/K046.md) |
 | K47 | A packed read with one returned (down-marked) holder answering NET, one valid fragment and one absen | single-loss availability (packed files) | FIXED | yes | [K047](k/K047.md) |
-| K48 | Healthy-quorum directory listing misses a name with a replica halted (W130) | directory enumeration / availability with one replica halted | VERIFY | yes | [K048](k/K048.md) |
+| K48 | Healthy-quorum listing misses a name with one replica halted (W130) | directory enumeration / availability with one replica halted | VERIFY | yes | [K048](k/K048.md) |
 | K49 | RDMA request dispatch uses misaligned casts and UBSan stops the daemon | RDMA request safety / availability | VERIFY | yes | [K049](k/K049.md) |
 | K50 | RMDIR returns EBUSY after a fixed sixteen-attempt admission BUSY cap | namespace availability under pressure | VERIFY | yes | [K050](k/K050.md) |
 | K51 | Task L | shutdown lifetime safety | VERIFIED | yes | [K051](k/K051.md) |
@@ -224,15 +224,15 @@ Historical October 22 legend (retained):
 | K102 | Failed write of a removed inode is retried forever; clean stop refused | client write-back / clean stop, alpha blocker | VERIFY | yes | [K102](k/K102.md) |
 | K103 | Task FB (found while diagnosing K38, Nov 10) | performance / Raft read path | FIXED | no | [K103](k/K103.md) |
 | K104 | Wave 70 merge gate (Nov 10, node9900, `b4bafedae`) | availability with one member unresponsive | FIXED | no | [K104](k/K104.md) |
-| K105 | Packer counts a file unlinked mid-read as a read error | packer / small-file read, possibly data availability | VERIFY | no | [K105](k/K105.md) |
-| K106 | Task FF (Nov 10, seen while fixing K104) | availability with one member unresponsive | OPEN | yes | [K106](k/K106.md) |
+| K105 | Packer read error on a fresh small file fails D4 (cause inferred) | packer / small-file read, possibly data availability | VERIFY | no | [K105](k/K105.md) |
+| K106 | Request in flight to a halted member waits the 30 s transport timeout | availability with one member unresponsive | OPEN | yes | [K106](k/K106.md) |
 | K107 | Wave 72 merge (Nov 10, amd, TSan lane) | server / Raft host view, TSan lane | FIXED | no | [K107](k/K107.md) |
 | K108 | Snapshot import holds the whole key diff in memory (13.41 GiB peak) | server / resource bound | VERIFY | yes | [K108](k/K108.md) |
-| K109 | Task EZ batch S2 (Nov 10) | server, client / clean stop with one member slow | OPEN | yes | [K109](k/K109.md) |
+| K109 | A stalled member's storage-fence error fails every clean unmount | server, client / clean stop with one member slow | OPEN | yes | [K109](k/K109.md) |
 | K110 | fsync returns EIO after sequential SIGKILLs of members | durability proof / fsync availability across member restarts | VERIFY | yes | [K110](k/K110.md) |
 | K111 | fsync stays EIO for good after a second kill inside a barrier window | durability proof / fsync availability across member restarts | OPEN | no | [K111](k/K111.md) |
-| K112 | Task EY batch D (Nov 10, candidate `9bb50fe79`, `tests/live/e2_peer_stop_loop.py` with five members | clean stop on a healthy cluster / transaction retry | OPEN | yes | [K112](k/K112.md) |
-| K113 | Wave 76 merge gate (Nov 10, fstor007 and node9900, tree `1fc8e9211` | server / Raft snapshot rejoin under load | OPEN | yes | [K113](k/K113.md) |
+| K112 | One of three RDMA stop loops refused 20 of 20 clean stops (20 s budget) | clean stop on a healthy cluster / transaction retry | OPEN | yes | [K112](k/K112.md) |
+| K113 | Snapshot rejoin never completes under sustained load (import restarts) | server / Raft snapshot rejoin under load | OPEN | yes | [K113](k/K113.md) |
 
 Current counts: 43 FIXED / 21 VERIFIED / 37 VERIFY / 3 CLOSED / 4 DECIDED / 5 OPEN (113 rows).
 <!-- K-REGISTER:END -->

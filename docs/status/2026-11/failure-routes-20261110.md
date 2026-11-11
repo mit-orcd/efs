@@ -1,5 +1,7 @@
 # Failure routes: what a recurring failure line proves (Task U2)
 
+**Merge state (Nov 10):** merged into devel in wave 78 after an independent review of every route against the source. The merge corrected the statements the review found wrong or too narrow: what `abort decided rc=-7` proves on `txn-finish`, the causes of `dcache-flush-fail stage=put`, the meaning of `rc=` on `report-split`, `report-resolve` and `report-sync-fail`, what `stage=report` covers on `flush-meta`, the description of `uncertified-busy` and its next check, and the next check and K rows of the `efs-fuse` route. It dropped the `efs-mgmt` route (no K row contains its line), so the page has 8 routes, and it rewrote six error-code comments (IO, PROTO, NO_QUORUM, QUOTA, BUSY, FENCED); no code is "not determined" now. The report below is the task's own and is not updated. Limit of `scripts/check_failure_routes.py`: it checks the six labels, their order and one function name per route, not whether a statement is true.
+
 - Source commit: devel `67fc3b4a1`; changes on top in branch `claude/task-u2-failure-routes-35b2a5` (commits listed by `git log devel..claude/task-u2-failure-routes-35b2a5`).
 - Verdict: **PASS** for the documentation and checker described below (no test host involved, nothing run on a cluster).
 - Remaining failures: none in the checks; 9 routes written, 2 of the 21 undocumented error codes are "not determined" (`EFS_ERR_BUSY`, `EFS_ERR_FENCED`); the seeds `txn-finish` and the three refusal reasons are not diagnostic keys of `src` as the task assumed (see Limitations).
