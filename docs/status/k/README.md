@@ -11,11 +11,21 @@ table and counts line there are generated from these files.
 - Blocks alpha: <yes|no|unstated>
 - Kind: <kind>
 
+## Summary
+- Cause: <current cause, one sentence>
+- Owners: <component tags or source files>
+- Reproducer: <test or command>
+- Invariant: <rule that must hold>
+- Owed: <test, gate or decision still required>
+
 ## Item
 ## Disposition
 ## Finding on devel
 ```
 
+- `## Summary` is required for OPEN and VERIFY rows, directly before `## Item`:
+  five one-line values, each at most 220 characters, no `|`. Rewrite it whenever
+  the State or the cause changes; history stays in the three sections below.
 - Add a row: copy the layout into the next free number, then run
   `python3 scripts/check_k_register.py --write`.
 - Change a state: edit the State line, then run the same command.
@@ -23,6 +33,6 @@ table and counts line there are generated from these files.
   `# K<N>:` heading) to the next free number and reruns the command.
 - `python3 scripts/check_k_register.py` (also in `make docs-check`) fails on a
   gap, a duplicate, a bad State word or a stale generated table.
-- Never put `|` in the title or Kind line; the generator replaces it with `/`.
+- Never put `|` in the title or Kind line (the generator replaces it with `/`).
 - `scripts/evidence/t1/split_k_register.py [CHECKLIST] [OUTDIR]` split the old
   two-table layout once; it converts a checklist of that layout.
