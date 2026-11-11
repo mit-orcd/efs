@@ -58,13 +58,22 @@ static void ordinary_setup(void)
     memcpy(rebuild_frame + EFS_REBUILD_PUT_HEADER_LEN,
            ordinary_frame + EFS_PUT_UPLOAD_HEADER_LEN, p.put_fragment_len);
 }
+/* local-rebuild: the split form the host's own rebuild pass calls. */
+static int ordinary_rebuild_put(uint8_t *path)
+{
+    return ordinary_rebuild == 2
+        ? server_rebuild_put_parts(&S, rebuild_frame,
+            rebuild_frame + EFS_REBUILD_PUT_HEADER_LEN,
+            rebuild_len - EFS_REBUILD_PUT_HEADER_LEN, path)
+        : server_rebuild_put(&S, rebuild_frame, rebuild_len, path);
+}
 static void *ordinary_writer(void *unused)
 {
     (void)unused;
     capture_this_put = 1; efs_tls_write_root = 0;
     uint8_t path;
     delayed_put_rc = ordinary_rebuild
-        ? server_rebuild_put(&S, rebuild_frame, rebuild_len, &path)
+        ? ordinary_rebuild_put(&path)
         : server_put_upload(&S, ordinary_frame, ordinary_len, &path);
     return NULL;
 }
@@ -131,8 +140,9 @@ static void retire_ring_burst(void)
 }
 int main(int argc, char **argv)
 {
-    assert(argc == 2 && (!strcmp(argv[1], "put") || !strcmp(argv[1], "rebuild")));
-    ordinary_rebuild = !strcmp(argv[1], "rebuild");
+    assert(argc == 2 && (!strcmp(argv[1], "put") || !strcmp(argv[1], "rebuild") ||
+                         !strcmp(argv[1], "local-rebuild")));
+    ordinary_rebuild = !strcmp(argv[1], "local-rebuild") ? 2 : !strcmp(argv[1], "rebuild");
     efs_test_path(roots[0], sizeof(roots[0]), "efs-ba-upload-a-XXXXXX");
     efs_test_path(roots[1], sizeof(roots[1]), "efs-ba-upload-b-XXXXXX");
     assert(efs_test_mkdtemp(roots[0]) && efs_test_mkdtemp(roots[1]));

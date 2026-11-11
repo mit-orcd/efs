@@ -12,7 +12,7 @@ static uint32_t authority_state=EFS_PUT_TICKET_ADMITTED;
 static int rebuild_mode,mark_rc;static unsigned mark_checks;
 __thread int efs_tls_path_hint,efs_tls_path_used;
 __thread uint64_t efs_tls_retire_mark=EFS_RETIRE_MARK_NONE;
-uint64_t server_fragment_retire_mark(efs_export_id_t e,efs_ino_t i,uint32_t c,uint32_t f){(void)e;(void)i;(void)c;(void)f;return 0;}
+uint64_t server_fragment_retire_mark(efs_export_id_t e,efs_ino_t i,uint32_t c,uint32_t f){(void)e;(void)i;(void)c;(void)f;return 17;}
 /* K34: 1 = stopping before the PUT, 2 = the stop begins during the store. */
 static int stopping;
 int server_stop_requested(void){return stopping==1;}
@@ -37,7 +37,7 @@ static int store(void *ctx,const struct efs_frag_id *id,const uint8_t *data,uint
 {
  assert(ctx==&server&&id->ino==expected.ino&&id->chunk_generation==expected.object&&id->inode_generation==(rebuild_mode?0u:7u));
  assert(id->fragment_index==0&&bytes==expected.fragment_len&&data[0]==91&&sum[0]==expected.checksums[0][0]);
- assert(efs_tls_path_hint==-1);stores++;efs_tls_path_used=1;if(stopping==2)stopping=1;return store_rc;
+ assert(efs_tls_path_hint==-1 && efs_tls_retire_mark==17);stores++;efs_tls_path_used=1;if(stopping==2)stopping=1;return store_rc;
 }
 void efs_store_nvme_bind(struct efs_store *st,struct efs_nvme_store *ctx,struct efsd_server *s,struct efs_export *ex)
 {static const struct efs_store_ops ops={.put=store};(void)ctx;assert(s==&server&&ex==&export);st->ops=&ops;st->ctx=s;}
@@ -86,6 +86,10 @@ int main(void)
  efs_put_upload_wr32(rf,1);server_degraded_mark_encode(rf+4,&mark);memset(rf+EFS_REBUILD_PUT_HEADER_LEN,91,expected.fragment_len);
  struct efs_meta_degraded back;assert(!server_degraded_mark_decode(rf+4,&back)&&!memcmp(&back,&mark,sizeof(mark)));
  assert(!server_rebuild_put(&server,rf,rb,&path)&&stores==1&&mark_checks==1&&path==1&&!export_refs);
+ assert(!server_rebuild_put_parts(&server,rf,rf+EFS_REBUILD_PUT_HEADER_LEN,expected.fragment_len,&path)&&stores==2&&mark_checks==2&&path==1);
+ stores=1;mark_checks=1;
+ store_rc=EFS_ERR_BUSY;assert(server_rebuild_put_parts(&server,rf,rf+EFS_REBUILD_PUT_HEADER_LEN,expected.fragment_len,&path)==EFS_ERR_BUSY&&path==255&&efs_tls_retire_mark==EFS_RETIRE_MARK_NONE&&!export_refs);
+ stores=1;mark_checks=1;store_rc=0;
  mark_rc=EFS_ERR_NOT_FOUND;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_STALE&&stores==1);
  mark_rc=EFS_ERR_STALE;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_STALE&&stores==1);mark_rc=0;
  rf[EFS_REBUILD_PUT_HEADER_LEN]^=1;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_PROTO&&mark_checks==3);rf[EFS_REBUILD_PUT_HEADER_LEN]^=1;

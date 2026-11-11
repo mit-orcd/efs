@@ -166,6 +166,8 @@ uint32_t server_put_sync_history(struct efs_data_commit_history *out);
 /* K13 + W154: EFS_MSG_REBUILD_PUT. Stores the one missing fragment of a
  * degraded stripe only when the mark's group holds exactly that mark. */
 int server_rebuild_put(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);
+/* Fixed-size rebuild header plus payload; same authority/guard as wire PUT. */
+int server_rebuild_put_parts(struct efsd_server *,const uint8_t *,const uint8_t *,uint32_t,uint8_t *);
 struct efs_meta_degraded;
 void server_degraded_mark_encode(uint8_t *q, const struct efs_meta_degraded *d);
 int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d);

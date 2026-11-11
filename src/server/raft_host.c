@@ -12143,15 +12143,15 @@ static int dg_put_fragment(struct efs_raft_host *h, struct efs_export *ex,
     efs_node_id_t id = d->nodes[fi];
 
     if (id == h->s->id) {
-        struct efs_store st;
-        struct efs_nvme_store nctx;
-        struct efs_frag_id fid = {.export_id = ex->id, .ino = d->ino,
-                                  .chunk_index = d->chunk_index, .fragment_index = fi,
-                                  .chunk_generation = d->object_gen};
+        /* Same fresh mark check and retire guard as the wire path (K61). */
+        uint8_t header[EFS_REBUILD_PUT_HEADER_LEN], path_used;
         uint32_t roots = 0;
-        efs_store_nvme_bind(&st, &nctx, h->s, ex);
-        if (efs_store_put(&st, &fid, data, len, d->checksums[fi]) != 0)
-            return EFS_ERR_IO;
+        int put_rc;
+        wr32be(header, ex->id);
+        server_degraded_mark_encode(header + 4, d);
+        put_rc = server_rebuild_put_parts(h->s, header, data, len, &path_used);
+        if (put_rc != EFS_OK)
+            return put_rc;
         /* PUT acknowledgement is asynchronous: the mark goes only after
          * the barrier made the rebuilt fragment durable. */
         if (server_put_sync_commit(h->s, &roots) == EFS_OK)
