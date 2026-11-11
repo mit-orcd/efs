@@ -4,7 +4,11 @@
 
 ## Recent evidence and remaining acceptance
 
-- [Task V4 read-proof ownership design](ledger/20261111-010-read-proof-ownership.md): **design only, no code moved**
+- [Task V4 read-proof ownership design](ledger/20261111-014-read-proof-ownership.md): **design only, no code moved**
+- [Wave 83 merge](ledger/20261111-013-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `ddf3a5d22`)**
+- [Group view ownership Task V6](ledger/20261111-012-group-view-contract-split.md): **branch claude/task-v6-group-view-contract-70fa8b, not merged, Nov 11**
+- [Question routes](ledger/20261111-011-question-routes.md): **Task V7, Nov 11:**
+- [Task V5 PUT lifecycle](ledger/20261111-010-put-lifecycle-description.md): **PUT lifecycle described in one checked page (Nov 11): deadline, retries, quorum and completion, linked from the PUT-window contract; fragment PUT (17 functions, 989 lines, one entry point, 4 outside callees) recommended for extraction, pool and pipe not; Mac only, no cluster run**
 - [Wave 82 merge](ledger/20261111-009-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `814d9b55d`)**
 - [Wave 81 merge](ledger/20261111-008-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `f7b983b8b`)**
 - [Group view ownership Task V3](ledger/20261111-007-group-view-ownership.md): **branch claude/task-v3-group-view-ceb2d8, not merged, Nov 11**

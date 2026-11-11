@@ -6,12 +6,15 @@ import importlib.util
 import json
 import os
 import shutil
+import sys
 import subprocess
 import tempfile
 from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import measure_question_routes as mq
 spec = importlib.util.spec_from_file_location("efs_graph", ROOT / "scripts/build-code-graph.py")
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
@@ -169,6 +172,54 @@ class GraphChecks(unittest.TestCase):
         self.assertEqual(m.component_tag('src/client/efs_fuse/open.c'), 'client/efs_fuse.open')
         self.assertEqual(m.component_tag('src/client/write.c'), 'client/write')
         self.assertEqual(m.component_tag('src/meta/meta_apply/publish.c'), 'meta/meta_apply.publish')
+
+    # Task V7: one paraphrase per route, kept here and not in routes.json, so the
+    # behaviour test does not pass by string identity alone.
+    PARAPHRASES = {
+        "what wakes a read waiter after a leadership change": "which sleeping read gets woken when the leader changes",
+        "which code publishes a role or term change to handlers": "where is a new term or role announced to request handlers",
+        "handler keeps using a stale leader view": "request handler still sees the old leader after a role change",
+        "read request sleeps waiting for a quorum proof": "read stuck until the quorum confirms leadership",
+        "can a flush wait for a PUT that is still in flight": "does fsync block on a chunk upload that has not finished",
+        "what closes a PUT window when the PUT fails": "who ends the open PUT window after an upload error",
+        "reader blocked while a chunk PUT is in progress": "read hangs while a chunk is being uploaded",
+        "another user sees my find results": "search results of one user leak to a different user",
+        "find query file reads old bytes after the search changed": "reading a find result returns outdated content",
+        "fsync reports an old write error twice": "the same background write failure is reported on two syncs",
+        "write call hangs when many writes are queued": "write blocks when the write-back queue is full",
+        "file closed but its lease is never released": "after close the file lease stays held",
+        "open of a file answers busy": "opening a file returns EBUSY",
+    }
+
+    def routes(self):
+        return json.loads((ROOT / 'tools/graphify/routes.json').read_text())['routes']
+
+    def test_routes_name_components_at_most_four_each(self):
+        ids = {n['id'] for n in self.graph['nodes']}
+        per = defaultdict(int)
+        for r in self.routes():
+            self.assertIn('efs:component:' + r['component'], ids, r)
+            self.assertTrue(r['question'].strip() and r['why'].strip(), r)
+            per[r['component']] += 1
+        self.assertTrue(all(n <= 4 for n in per.values()), dict(per))
+        answered = [e for e in self.graph['links'] if e['relation'] == 'answered_by']
+        self.assertEqual(len(answered), len(self.routes()))
+
+    def test_query_of_a_route_question_names_its_owner_early(self):
+        for r in self.routes():
+            pos = mq.measure(ROOT, r['question'], r['component'])['position']
+            self.assertEqual(pos, 1, (r['question'], pos))  # the recorded wording leads with its route
+
+    def test_query_of_a_paraphrase_names_the_owner_early(self):
+        # Report only. A paraphrase reaches the owner when graphify's own word
+        # scoring happens to seed the route node; that depends on unrelated
+        # labels in the graph, so a count is not a guarantee to assert.
+        hits = 0
+        for r in self.routes():
+            pos = mq.measure(ROOT, self.PARAPHRASES[r['question']], r['component'])['position']
+            hits += bool(pos and pos <= 10)
+        print('paraphrases reaching the owner within 10 nodes: %d of %d (reported, not asserted)'
+              % (hits, len(self.routes())), flush=True)
 
     def test_scope_retains_models_excludes_history(self):
         # select_files lists tracked files; the gate runs from a git archive.

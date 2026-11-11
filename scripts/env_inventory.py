@@ -232,6 +232,9 @@ def scan():
                 if m.group(1) == 'ifndef' and re.fullmatch(
                         r'\s*#\s*define\s+%s\s*' % var, nxt):
                     continue  # header guard
+                if (m.group(1) == 'ifndef' and var.endswith('_H')
+                        and re.match(r'\s*#\s*error\b', nxt)):
+                    continue  # private header refusing direct inclusion (group_view_impl.h)
                 loc = "%s:%d" % (s.rel, i + 1)
                 if loc not in modes.setdefault(var, []):
                     modes[var].append(loc)

@@ -196,7 +196,7 @@ def build(root, out):
         raise ValueError(f"expected graphifyy {config['graphify_version']}, got {version}; revalidate before upgrading")
     code, docs = select_files(root, config)
     inputs = sorted(set(code + docs + config["build_files"] + [config["catalogue"],
-        "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"]))
+        "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "tools/graphify/routes.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"]))
     before = {p: digest(root / p) for p in inputs}
     print(f"Scope: {len(code)} code, {len(docs)} documents, {len(config['build_files'])} build files", flush=True)
     # Fresh extraction, bounded workers, no reuse of potentially stale semantic cache.
@@ -282,6 +282,26 @@ def build(root, out):
             edge(cid, file_id(c["impl"]), "implemented_by", c["impl"], method="source-layout")
         for test, line, method, confidence in c["tests"]:
             edge(cid, file_id(test), "tested_by", config["catalogue"], line, method, confidence)
+    # Question routes (Task V7): `graphify query` seeds on node labels, so each
+    # curated symptom question is a node labelled with its text, answered by
+    # the owning component. Routes never claim behaviour; `why` is the owner's
+    # documented guarantee.
+    from graphify.serve import _query_terms
+    routes = json.loads((root / "tools/graphify/routes.json").read_text())["routes"]
+    for i, r in enumerate(routes):
+        cid = "efs:component:" + r["component"]
+        if cid not in nodes:
+            raise ValueError(f"route names unknown component {r['component']}")
+        rid = f"efs:route:{i:03d}"
+        # The label is the question as `graphify query` normalizes it (filler
+        # words dropped), so the identical question equals the label and seeds
+        # first. `attributes` are printed on the node's output line: the first
+        # line already names the owner.
+        node(rid, " ".join(_query_terms(r["question"])), "tools/graphify/routes.json", 1, "question_route")
+        # graphify prints attributes sorted by key and cuts long values: "next" comes first.
+        nodes[rid]["attributes"] = {"next": 'graphify explain "%s"' % r["component"],
+                                    "owner": r["component"], "why": r["why"]}
+        edge(rid, cid, "answered_by", "tools/graphify/routes.json", method="curated-question-route")
     # Resolve quoted C includes by exact path, not matching a basename to a
     # possibly unrelated file. Unresolved imports remain labelled boundaries.
     for e in edges:
@@ -391,7 +411,7 @@ def main():
         config = json.loads((ROOT / "tools/graphify/scope.json").read_text())
         code, docs = select_files(ROOT, config)
         expected = set(code + docs + config["build_files"] + [config["catalogue"],
-            "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"])
+            "tools/graphify/scope.json", "tools/graphify/known-bugs.json", "tools/graphify/routes.json", "scripts/build-code-graph.py", "scripts/graph-community-labels.py"])
         if expected != set(manifest["input_sha256"]) or any(
                 digest(ROOT / p) != h for p, h in manifest["input_sha256"].items()):
             raise ValueError("graph is stale: source inputs differ; rebuild required")

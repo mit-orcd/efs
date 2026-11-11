@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
-raft=(root/'src/raft/raft.c').read_text();host=csrc.module('group_view')
+raft=(root/'src/raft/raft.c').read_text();host=csrc.module('group_view');impl=host[host.index('#define V_LOAD'):]
 def function(source,name):
  a=source.index('int '+name+'(');return source[a:source.index('\n}',a)+2]
 a=host.index('struct host_view {');b=host.index('\n};',a)+3
@@ -20,7 +20,7 @@ struct efs_raft {int recv_persisting,storage_failed,role,quorum;uint64_t read_ro
  uint64_t read_applied_round,read_applied_index,read_applied_term;
  uint32_t read_applied_cfg_old,read_applied_cfg_new;};
 static int efs_raft_read_quorum(const struct efs_raft *r){return r->quorum;}
-'''+helper+raft[raft.index('uint64_t efs_raft_read_context('):raft.index('\n}',raft.index('uint64_t efs_raft_read_context('))+2]+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(host,'host_view_covers')+'\nstatic '+function(host,'host_view_wait_apply')+r'''
+'''+helper+raft[raft.index('uint64_t efs_raft_read_context('):raft.index('\n}',raft.index('uint64_t efs_raft_read_context('))+2]+function(raft,'efs_raft_read_proven')+host[a:b]+'\nstatic '+function(impl,'host_view_covers')+'\nstatic '+function(impl,'host_view_wait_apply')+r'''
 static struct host_view view(struct efs_raft *r,uint64_t applied){
  r->last_applied=applied;
  struct host_view v={.has=1,.role=r->role,.term=r->current_term,.read_pending=1,

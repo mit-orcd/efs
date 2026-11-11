@@ -6,8 +6,9 @@ import csrc
 root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');gv=csrc.module('group_view')
 def fn(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
+impl=gv[gv.index('#define V_LOAD'):]  # group_view_impl.h: the inline bodies
 def gfn(name):
- a=gv.index('int '+name+'(');return 'static '+gv[a:gv.index('\n}',a)+2]
+ a=impl.index('int '+name+'(');return 'static '+impl[a:impl.index('\n}',a)+2]
 a=gv.index('struct host_view {');view=gv[a:gv.index('\n};',a)+3]
 a=gv.index('struct host_read_floor {');floor=gv[a:gv.index('\n',a)]
 code=r'''

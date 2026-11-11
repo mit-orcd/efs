@@ -6,7 +6,7 @@ Mutexes in this file: `g_client.lock` (table), `g_client.idx_mu`, `g_client.dirt
 
 ## PUT pool and write entry
 
-Does: `efs_client_write` splits one FUSE write into chunk jobs, runs them through `client_write_run` and the persistent PUT worker pool (`put_pool_run` enqueues, `put_pool_thread` drains, `chunk_put_worker` stores one chunk into the dcache or PUTs it), then returns the first error. `efs_client_write_no_replicate` is the same path with replication off.
+Does: `efs_client_write` runs `client_write_run`, which PUTs each chunk in order on the calling thread and returns the first error. `efs_client_write_no_replicate` runs `write_chunks_no_replicate`, which sends batches of up to 32 chunk jobs through the persistent PUT worker pool (`put_pool_run` enqueues, `put_pool_thread` drains, `chunk_put_worker` stores one chunk into the dcache or PUTs it); the flush pipe is the pool's other caller.
 
 State: `g_put_sh[]` (per-worker FIFO of `chunk_put_job`, each with its own `mu`/`cv`); `g_put_pool` (thread ids, `ready`, `shutdown`, `rr`) started once under `g_put_init`.
 
@@ -62,7 +62,7 @@ Tests: `tests/test_pressure_cohort.py` `tests/test_client_memory.py` `tests/test
 
 ## PUT window
 
-Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole. Owned by `src/client/put_window.c` behind [`put_window.h`](../../src/client/put_window.h), which carries the contract; `write.c` calls `put_win_open`, `put_win_close` and `put_win_wait` and never reads the state.
+Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole. Owned by `src/client/put_window.c` behind [`put_window.h`](../../src/client/put_window.h), which carries the contract; `write.c` calls `put_win_open`, `put_win_close` and `put_win_wait` and never reads the state. What bounds the PUT itself (deadline, retries, quorum, completion) is in [put-lifecycle.md](put-lifecycle.md).
 
 State: `put_win[]`, `put_win_overflow` under `put_win_mu`/`put_win_cv` (all private to `put_window.c`); `put_win_total` atomic (lock-free fast path for readers).
 
