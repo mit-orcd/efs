@@ -20,6 +20,53 @@ int __wrap_efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t te
     return EFS_OK;
 }
 
+/* K113 round 3: the Raft core's position and role, and the core's record of
+ * the dropped image. */
+static uint64_t stub_applied;
+static int stub_role = EFS_RAFT_FOLLOWER;
+static int drop_calls;
+static uint64_t drop_incl, drop_term;
+uint64_t __wrap_efs_raft_applied(const struct efs_raft *r)
+{
+    (void)r;
+    return stub_applied;
+}
+int __wrap_efs_raft_role(const struct efs_raft *r)
+{
+    (void)r;
+    return stub_role;
+}
+void __wrap_efs_raft_snap_import_drop(struct efs_raft *r, uint64_t incl, uint64_t term)
+{
+    (void)r;
+    drop_calls++;
+    drop_incl = incl;
+    drop_term = term;
+}
+
+/* Run the GC pass with stderr captured into line (the telemetry log). */
+static void pass_captured(struct efs_raft_host *h, char *line, size_t cap)
+{
+    char path[EFS_TEST_PATH];
+    int fd, saved;
+    ssize_t n;
+
+    efs_test_path(path, sizeof(path), "snap-pass-log-XXXXXX");
+    fd = efs_test_mkstemp(path);
+    CHECK(fd >= 0, "log file");
+    fflush(stderr);
+    saved = dup(2);
+    dup2(fd, 2);
+    host_snap_import_pass(h);
+    fflush(stderr);
+    dup2(saved, 2);
+    close(saved);
+    n = pread(fd, line, cap - 1, 0);
+    close(fd);
+    unlink(path);
+    line[n < 0 ? 0 : n] = 0;
+}
+
 /* The KV refuses the batch (L0 stall): one step per pump call, and the pump
  * goes back to its normal wait instead of polling with timeout 0. */
 static int step_busy_left, step_progress_left, step_calls, step_hard_error;
@@ -184,7 +231,52 @@ static void test_hard_error_requests_resync(void)
     CHECK(resync_calls == 1, "the pump does not ask again");
     CHECK(host_snap_chunk(g, INCL + 1, 1, 0, f.img, 16, 0) == EFS_OK,
           "a chunk at offset 0 is accepted afterwards");
+    CHECK(access(g->import_path, F_OK) != 0, "the failed image file is unlinked");
     close(f.h->pump_efd);
+    fixture_free(&f);
+}
+
+/* C1/C2: an image still QUEUED when the member has applied past it (or leads)
+ * is dropped before the KV is touched; below it, the import runs as before. */
+static void test_queued_import_dropped(uint64_t applied, int role, int expect_drop)
+{
+    struct fixture f;
+    struct host_group *g;
+    char line[4096];
+    char path[EFS_MAX_PATH];
+
+    fixture_make(&f);
+    g = &f.h->g[0];
+    g->r = (struct efs_raft *)&f;
+    stub_applied = applied;
+    stub_role = role;
+    drop_calls = 0;
+    import_open_calls = 0;
+    step_calls = 0;
+    CHECK(send_chunk(&f) == EFS_ERR_BUSY, "chunk of X queues the import");
+    snprintf(path, sizeof(path), "%s", g->import_path);
+    CHECK(access(path, F_OK) == 0, "the image file exists");
+    pass_captured(f.h, line, sizeof(line));
+    if (expect_drop) {
+        CHECK(import_open_calls == 0 && step_calls == 0, "the KV import was never called");
+        CHECK(!converged(&f) && !g->import_im, "the KV is untouched");
+        CHECK(g->import_state == SNAP_IMP_IDLE, "state is IDLE");
+        CHECK(!__atomic_load_n(&g->import_block, __ATOMIC_ACQUIRE), "import_block is clear");
+        CHECK(access(path, F_OK) != 0, "the image file is gone");
+        CHECK(strstr(line, "raft-snap: import dropped group=0 incl=10 applied=") != NULL,
+              "the drop is logged");
+        CHECK(drop_calls == 1 && drop_incl == INCL && drop_term == 1,
+              "the core is told to forget the record");
+        CHECK(host_snap_chunk(g, INCL + 1, 1, 0, f.img, 16, 0) == EFS_OK,
+              "a chunk at offset 0 is accepted afterwards");
+    } else {
+        CHECK(import_open_calls == 1 && g->import_state == SNAP_IMP_DONE && g->import_im,
+              "applied below X: the import runs");
+        CHECK(!drop_calls && strstr(line, "import dropped") == NULL, "nothing is dropped");
+        CHECK(__atomic_load_n(&g->import_block, __ATOMIC_ACQUIRE), "applies stay blocked");
+    }
+    stub_applied = 0;
+    stub_role = EFS_RAFT_FOLLOWER;
     fixture_free(&f);
 }
 
@@ -195,6 +287,10 @@ int main(void)
     imported_calls = 0;
     test_kv_busy_does_not_spin_the_pump();
     test_hard_error_requests_resync();
+    test_queued_import_dropped(INCL, EFS_RAFT_FOLLOWER, 1);
+    test_queued_import_dropped(INCL + 5, EFS_RAFT_FOLLOWER, 1);
+    test_queued_import_dropped(INCL - 1, EFS_RAFT_LEADER, 1);
+    test_queued_import_dropped(INCL - 1, EFS_RAFT_FOLLOWER, 0);
     printf("PASS K113: newer snapshot chunk keeps the import, the pump steps and installs it without a leader retry\n");
     return 0;
 }

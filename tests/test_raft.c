@@ -2555,6 +2555,110 @@ static void test_snap_imported_guards(void)
     efs_raft_free(r); efs_raft_mem_free(st);
 }
 
+/* K113 round 3: send hook that counts, records the last message and can fail. */
+static int k113_sent, k113_send_rc;
+static struct efs_raft_msg k113_last;
+static int k113_counting_send(void *net, const struct efs_raft_msg *msg)
+{
+    (void)net;
+    k113_sent++;
+    k113_last = *msg;
+    k113_last.nentries = 0;
+    return k113_send_rc;
+}
+
+static struct efs_raft *k113_follower(struct efs_raft_cfg *cfg,
+                                      struct efs_raft_store **st,
+                                      struct k113_app *app)
+{
+    struct efs_raft *r;
+    uint8_t buf[16];
+
+    k113_fixture(cfg, st, app, 3);
+    cfg->send = k113_counting_send;
+    r = test_raft_new(cfg);
+    CHECK(r != NULL, "k113 follower fixture");
+    if (!r) { efs_raft_mem_free(*st); return NULL; }
+    (void)k113_send(r, 5, 0, 0, 7, buf);
+    (void)k113_send(r, 5, 3, 0, 7, buf);
+    return r;
+}
+
+static void test_snap_imported_send_and_leader(void)
+{
+    struct efs_raft_cfg cfg; struct efs_raft_store *st;
+    struct k113_app app = { .busy_for = 5, .refuse_for = 9 };
+    struct efs_raft *r;
+    uint8_t buf[16];
+    int before, i;
+
+    /* c: the install succeeded, the ack send failed: the result is the install */
+    r = k113_follower(&cfg, &st, &app);
+    if (!r) return;
+    k113_send_rc = EFS_OK;
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK, "closing chunk queued");
+    k113_send_rc = EFS_ERR_IO;
+    k113_sent = 0;
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_OK, "installed although the ack send fails");
+    CHECK(k113_sent == 1 && efs_raft_snap_index(r) == 5 && efs_raft_applied(r) == 5,
+          "the ack was tried and the image is installed");
+    CHECK(k113_last.type == EFS_RAFT_MSG_SNAP_REP && k113_last.to == 0 &&
+          k113_last.success == 1 && k113_last.match_index == 5, "the ack names the image");
+    k113_send_rc = EFS_OK;
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    /* d: no known leader: installed, nothing sent */
+    r = k113_follower(&cfg, &st, &app);
+    if (!r) return;
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK, "closing chunk queued");
+    for (i = 0; i < 40 && efs_raft_leader(r) >= 0; i++)
+        (void)efs_raft_tick(r);
+    CHECK(efs_raft_leader(r) < 0, "the leader is unknown");
+    before = k113_sent;
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_OK, "installed without a leader");
+    CHECK(k113_sent == before, "no message is sent");
+    CHECK(efs_raft_snap_index(r) == 5, "snapshot index is X's");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    /* the refusal reply of a chunk 0 the host refuses */
+    r = k113_follower(&cfg, &st, &app);
+    if (!r) return;
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK, "closing chunk queued");
+    k113_sent = 0;
+    CHECK(k113_send(r, 9, 0, 1, 7, buf) == EFS_OK, "Y refused");
+    CHECK(k113_sent == 1 && k113_last.type == EFS_RAFT_MSG_SNAP_REP && k113_last.to == 0 &&
+          k113_last.success == 1 && k113_last.vote_granted == 0 &&
+          k113_last.prev_index == 0, "refusal reply: success, no vote, prev_index = offset");
+    efs_raft_free(r); efs_raft_mem_free(st);
+}
+
+/* The host's election veto (efs_raft_set_pressure while an import is not
+ * IDLE): no campaign starts under it, and it can campaign again after. */
+static void test_pressure_vetoes_campaign(void)
+{
+    struct efs_raft_cfg cfg; struct efs_raft_store *st;
+    struct k113_app app = { .busy_for = 5 };
+    struct efs_raft *r;
+    uint8_t buf[16];
+    int i, base;
+
+    r = k113_follower(&cfg, &st, &app);
+    if (!r) return;
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK, "closing chunk queued");
+    k113_send_rc = EFS_OK;
+    efs_raft_set_pressure(r, 1);
+    base = k113_sent;
+    for (i = 0; i < 100; i++)
+        (void)efs_raft_tick(r);
+    CHECK(k113_sent == base && efs_raft_leader(r) == 0, "no campaign while the import runs");
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_OK, "install");
+    efs_raft_set_pressure(r, 0);
+    for (i = 0; i < 100 && k113_last.type != EFS_RAFT_MSG_PREVOTE_REQ; i++)
+        (void)efs_raft_tick(r);
+    CHECK(k113_last.type == EFS_RAFT_MSG_PREVOTE_REQ, "it campaigns again after the install");
+    efs_raft_free(r); efs_raft_mem_free(st);
+}
+
 /* Compacting without a snap_get blob must not skip a learner ahead.
  * wait_voters stays BUSY — match never reaches commit. */
 static void test_install_snapshot_needs_blob(void)
@@ -4046,6 +4150,8 @@ int main(int argc, char **argv)
         RUN(test_snapshot_imported_without_retry);
         RUN(test_snapshot_refused_image_keeps_import);
         RUN(test_snap_imported_guards);
+        RUN(test_snap_imported_send_and_leader);
+        RUN(test_pressure_vetoes_campaign);
         RUN(test_install_snapshot);
         RUN(test_install_snapshot_needs_blob);
         RUN(test_install_snapshot_restarted_leader);

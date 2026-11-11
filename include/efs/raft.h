@@ -385,6 +385,12 @@ int efs_raft_resync_pending(const struct efs_raft *r);
  * it is not the image the core last saw closed, applied has passed it, or
  * this member leads. With no known leader it installs and sends no ack. */
 int efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t term);
+/* The result says whether the image was installed, not whether the ack to
+ * the leader was sent (a lost ack is retried by the leader). */
+
+/* The host dropped the queued image (incl, term) unimported (the member had
+ * applied past it, or leads): forget the core's record of it. */
+void efs_raft_snap_import_drop(struct efs_raft *r, uint64_t incl, uint64_t term);
 
 /* A resyncing peer pulled its match to 0: the pump must export an image
  * for send_snap outside the byte cadence. */

@@ -148,8 +148,10 @@ struct efs_raft {
     uint32_t rx_old;
     uint32_t rx_new;
     /* The image whose closing chunk the host answered BUSY (its import is
-     * running): a newer image's chunk 0 overwrites rx_*, this copy lets the
-     * host install it later (efs_raft_snap_imported). */
+     * running). The host refuses a newer image's chunk 0 (EFS_ERR_AGAIN) while
+     * it runs, so rx_* keep describing it; this copy is what the host's later
+     * install (efs_raft_snap_imported) is checked against, and what
+     * efs_raft_snap_import_drop forgets. */
     uint64_t imp_incl;
     uint64_t imp_term;
     uint32_t imp_old;
@@ -2307,15 +2309,32 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
 int efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t term)
 {
     struct efs_raft_msg m;
+    int rc, to;
 
     if (!r || r->role == EFS_RAFT_LEADER || incl == 0 || incl != r->imp_incl ||
         term != r->imp_term || incl <= r->last_applied || incl < r->snap_idx)
         return EFS_ERR_INVAL;
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_SNAP_REP;
-    m.to = r->leader;
+    m.to = -1; /* snap_installed installs and sends nothing */
+    to = r->leader;
     r->imp_incl = 0;
-    return snap_installed(r, &m, incl, term, r->imp_old, r->imp_new, 1);
+    rc = snap_installed(r, &m, incl, term, r->imp_old, r->imp_new, 1);
+    /* The result is the install, not the ack: a lost ack is retried by the
+     * leader's next InstallSnapshot, which finds the image already applied. */
+    if (rc == EFS_OK && to >= 0) {
+        m.to = to;
+        (void)send_msg(r, &m);
+    }
+    return rc;
+}
+
+/* The host dropped the queued image (incl, term) without importing it: forget
+ * the record so a later image is handled as a fresh one. */
+void efs_raft_snap_import_drop(struct efs_raft *r, uint64_t incl, uint64_t term)
+{
+    if (r && incl && r->imp_incl == incl && r->imp_term == term)
+        r->imp_incl = 0;
 }
 
 static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)

@@ -3866,8 +3866,10 @@ static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
      * no longer tracks this anchor's GC records (D26). */
     efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
     efs_meta_degraded_count_invalidate(g->group == 0 ? 1u : 2u);
-    /* RUN: the GC thread owns the buffers. APPLY: the pump is mid-slice
-     * and frees them when it notices the state left APPLY. */
+    /* host_snap_chunk reaches here only for chunk 0 with no import queued,
+     * running or applying, so the state is IDLE or FAIL; RUN and APPLY are
+     * kept for a direct caller and then fail closed: the GC thread (RUN) or
+     * the pump (APPLY) owns the buffers. */
     if (st != SNAP_IMP_RUN && !g->import_applying)
         snap_import_free_diff(g);
     if (st == SNAP_IMP_QUEUED || st == SNAP_IMP_DONE || st == SNAP_IMP_FAIL)
@@ -3885,6 +3887,18 @@ static int snap_import_active(struct efs_raft_host *h, struct host_group *g)
     pthread_mutex_unlock(&h->snap_mu);
     return st == SNAP_IMP_QUEUED || st == SNAP_IMP_RUN ||
            st == SNAP_IMP_DONE || st == SNAP_IMP_APPLY;
+}
+
+/* 1 while the group's import is in any state but IDLE (FAIL included: applies
+ * stay blocked until it is cleared). The election veto uses it. */
+static int snap_import_pending(struct efs_raft_host *h, struct host_group *g)
+{
+    int st;
+
+    pthread_mutex_lock(&h->snap_mu);
+    st = g->import_state;
+    pthread_mutex_unlock(&h->snap_mu);
+    return st != SNAP_IMP_IDLE;
 }
 
 /* 1 if this incl already has an import queued, running, or finished.
@@ -3944,6 +3958,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
              * leader's resend of a one-chunk image lands here first. Drop
              * it; the next chunk at offset 0 queues a fresh import. */
             snap_import_free_diff(g);
+            unlink(g->import_path);
             g->import_state = SNAP_IMP_IDLE;
             efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
             efs_meta_degraded_count_invalidate(g->group == 0 ? 1u : 2u);
@@ -3998,6 +4013,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         return 1;
     }
     *rc = g->import_rc ? g->import_rc : EFS_ERR_IO;
+    unlink(g->import_path);
     g->import_state = SNAP_IMP_IDLE;
     efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
     efs_meta_degraded_count_invalidate(g->group == 0 ? 1u : 2u);
@@ -9022,7 +9038,11 @@ static void *host_pump(void *arg)
                 int kv_over = host_kv_pressure(h);
                 for (i = 0; i < HOST_NGROUPS; i++) {
                     if (h->g[i].hosted && h->g[i].r) {
-                        efs_raft_set_pressure(h->g[i].r, kv_over);
+                        /* K113: a member whose KV is mid-import (or whose
+                         * Raft position lags the finished import) must not
+                         * campaign: the same veto as KV pressure. */
+                        efs_raft_set_pressure(h->g[i].r, kv_over ||
+                                snap_import_pending(h, &h->g[i]));
                         (void)efs_raft_tick(h->g[i].r);
                     }
                 }
@@ -11562,6 +11582,35 @@ static void host_snap_import_pass(struct efs_raft_host *h)
          * group lands after the local export below, where the diff could not
          * correct it. */
         pthread_mutex_lock(&h->mu);
+        if (h->g[gi].r) {
+            uint64_t applied = efs_raft_applied(h->g[gi].r);
+
+            /* A delayed AppendEntries may have moved the member past this
+             * image while it was only queued (applies run until import_block
+             * is up), and a leader never installs one: importing would put
+             * an older store under a newer Raft position. Drop it before the
+             * KV is touched. h->mu is held, so no apply lands in between. */
+            if (applied >= incl || efs_raft_role(h->g[gi].r) == EFS_RAFT_LEADER) {
+                uint64_t term;
+
+                pthread_mutex_lock(&h->snap_mu);
+                term = h->g[gi].import_term;
+                if (h->g[gi].import_gen == gen &&
+                    h->g[gi].import_state == SNAP_IMP_RUN) {
+                    unlink(path);
+                    h->g[gi].import_state = SNAP_IMP_IDLE;
+                    efs_raft_snap_import_drop(h->g[gi].r, incl, term);
+                    efs_telemetry_log(0, "raft-snap: import dropped group=%u "
+                            "incl=%llu applied=%llu\n", group,
+                            (unsigned long long)incl,
+                            (unsigned long long)applied);
+                }
+                pthread_mutex_unlock(&h->snap_mu);
+                pthread_mutex_unlock(&h->mu);
+                __atomic_store_n(&h->g[gi].import_block, 0, __ATOMIC_RELEASE);
+                continue;
+            }
+        }
         pthread_mutex_unlock(&h->mu);
         t0 = now_us_();
         efs_telemetry_log(0, "raft-snap: import start group=%u incl=%llu\n",
@@ -11633,7 +11682,9 @@ static void host_snap_import_pass(struct efs_raft_host *h)
             h->g[gi].import_rc = rc;
             h->g[gi].import_state =
                 rc == EFS_OK ? SNAP_IMP_DONE : SNAP_IMP_FAIL;
-            /* import_block stays until the pump observes DONE/FAIL. */
+            /* import_block stays until the pump observes DONE, or until the
+             * next chunk at offset 0 (snap_import_cancel) or the retry of
+             * the closing chunk (snap_import_poll) clears a FAIL. */
             pthread_mutex_unlock(&h->snap_mu);
         } else {
             pthread_mutex_unlock(&h->snap_mu);
