@@ -14,7 +14,7 @@ The structure review of Nov 11 said the reading-set numbers on the [PUT-window p
 - **Not allowed:** anything under `docs/status/` (earlier answers), `scripts/evidence/` (trial 3), other commits, the web, other sessions. Allowed: source, headers, tests, the `README.md` guides, `docs/how-it-works/`, and the code graph.
 - **Log:** the reader appends one row to `trial/reading-log.tsv` each time text from the tree enters its context (file, first and last line, lines, why), and afterwards classes each row as needed (the answer depends on it), validation (read to confirm) or irrelevant.
 - **Score:** the coordinator compares the answer with the committed key, fact by fact.
-- **Raw:** the three `trial/` directories (log, answer, summary) are on local refs `keep-trial1` (`2395ab5dd`), `keep-trial2` (`f22f1c985`) and `keep-trial3` (`f0198f4bd`); they are not merged.
+- **Raw:** the three `trial/` directories (reading log, answer, summary; 9 files) are on amd in `~maik/efs-artifacts/reader-trials-20261111/` (`SHA256SUMS` hash `548ed9610a05b2df`); they are not in Git.
 
 ## Results
 
