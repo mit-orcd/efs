@@ -53,6 +53,10 @@ Component known: start with `graphify explain <tag>` (the catalogue tag, the
 then `graphify explain` on what it finds. Both come before the first grep or
 source read.
 
+Owner unknown: `graphify query` with the symptom in plain words; curated question
+routes (`routes.json`) lead to the owner; add a route when you had to search
+(see [question-routes-20261111.md](../../docs/status/2026-11/question-routes-20261111.md)).
+
 ```sh
 graphify explain client/efs_fuse.writeback
 graphify query host_apply --seed host_apply --context calls --budget 1500

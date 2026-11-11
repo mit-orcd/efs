@@ -408,6 +408,7 @@
     "scripts/install-code-graph-hooks.py": 1,
     "scripts/leader_placement.py": 23,
     "scripts/make_test_summary.sh": 3,
+    "scripts/measure_question_routes.py": 4,
     "scripts/put_window_mutation.py": 1,
     "scripts/qualify.py": 229,
     "scripts/rebuild-code-graph.sh": 1,
@@ -1022,7 +1023,7 @@
     "tests/test_close_retire_batch.py": 1,
     "tests/test_close_retire_fastpath.py": 1,
     "tests/test_cluster_stop.py": 2,
-    "tests/test_code_graph.py": 15,
+    "tests/test_code_graph.py": 19,
     "tests/test_command_policy_mount.py": 1,
     "tests/test_commands_load_payloads.py": 2,
     "tests/test_committed_directory_stage.py": 2,
@@ -1679,7 +1680,7 @@
     "scripts/b_checks.py": "5e2366aaf81e76b5ff2eea2c2867e7e45bea4697926757911b2ea24881cea4e4",
     "scripts/batch_f.sh": "a6fef37a3dfbcb984ed775c406dc3ae980e0e5dd28303ac1e12af2860c349830",
     "scripts/bench_profile.py": "73de02e1fed4f1d2d19a260d73299ea98370c9f0d18c22d33489ef8a1d38dab8",
-    "scripts/build-code-graph.py": "9fc67ce1e5866dd68709caec57766474a012b203116738c0e48126008d6e1b38",
+    "scripts/build-code-graph.py": "84fbfa509cefc6de2cba94524395cc351eb156e1e6dafa6619a92d39b8a3ee0b",
     "scripts/calibrate_test_budgets.sh": "26d0675574f0749aeb33127f7c390bdcbb7d2beee6b6adbb48dae840972bd51d",
     "scripts/check_concern_map.py": "0c303c96ec868ddd6dd5cae9067041cc4c71dfa64c69831188ad5d3ba7ecf089",
     "scripts/check_doc_links.py": "3cc40133ba30aef5ac48df7e9adbdcb7c6a32d5c9385b24acbba0b3d5c18e37d",
@@ -2017,6 +2018,7 @@
     "scripts/install-code-graph-hooks.py": "76963083b38e009a044c6daf69fdc8d7e5af5c343a6cc927d8048515d62fe6f8",
     "scripts/leader_placement.py": "84cf85b8e84990501916d59e9e8ed4073cf3450ace524c1dfd3e3577bb73d503",
     "scripts/make_test_summary.sh": "3281bfbb42825d6e8a22d5a90d565ca51b26b9d0f4036b95d823b0077249b864",
+    "scripts/measure_question_routes.py": "d1e46d424bf3df89d7eeba0614bdbf7d4521e2a5c4a7a2ddc13e1bf126f1c76a",
     "scripts/put_window_mutation.py": "0c31dbcccbb0cfe554e5db78a8ef57e2d6655d4f854ab499c5c0ded59c8f45d9",
     "scripts/qualify.py": "8fa89e5b9af29e6d7a0f071dd7c6a4e55ef8d7e58c9521e761e57b4deb9479ea",
     "scripts/rebuild-code-graph.sh": "9fb94cc1b977a0315416fbb9d582ac52e43056bd90cdef7ad7ffd3280e4b8d1f",
@@ -2645,7 +2647,7 @@
     "tests/test_close_retire_batch.py": "07b5cebd47d5d88366cf7b97a8a14aead8b2cd44ea0ad5a8cc73c99d7a40f3aa",
     "tests/test_close_retire_fastpath.py": "9c83dc948aaf63c4c2d9b713cd6f553dd5ee84d08847a4268fa69ae8c9543ee3",
     "tests/test_cluster_stop.py": "a85c5e962a4603496020f7284068ada2c4d2b71934c5555516e90784ecc5b5f1",
-    "tests/test_code_graph.py": "83acaa31c4652db9a113f32be15171f3fc6d3fa7384ae7e53e2101f83ddbf0c0",
+    "tests/test_code_graph.py": "563b90732aaf59f3f5c31507638c11b5b0d2e3cd817f5c2d1c768e18aff1bc12",
     "tests/test_command_policy_mount.py": "7f814c36d19a6494f13a9e480e0749e670e0a48da22f9e2997583062fa4cff20",
     "tests/test_commands_load_payloads.py": "0c61cddf4c6b0315756cb25956806ac403cee2123be968d7140a3c5b632315fc",
     "tests/test_committed_directory_stage.py": "13a06ae62b94c8a9bddffe758482323ebb810f4398a24b766b7cd13564453dd4",
@@ -3183,16 +3185,17 @@
     "tests/tools/reap_dup.py": "f234dfe82d00665b183f3e9b4445492f022f85c09e1e9bb81fa2cfb60ce807b6",
     "tests/valgrind_leaks.sh": "7fbda7a9d6d55de805c21904096579ddeb0ce8222b34ab2a495770aba4173cbf",
     "tests/wipe_cluster.sh": "84c22d5dc42f3450603b956f81a965a699943591abbcb2a135a26d99b6277627",
-    "tools/graphify/README.md": "ee63cfaded58677067ed107b65db9b84af6220820564e09a1ffc71ddd4e1250f",
+    "tools/graphify/README.md": "2fe0cbfc7445ecdc3e1375cd3cd006a42ef0a2d92cd693629d2c55ebd4cb4b02",
     "tools/graphify/known-bugs.json": "445cc560c697f28faee31a17da2f111db104a4a975501bbb1d020a6d99926088",
+    "tools/graphify/routes.json": "9d29353c6a306a647e60e8fc6fc4cb3d35138b7d0df31d16f992049a7c61a3d0",
     "tools/graphify/scope.json": "b929a090439e74ae5ca60a2bef7f00015245420189cc0b27c005d938ad4f74f9"
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1884
+    "calls": 1887
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "814d9b55d1add3e3ed2467839264c0fd8dafcfcc"
+  "source_commit": "0bffb131d6c6b1f0cfe0628800241f6b8de7a9f4"
 }
