@@ -649,18 +649,12 @@ static int manifest_load(struct kv_lsm *l)
     fclose(f);
     if (rc != EFS_OK)
         return rc;
-    /* L0 newest first: the MANIFEST writes them in that order already, but
-     * sort so a hand-edited or older manifest cannot invert precedence. */
-    if (l->n_l0 > 1) {
-        uint32_t i, j;
-        for (i = 0; i < l->n_l0; i++)
-            for (j = i + 1; j < l->n_l0; j++)
-                if (l->l0[j].seq > l->l0[i].seq) {
-                    struct seg_slot t = l->l0[i];
-                    l->l0[i] = l->l0[j];
-                    l->l0[j] = t;
-                }
-    }
+    /* MANIFEST order is L0 recency authority. An async fold reserves its
+     * output id while unlocked, possibly AFTER a newer concurrent flush.
+     * Publication keeps that newer flush ahead of the older folded values;
+     * sorting by allocation id on restart would reverse that ordering and
+     * resurrect stale values/tombstones.
+     * Keep exactly the order atomically persisted by the publisher. */
     if (l->n_l1 > 1)
         qsort(l->l1, l->n_l1, sizeof(l->l1[0]), kv_l1_cmp);
     kv_candidates_changed(l);
