@@ -8,7 +8,7 @@ Linked item: structure review of Nov 11 (Task V5). Binary identity: none (nothin
 
 - Read the code named in the page, using `graphify explain "client/put_window"` and the [write-path map](../../how-it-works/write-path-map.md) to locate it. Line numbers below are at `0bffb131d`.
 - Checker: `python3 scripts/check_put_lifecycle.py`.
-- Inventory: `python3 scripts/evidence/v5/lifecycle_inventory.py src/client/write.c --functions` (a copy of the V2 script; only the struct names, the base-type rule and the test-pattern name changed; the candidate lists are `scripts/evidence/v5/candidate_*.txt`). Exit 1 if a listed name is not defined once. Raw output is not committed; the numbers are below.
+- Inventory: `python3 scripts/evidence/v5/lifecycle_inventory.py src/client/write.c --functions` (a copy of the V2 script; only the struct names, the base-type rule and the test-pattern name changed; the candidate lists are `scripts/evidence/v5/candidate_A_put_completion.txt`, `scripts/evidence/v5/candidate_B_fragment_put.txt` and `scripts/evidence/v5/candidate_C_pool_and_pipe.txt`). Exit 1 if a listed name is not defined once. Raw output is not committed; the numbers are below.
 - Environment: macOS, Python 3, no cluster, no build.
 
 ## Code read, per question
