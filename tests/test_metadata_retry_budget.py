@@ -47,6 +47,7 @@ static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip)
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;releases++;}
 static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;}
+static int rpc_reply_wait_cut(uint8_t t,const void *r,uint32_t l){(void)t;(void)r;(void)l;return 0;}
 static int rpc_prof_enabled(void){return 0;}
 static unsigned long long rpc_prof_now_us(void){return now*1000;}
 static void rpc_prof_add(int type,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d){(void)type;(void)a;(void)b;(void)c;(void)d;}

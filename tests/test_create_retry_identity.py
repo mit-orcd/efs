@@ -57,6 +57,7 @@ static struct efs_conn *raft_voter_conn_skip(uint32_t sh,efs_node_id_t *n,efs_no
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;assert(c==&connection);}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;assert(c==&connection);}
 static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
+static int rpc_reply_wait_cut(uint8_t t,const void *r,uint32_t l){(void)t;(void)r;(void)l;return 0;}
 uint32_t efs_export_shard_of(efs_ino_t ino,uint32_t bits){return ino&((1u<<bits)-1);}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *req,uint32_t len){
  assert(c==&connection&&type==EFS_MSG_INODE_CREATE&&active);

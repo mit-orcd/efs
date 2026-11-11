@@ -62,7 +62,7 @@ fails at once instead of waiting a second 30 s. Nothing is raised, shortened or 
 
 ## Tests
 
-`tests/test_node_waiter_cut.py` (four scenarios, each a Makefile and `tests/budgets.tsv` row, also in the TSan lane of
+`tests/test_node_waiter_cut.py` (four scenarios in round 1, seven after round 2 below; each a Makefile and `tests/budgets.tsv` row, also in the TSan lane of
 `tests/sanitizer_check.sh`) runs the production `efs_client_conn_await_reply` and `node_exchange` with a peer that accepts TCP, over real
 socket pairs. No wall-clock bound is asserted: a missed cut hangs a waiter and the alarm fails the test. `EFS_NODE_PROBE_MS` is scaled to 40 ms
 and `EFS_IO_TIMEOUT_MS` to 300 ms in the test.
@@ -154,6 +154,32 @@ Hot-path control, (b) with no halt, 30 writes: devel 1.4, 1.2, 1.4 s; fixed 1.3,
 | `bash tests/sanitizer_check.sh tsan` | VERDICT FAIL (36 run, 1 failed): `k37_segment_rebuild`, `AssertionError: refused files once node 3 is back: packer moved 0 of 4`, the test race recorded in [Task FL](k106-halted-member-waits-20261110.md) (fails on devel too). `waiter_cut_halted`, `_slow`, `_two`, `_noreply` PASS under TSan |
 | test timings (gate, intel1) | the four scenarios run in 0.1 to 0.4 s; budget 5 s each (1.25 x slowest rounded up) |
 | `python3 scripts/check_k_register.py`, `check_doc_links.py`, `docs/gen-architecture-full.py`, `make docs-check`, `rebuild-code-graph.sh`, `tests/test_code_graph.py` | PASS (K register 113 rows, 0 dangling links, architecture pages regenerated unchanged, `make docs-check` rc 0; graph rebuilt in the last commit, `tests/test_code_graph.py` OK) |
+
+## Round 2 (Task FW)
+
+An independent review of the change found nothing blocking and four things to repair. Branch `claude/sleepy-curie-5c8445` on the wave 77 base `20d58f67c`. Raw output stays on intel1 in `~maik/efs-artifacts/taskFW-20261110/` (`SHA256SUMS`).
+
+| finding | what changed |
+|---|---|
+| F1 `tests/test_node_waiter_cut.py` had a fallback that built against a tree without the hook (`HAVE_AWAIT`), a `usleep` and a polling loop | The fallback is gone: the test builds only against a tree that has the hook. The stub declaration now blocks on a semaphore that the test releases, and the test waits on a second semaphore for the exchange to start: no sleep, no polling. |
+| F2 the test forced the operation deadline to 0 and replaced `slot_for_conn`, `pool_size` and `node_index_for_id`; the gating at `inode_rpc.c` was untested | The real `pool_size`, `slot_for_conn`, `node_index_for_id`, reap and release are spliced from `node_cache.c`. The stub deadline is real when a scenario asks for it. The gating condition is a function, `rpc_reply_wait_cut` in `inode_rpc.c`, spliced into a new scenario. New scenarios `deadline`, `race`, `gating` (Makefile, `tests/budgets.tsv` 5 s, `tests/sanitizer_check.sh` rows). |
+| F3 a cut could shut down a waiter whose reply was already readable; it then read the reply and released a shut-down conn to the pool | The cutter skips a waiting conn whose reply is readable (`poll` with timeout 0 under `conn_lock`). A conn the cut shut down is marked (`conn_wait` value 2, no new field); `efs_client_conn_release` destroys it and frees the slot instead of pooling it, `efs_client_conn_drop` clears the mark. |
+| F4 `node_exch_busy` and `conn_wait` were never reset by the init function | `efs_client_conn_init` resets `conn_wait` (idle slots), `node_exch_busy` and `node_exch_end_ms`. |
+
+The set of cut requests is unchanged and `EFS_NODE_PROBE_MS` and every other bound are unchanged.
+
+Scenarios: `deadline` (deadline 20 s away, member halted: the wait ends at the exchange verdict, more than 10 s before the deadline); `race` (two waiters, one reply readable before the verdict: that waiter keeps its conn, reads its reply and keeps its pool slot on release; the other is cut and its conn is destroyed at release); `gating` (every request type 0 to 255 plus the body-dependent FLOCK, XATTR and CREATE_RETAINED cases: cut exactly for reads and the four directory mutations with an op-id; SETATTR, APPEND, HOLD, REPORT_CHUNKS, FLOCK set, XATTR set and remove, CREATE_RETAINED non-probe and op-id-less directory ops are not cut).
+
+Mutation proof (intel1, outputs `mutation-*.txt`): removing the readable skip fails `race` (the readable waiter's conn was shut down); removing the cut mark fails `race` (the cut conn is not marked); adding SETATTR to the cut set fails `gating` (`type 63 cut=1`). Each reverted.
+
+Results of the other commands of this round: all on intel1 (gcc 14, same tree as the commit plus the stub lines named here): `make` rc 0; the seven scenarios of `test_node_waiter_cut.py` rc 0 each; `test_create_retry_identity.py`, `test_metadata_retry_budget.py`, `test_w155_identified_resolve.py` (their hook stub also needs a stub of `rpc_reply_wait_cut`, added; they failed with an implicit declaration before), `scripts/tests_for.py client/node_cache --run`, `make test` rc 0, `test_make_test_recipe.py` rc 0; `sanitizer_check.sh asan` VERDICT PASS (65 run, 0 failed), `tsan` VERDICT PASS (41 run, 0 failed; `k37_segment_rebuild` did not fail this time). The first run of `make test` and ASan failed only on the three tests that splice `inode_rpc.c` before their stub was added. Live measurement (the page's (a), first `mkdir` after SIGSTOP of the leader, three runs): 6.07, 6.12, 6.07 s, the two following `mkdir` 0.00 to 0.01 s, no errno. Raw output (`live-*.log`, `mutation-*.txt`, `*.log`, `SHA256SUMS`): intel1 `~maik/efs-artifacts/taskFW-20261110/`, `SHA256SUMS` SHA-256 `d0a900a071e9979ef561c7736e3c5fd309703d22958abb4d3b36165c0f2b959b`; `~/efs-taskFW` removed. Reproduction: the commands of the Reproduction section, `python3 tests/test_node_waiter_cut.py SCENARIO` for the seven scenarios
+
+### Known limits (review notes)
+
+- One silent exchange marks the member down at once (the checkout path otherwise needs four failures). A live member that cannot accept a new connection for 5 s (descriptor exhaustion, a long process stall) is marked down until a probe is answered.
+- The waiter that runs the exchange does not read its own connection during it, so its own reply can be delivered up to 5 s late.
+- A powered-off or partitioned host is not covered: the connect times out, the verdict is "failed", and the wait stays 30 s. A request whose deadline is less than 5 s away is not covered either.
+- Every hooked reply costs two lock acquisitions, a 64-slot scan and one `poll`; this was measured only with 30 writes.
 
 ## What is not verified
 
