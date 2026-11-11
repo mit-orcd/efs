@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `814d9b55d1add3e3ed2467839264c0fd8dafcfcc`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 19,506 nodes, 82,370 directed typed edges, 632 communities.
+Source base: `0bffb131d6c6b1f0cfe0628800241f6b8de7a9f4`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 19,438 nodes, 82,149 directed typed edges, 612 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -19,25 +19,25 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Relationships
 
 - `affects`: 8
-- `calls`: 28596
+- `calls`: 28547
 - `case_of`: 118
-- `contains`: 28773
+- `contains`: 28684
 - `contract`: 46
-- `defines`: 2073
+- `defines`: 2018
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 181
 - `implemented_by`: 140
-- `imports`: 8505
+- `imports`: 8506
 - `imports_from`: 1047
 - `indirect_call`: 753
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 5072
+- `mentions_symbol`: 5045
 - `method`: 683
-- `rationale_for`: 1488
-- `references`: 2246
-- `references_path`: 1356
+- `rationale_for`: 1489
+- `references`: 2242
+- `references_path`: 1357
 - `regression_for`: 8
 - `tested_by`: 1142
 - `uses`: 101
@@ -45,7 +45,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)
-- warning: 77 code file(s) yielded no symbols (0.25 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+72 more)
+- warning: 78 code file(s) yielded no symbols (0.26 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+73 more)
 
 ## Limits
 

@@ -5,8 +5,9 @@ import os, shlex, subprocess, tempfile
 import csrc
 root = Path(__file__).resolve().parents[1]
 s = csrc.module('group_view')
+impl = s[s.index('#define V_LOAD'):]  # group_view_impl.h: the inline bodies (the .h holds their prototypes)
 def section(start, end):
-    a=s.index(start); return s[a:s.index(end,a)]
+    a=impl.index(start); return impl[a:impl.index(end,a)]
 def structure(name):
     a=s.index('struct '+name+' {'); return s[a:s.index('\n};',a)+3]
 code = r'''
@@ -18,7 +19,7 @@ code = r'''
 #define HOST_WAITERS 512
 #define GROUP_VIEW_NGROUPS 2
 #define V_LOAD(x) (x)
-''' + structure('host_view') + section('struct host_read_floor {', 'struct host_waiter {') + structure('host_waiter') + structure('group_view_slot') + r'''
+''' + structure('host_view') + s[s.index('struct host_read_floor {'):s.index('\n', s.index('struct host_read_floor {'))+1] + structure('host_waiter') + structure('group_view_slot') + r'''
 struct group_views {pthread_mutex_t cv_mu;struct host_waiter wait_slot[HOST_WAITERS];uint64_t waiter_active[HOST_WAITERS/64];
  struct group_view_slot slot[GROUP_VIEW_NGROUPS];struct host_view view,other_view;uint32_t waiter_hint;uint32_t cv_overflow;pthread_cond_t applied_cv;};
 ''' + section('static inline struct group_view_slot *group_view_slot(', 'static inline int host_view_covers(') + r'''
