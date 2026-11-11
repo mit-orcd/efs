@@ -728,6 +728,47 @@ int efs_meta_append_session_idle(struct efs_kv *kv,uint32_t shard,
     return rc;
 }
 
+/* Stop retirement while another session's append is OPEN (K112): only this
+ * session's DONE rows wholly below min(base_size, frontier) go; every scan
+ * that moves the frontier starts at it, so none reads them. Rows at or above
+ * the frontier still hold up the open reservation and stay (remaining). */
+struct floor_scan {struct finish_capture *capture;const uint8_t *uuid;uint32_t epoch;
+                   uint64_t floor;unsigned count;int rc,remaining;};
+static int floor_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
+{
+    struct floor_scan *s=user;uint32_t slot,epoch=0;
+    if(kl!=27 || vl!=48 || val[44]>1){s->rc=EFS_ERR_PROTO;return 1;}
+    if(memcmp(val+16,s->uuid,16))return 0;
+    for(unsigned i=32;i<36;i++)epoch=epoch<<8|val[i];
+    if(epoch!=s->epoch)return 0;
+    uint64_t offset=0,stored=0,length=0;
+    for(unsigned i=0;i<8;i++) {
+        offset=offset<<8|key[19+i];stored=stored<<8|val[i];length=length<<8|val[8+i];
+    }
+    if(offset!=stored || !length || offset>UINT64_MAX-length){s->rc=EFS_ERR_PROTO;return 1;}
+    if(!val[44] || offset+length>s->floor){s->remaining=1;return 1;}
+    s->rc=finish_record(s->capture,key,kl,val,vl,&slot);
+    if(s->rc!=EFS_OK)return 1;
+    s->capture->images[slot].op=EFS_TXN_DEL;s->capture->images[slot].new_len=0;
+    return ++s->count==APPEND_PRUNE_PAGE;
+}
+static int retire_below_floor(struct efs_kv *kv,struct efs_kv *capture,struct finish_capture *c,
+    efs_ino_t ino,const uint8_t *uuid,uint32_t epoch,unsigned *removed,int *remaining)
+{
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t kl;uint64_t frontier=0;struct efs_meta_row row;
+    struct floor_scan scan={.capture=c,.uuid=uuid,.epoch=epoch};
+    *removed=0;*remaining=0;
+    int rc=efs_meta_apply_get_inode(capture,ino,&row);
+    if(rc==EFS_OK)rc=efs_meta_apply_append_state(capture,ino,NULL,&frontier,NULL);
+    if(rc!=EFS_OK)return rc;
+    scan.floor=row.base_size<frontier?row.base_size:frontier;
+    rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,row.generation,key,&kl);
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,key,kl,floor_row,&scan);
+    if(scan.rc!=EFS_OK)return scan.rc;
+    if(rc!=EFS_OK && rc!=1)return rc;
+    *removed=scan.count;*remaining=scan.remaining;return EFS_OK;
+}
+
 int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *ctx,
@@ -762,9 +803,12 @@ int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
     const struct efs_kv_ops capture_ops={.get=finish_get};
     struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
     rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
-    if(rc==EFS_OK && open){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_OPEN;}
     unsigned removed=0;
-    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed,0);
+    if(rc==EFS_OK && open) {
+        int remaining;
+        rc=retire_below_floor(kv,&capture,&c,ino,uuid,epoch,&removed,&remaining);
+        if(rc==EFS_OK && !removed && remaining){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_OPEN;}
+    } else if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed,0);
     if(rc==EFS_OK && !removed && selected.kl==27){rc=EFS_ERR_BUSY;*wait=EFS_META_APPEND_WAIT_FRONTIER;}
     if(rc==EFS_OK && !removed) {
         uint32_t slot;
