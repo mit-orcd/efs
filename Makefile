@@ -131,7 +131,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/stop_phase.c src/client/data_commit.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/stop_phase.c src/client/data_commit.c src/client/put_window.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -165,8 +165,8 @@ TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c
-TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c
-TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface
+TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c
+TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import
 TEST_BINS += tests/test_snap_import_host
 
@@ -459,7 +459,7 @@ docs-check:
 	python3 scripts/check_doc_links.py
 	python3 scripts/gen_ledger.py
 	python3 scripts/check_guide_counts.py
-	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c
+	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c src/client/put_window.c
 	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
@@ -883,6 +883,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_wb_interface
 	./tests/test_open_interface
 	./tests/test_find_res_interface
+	./tests/test_put_window_interface
 	python3 tests/test_tests_for.py
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
@@ -954,6 +955,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_lane_bootstrap_export.py
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
+src/client/write.o src/client/put_window.o: src/client/put_window.h
 $(CLIENT_OBJS): $(wildcard src/client/efs_fuse/*.h) src/client/reply_buffers.h src/client/stop_control.h
 $(META_APPLY_SRCS:.c=.o): $(wildcard src/meta/meta_apply/*.h)
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
@@ -1002,6 +1004,11 @@ tests/test_open_interface: tests/test_open_interface.c src/client/efs_fuse/open.
 # the query RPC, the caller context and the virtual-inode helpers, so no $(LIB).
 tests/test_find_res_interface: tests/test_find_res_interface.c src/client/efs_fuse/find_res.c $(wildcard src/client/efs_fuse/*.h) src/client/client_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -Isrc/client -o $@ $< src/client/efs_fuse/find_res.c $(LDFLAGS)
+
+# Task U1: the real PUT window through put_window.h; the test defines the one
+# symbol the module takes from elsewhere (the RPC deadline), so no $(LIB).
+tests/test_put_window_interface: tests/test_put_window_interface.c src/client/put_window.c src/client/put_window.h src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -o $@ $< src/client/put_window.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)

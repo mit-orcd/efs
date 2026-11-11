@@ -21,7 +21,7 @@
   | `close()` or `fsync()` returns EIO | Write-back error state, then the concern of the log line before it |
   | dirty bytes high, reclaim threads busy | Reclaim |
   | write blocks or fails before any PUT | PUT pool and write entry, Dcache store and read |
-- `writer_state.c` — per-file writer state; `data_commit.c` — per-stripe fsync commit record (K35).
+- `put_window.c` — the PUT window (per-inode count of PUTs between marking a slot clean and recording its chunk; contract in `put_window.h`, guide below); `writer_state.c` — per-file writer state; `data_commit.c` — per-stripe fsync commit record (K35).
 - `stage_evict.c` — staging-table evictor; `bufpool.c` — shared body/scratch budget; `node_cache.c` — peer up/down marks.
 - `publication_ack_owner.c`, `publication_writeback.c`, `put_ticket_owner.c` — queues owning publication ACKs, writeback intents and the PUT ticket ledger.
 - `stop_phase.c` — unmount progress observer; `commands/` — Python generators for command help (not C).
@@ -54,6 +54,18 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py client/reply_buffers`
 - `python3 scripts/tests_for.py client/stage_evict`
 - `python3 scripts/tests_for.py client/write`
+
+**PUT window (`put_window.c`).** Owns the per-inode count of PUTs that have marked a dcache slot clean but not yet recorded the chunk in a dirty set: 512 slots, an overflow count, the all-inode total, one private mutex and condition variable. `write.c` calls `put_win_open` and `put_win_close` around a PUT and `put_win_wait` (flush) or `efs_dcache_put_win_wait` (readers) to wait; it never reads the state. Contract in [`put_window.h`](put_window.h): `put_win_mu` is a leaf taken under `dcache_io_mu` and `dcache_mu`; every open is closed once on every exit; a wait returns 0, 1, `EFS_ERR_BUSY` at the earlier of its bound and the RPC deadline, or `EFS_ERR_IO`, and a close wakes it. Interface test: [`tests/test_put_window_interface.c`](../../tests/test_put_window_interface.c), every case a `test_...` function, `./tests/test_put_window_interface --list` names them.
+
+| Operation or invariant | Cases | Command |
+|---|---|---|
+| `put_win_open` then `put_win_close` leaves the inode's window closed; two opens need two closes; windows of other inodes do not block | `test_open_close_closes`, `test_two_opens_need_two_closes`, `test_other_inode_not_blocked` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_open_close_closes test_two_opens_need_two_closes test_other_inode_not_blocked` |
+| `put_win_wait` returns 0 at once when nothing is open | `test_wait_returns_at_once_when_closed` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_wait_returns_at_once_when_closed` |
+| `put_win_close` wakes a blocked `put_win_wait` (returns 1) | `test_close_wakes_wait` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_close_wakes_wait` |
+| `put_win_wait` gives up with `EFS_ERR_BUSY` at its own bound and at the caller's RPC deadline, and releases the mutex | `test_wait_gives_up_at_its_bound`, `test_rpc_deadline_caps_the_wait` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_wait_gives_up_at_its_bound test_rpc_deadline_caps_the_wait` |
+| `efs_dcache_put_win_wait`: 0 without the mutex when no window is open, else the 8 s wait | `test_reader_wait` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_reader_wait` |
+| More inodes than slots: the overflow count makes every inode busy until its window is closed | `test_more_inodes_than_slots` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_more_inodes_than_slots` |
+| Concurrent open, close and wait from several threads end closed (TSan entry) | `test_concurrent_open_close_ends_closed` | `make tests/test_put_window_interface && ./tests/test_put_window_interface test_concurrent_open_close_ends_closed` |
 
 ## Open findings
 
