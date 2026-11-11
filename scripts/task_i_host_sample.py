@@ -18,7 +18,7 @@ def background_identity(pid):
     return dict(pid=int(pid), start_ticks=int(fields[19]), cpu_ticks=int(fields[11])+int(fields[12]), command=args[:3])
 
 
-def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
+def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None, owned_jobs=None):
     """Test/build work across all UIDs; AMD's W123 runs as a different user.
 
     A source match only owns a process of our UID. Unreadable metadata for
@@ -51,17 +51,6 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
                 if proc.exists() and (known or python):
                     found.append(dict(pid=int(proc.name),uid=uid,comm=comm,reason='command unreadable'))
                 continue
-            if not any(args):
-                # An observed zombie cannot execute work. During teardown
-                # cmdline/cwd disappear before the parent reaps it. Never
-                # infer this from an empty/unreadable command alone: running
-                # or unknown states stay foreign, regardless of UID.
-                try:
-                    state = (proc/'stat').read_text().rsplit(')', 1)[1].split()[0]
-                except (OSError, ValueError, IndexError):
-                    state = None
-                if state == 'Z':
-                    continue
             runner = any(Path(x).name == 'make_test_summary.sh' for x in args[1:3])
             project = any('/efs/' in x or '/efs-' in x or '/efs_' in x for x in args[1:])
             traffic = python and (project or any('/tests/' in x or x.startswith('tests/') or
@@ -77,8 +66,24 @@ def foreign_jobs(source=None, *, proc_root=Path('/proc'), current_uid=None):
                         owned = (proc/'cwd').resolve(strict=True).is_relative_to(source)
                     except OSError:
                         pass
+            # Capture identity at the final classification point: cwd may
+            # disappear during exit after an earlier running-state read.
+            identity={}
+            if not owned or owned_jobs is not None:
+                try:
+                    fields=(proc/'stat').read_text().rsplit(')',1)[1].split()
+                    identity['state']=fields[0]
+                    if len(fields)>19:identity['start_ticks']=int(fields[19])
+                except (OSError,ValueError,IndexError):
+                    identity['state']=None
             if not owned:
-                found.append(dict(pid=int(proc.name),uid=uid,comm=comm,command=args[:3]))
+                # Z is zombie; X/x is dead. Empty live/D/unknown states
+                # still block quiet, regardless of UID or prior ownership.
+                if not any(args) and identity['state'] in ('Z','X','x'):
+                    continue
+                found.append(dict(pid=int(proc.name),uid=uid,comm=comm,command=args[:3],**identity))
+            elif owned_jobs is not None:
+                owned_jobs.append(dict(pid=int(proc.name),uid=uid,comm=comm,command=args[:3],**identity))
         except (FileNotFoundError, ProcessLookupError):
             continue
         except (OSError, ValueError) as error:
@@ -100,11 +105,12 @@ def main():
                     background.append(found)
                 except (OSError, ValueError, AssertionError) as error:
                     foreign.append(dict(reason='background client changed',error=str(error)))
-            jobs = foreign_jobs(source)
+            owned=[]
+            jobs = foreign_jobs(source,owned_jobs=owned)
             if token and background:
                 jobs = [job for job in jobs if job['pid'] != token['pid']]
             foreign.extend(jobs)
-            record = dict(t=started, foreign_jobs=foreign, background_jobs=background,
+            record = dict(t=started, foreign_jobs=foreign, background_jobs=background, owned_jobs=owned,
                           cpu=Path('/proc/stat').read_text().splitlines()[0],
                           memory=Path('/proc/meminfo').read_text(),
                           disk=Path('/proc/diskstats').read_text(),

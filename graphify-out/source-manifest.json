@@ -2016,7 +2016,7 @@
     "scripts/graph-community-labels.py": "f06ed2e51fe653159b5fe9625e6731e2b86ffca1ef761fd4bfafee86f9021dd6",
     "scripts/install-code-graph-hooks.py": "76963083b38e009a044c6daf69fdc8d7e5af5c343a6cc927d8048515d62fe6f8",
     "scripts/leader_placement.py": "84cf85b8e84990501916d59e9e8ed4073cf3450ace524c1dfd3e3577bb73d503",
-    "scripts/make_test_summary.sh": "58eb25189db33ddb2668705282b5b629bed797c497edd40d9ef05b8d55da51d9",
+    "scripts/make_test_summary.sh": "3281bfbb42825d6e8a22d5a90d565ca51b26b9d0f4036b95d823b0077249b864",
     "scripts/put_window_mutation.py": "0c31dbcccbb0cfe554e5db78a8ef57e2d6655d4f854ab499c5c0ded59c8f45d9",
     "scripts/qualify.py": "8fa89e5b9af29e6d7a0f071dd7c6a4e55ef8d7e58c9521e761e57b4deb9479ea",
     "scripts/rebuild-code-graph.sh": "9fb94cc1b977a0315416fbb9d582ac52e43056bd90cdef7ad7ffd3280e4b8d1f",
@@ -2030,7 +2030,7 @@
     "scripts/soak.py": "c768d1d7b10b78267b28912e10cca45a1f58c800a5c6185c144909f0d32b683c",
     "scripts/stage2_helpers.py": "743dc61d1ca457d2948bcfd8652ae8756572a1d505f3c5b97bbd6e8211ff9ae1",
     "scripts/status_layout.py": "8aec38640c928792eb4e88db61e90030ccdd134e49546ba7915d7c7806240496",
-    "scripts/task_i_host_sample.py": "9036b4ca526097659cc6f5da69585cdd338bc67a99c942ae48c0df95c88df8a7",
+    "scripts/task_i_host_sample.py": "7f28056743b4ae90e1cdab44806541df9a289dccb7065cd900e43f44da0bec20",
     "scripts/tests_for.py": "6079dcde376ff1ca7f49d966a716844a34d2a19252dca8d0364871ffc48e3aa2",
     "scripts/unread_fields.py": "dcf83d2632b8c2bb4d37145a139d8551592b5fcc086082608f982cb977c1a387",
     "scripts/wave_gate.sh": "4642adc2dc8da1575a793a35653f80518e6298b61ba8363c211d873a62e7916b",
@@ -2833,7 +2833,7 @@
     "tests/test_lookup_read_group.py": "2207c7b4b4057910755857bb38ad6e0fa5dd7eab6ec1a9dc4d497860cf0e77bd",
     "tests/test_lookup_replacement.py": "a0efa9232098bf3a259187488f321fe737611832e7ea9a86b8614bca7bb0f472",
     "tests/test_make_test_recipe.py": "d9b4858cc3deb9b377d4ac748099575720badd25ce0f8d974daa7fc9cd5159a9",
-    "tests/test_make_test_summary_runner.py": "d4b0cc848d593c1429d18545a79858c508590ab143a7cbad9afff34366de89a7",
+    "tests/test_make_test_summary_runner.py": "c21e6bfb99ea32c59cc13cab1a21a365df4afac45fc41a8e0f59a7c94bd8b8b9",
     "tests/test_map_fresh_open.py": "08c18cb7b0b4428a0a63f2ca6ee5703c9dc245fe681ce8b54354f0555bae5a47",
     "tests/test_member_limit.py": "ef9dac9f73620e46edf000a752917216bb80ec913f79c897048fce526f008d9b",
     "tests/test_member_view.c": "363e175b2df1f897d697d9b563004aff3745c718ee0ebbc777670d0219184810",
@@ -3117,7 +3117,7 @@
     "tests/test_store_tls.py": "99068a58131b4cbb71ce9ad8cebbbc84c97dda44151b7f9c7300a13aec616e27",
     "tests/test_submit_unknown_tag.py": "6edc333aa6f7807d2bb4d9d76963875d1146124794f8b2b0b2e9aef8e121e08b",
     "tests/test_task_i_alloc_probe.py": "7ed05bd06cc8465133883ced8c8607187a3bbdb6e3969835a78c9be5be419601",
-    "tests/test_task_i_host_guard.py": "edc927895f34587676473f96b04f79732ad92a22a541ad8fd1b1228c07a25f40",
+    "tests/test_task_i_host_guard.py": "416a36492d71c09698bee495953a4ea100a24c99f8527225ce4574fbe2dbbabb",
     "tests/test_task_i_preserve.py": "85bfdbf86eebe7b070f423ae98e83f97a1abe7b9510f9accad0ae6cfc9db0b2d",
     "tests/test_tcp_counts.c": "cc4c08f06113616bbe466df04f3688b0c81d9ef8396ad87a7bd1cbaf6dc7b223",
     "tests/test_telemetry.c": "fca2f1ea94ad9fc19681ba61d53e5508e499e03c389ba46eaf2f547ff0d57cfc",
@@ -3194,5 +3194,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "f7b983b8b8d601b4394db741d57250262b96e5d2"
+  "source_commit": "e0411e3c1db16ccfea1a860225d930fcf4fffa77"
 }

@@ -472,3 +472,80 @@ stores. Logs, results, traces, captures and the failed archives above remain.
 Original passing-store restart replay is forfeited; recreate them from the
 committed method. This measurement includes no cold-restart, power-loss,
 real-network or RDMA qualification. The host is free of Task U runtime work.
+
+
+## Task AN initial follow-up — October 29, 2026 (historical)
+
+At this earlier checkpoint, [AN STATUS-authority measurement](an-put-status-batching-20261028.md) was OPEN
+on `agent/devel-task-an`, product base `9c4bfd171`, approved isolated fcstor014.
+The separate STATUS/owner-RPC/proof-admission/quorum-round per-fragment table
+now has **36/36 counter/latency cells**, three repeats per configuration;
+precise pump timing and optimization comparison remain NOTRUN. A healthy one-writer rewrite pilot fails
+EIO with the temporary counters, and untouched product reproduces EIO and a
+failed clean unmount. All failed fixtures remain. Missing-parent cache
+regression fails base; repair `871f9220d` passes focused storage tests, with
+the fresh counter/latency baseline complete. The prior Task U figures above
+are unchanged; no STATUS batching benefit or new performance acceptance is
+claimed from failed pilots. Native and untouched-base gates both failed B6
+slow fsync and two missing-runtime compiler checks. A separate COMMIT
+scheduling repair passes matched deterministic/TSan controls and unchanged
+live TCP/RDMA slow-fsync checks; fresh full qualification is running. The
+table below predates that COMMIT repair. Exact pump timing,
+observer calibration and any optimization comparison remain pending.
+
+The first parent-cache-repaired AN baseline, median [min–max] per successful
+fragment, follows. Aggregate proof counts include stat/background reads; this
+is not exclusive STATUS attribution or a batching benefit. Exact workload,
+retained failures and the precise-timing gap are on the [AN page](an-put-status-batching-20261028.md).
+
+| Writers / transport / state | STATUS RPCs / fragment | Owner RPCs / fragment | Proof admissions / fragment | Quorum rounds / fragment |
+|---|---|---|---|---|
+| 1 tcp healthy | 0.667 | 0.246 [0.233–0.330] | 5.249 [5.152–5.387] | 4.556 [4.542–4.652] |
+| 1 tcp down | 0.500 | 0.452 [0.438–0.452] | 6.818 [6.632–6.828] | 6.425 [6.225–6.453] |
+| 1 rdma healthy | 0.667 | 0.301 [0.232–0.318] | 5.240 [5.124–5.384] | 4.563 [4.452–4.632] |
+| 1 rdma down | 0.500 | 0.432 [0.335–0.445] | 6.908 [6.730–6.922] | 6.473 [6.390–6.500] |
+| 8 tcp healthy | 0.667 | 0.213 [0.204–0.220] | 4.160 [4.127–4.176] | 2.951 [2.890–2.959] |
+| 8 tcp down | 0.500 | 0.270 [0.268–0.283] | 5.445 [5.400–5.511] | 4.186 [4.169–4.267] |
+| 8 rdma healthy | 0.667 | 0.193 [0.192–0.195] | 4.112 [4.107–4.117] | 2.828 [2.827–2.842] |
+| 8 rdma down | 0.500 | 0.260 [0.250–0.274] | 5.396 [5.351–5.509] | 4.127 [4.087–4.255] |
+| 32 tcp healthy | 0.667 | 0.160 [0.156–0.161] | 3.979 [3.967–4.005] | 2.267 [2.264–2.288] |
+| 32 tcp down | 0.500 | 0.195 [0.190–0.200] | 5.136 [5.107–5.149] | 3.481 [3.432–3.483] |
+| 32 rdma healthy | 0.667 | 0.155 [0.150–0.172] | 3.997 [3.902–4.018] | 2.242 [2.175–2.265] |
+| 32 rdma down | 0.500 | 0.186 [0.186–0.188] | 5.119 [5.006–5.135] | 3.382 [3.303–3.430] |
+
+
+### AN precise f7 RPC follow-up (qualification reviewed; calibration pending)
+
+Every entry below is median [minimum–maximum] across three fresh repeats.
+STATUS counts only actual storage→leader frame sends; local authority checks
+are separate. Proof/quorum counts include GETATTR and background traffic in
+the bracketing snapshots, so they cannot be charged exclusively to STATUS.
+Owner placement varies with fresh session identities. No batching is active;
+batching residence is zero. No RPC-count reduction or healthy/down latency
+difference is an optimization benefit.
+
+| Writers / transport / state | STATUS RPC/fragment | Owner RPC/fragment | Proof admissions/fragment | Actual quorum rounds/fragment |
+| --- | --- | --- | --- | --- |
+| 1 / tcp / healthy | 0.667 [0.667–0.667] | 0.249 [0.242–0.319] | 5.254 [5.118–5.261] | 4.560 [4.487–4.600] |
+| 1 / tcp / down | 0.500 [0.500–0.500] | 0.472 [0.445–0.483] | 6.928 [6.658–6.962] | 6.547 [6.247–6.575] |
+| 1 / rdma / healthy | 0.667 [0.667–0.667] | 0.330 [0.237–0.334] | 5.271 [5.127–5.391] | 4.587 [4.470–4.619] |
+| 1 / rdma / down | 0.500 [0.500–0.500] | 0.343 [0.333–0.348] | 6.827 [6.815–7.028] | 6.433 [6.357–6.605] |
+| 8 / tcp / healthy | 0.667 [0.667–0.667] | 0.216 [0.213–0.217] | 4.162 [4.142–4.171] | 2.955 [2.940–2.957] |
+| 8 / tcp / down | 0.500 [0.500–0.500] | 0.276 [0.263–0.276] | 5.485 [5.435–5.554] | 4.278 [4.195–4.307] |
+| 8 / rdma / healthy | 0.667 [0.667–0.667] | 0.194 [0.192–0.213] | 4.111 [4.104–4.161] | 2.832 [2.802–2.889] |
+| 8 / rdma / down | 0.500 [0.500–0.500] | 0.276 [0.261–0.279] | 5.460 [5.423–5.522] | 4.203 [4.162–4.247] |
+| 32 / tcp / healthy | 0.667 [0.667–0.667] | 0.160 [0.157–0.161] | 3.950 [3.939–3.969] | 2.240 [2.224–2.252] |
+| 32 / tcp / down | 0.500 [0.500–0.500] | 0.220 [0.193–0.222] | 5.106 [5.092–5.145] | 3.427 [3.422–3.485] |
+| 32 / rdma / healthy | 0.667 [0.667–0.667] | 0.168 [0.165–0.168] | 3.934 [3.875–4.119] | 2.189 [2.150–2.373] |
+| 32 / rdma / down | 0.500 [0.500–0.500] | 0.186 [0.186–0.211] | 5.091 [5.088–5.091] | 3.350 [3.344–3.356] |
+
+Raw scope, precise pump/latency/CPU tables, reproducible commands and preserved
+failures are on the [AN page](an-put-status-batching-20261028.md). No STATUS
+optimization or RPC-count benefit is claimed.
+
+Final AN disposition: **COMPLETE, measured/no STATUS change**. All 36 primary
+cells and 36 healthy observer controls passed; write/throughput ranges overlap
+between native-off/native-on/probe controls while some CPU/GETATTR ranges do
+not. No demonstrated STATUS-specific gain justifies proof reuse or batching.
+See the AN final section for scope, calibration, complete gate/repeats and
+verified manifests. Historical counter table and failed evidence remain separate.

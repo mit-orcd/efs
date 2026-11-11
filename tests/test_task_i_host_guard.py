@@ -31,11 +31,16 @@ with tempfile.TemporaryDirectory(prefix='efs-host-guard-') as d:
  assert any(x['pid']==15 and 'unreadable' in x.get('reason','') for x in found)
  # A proven zombie is not running work; empty live/unknown processes still
  # block quiet, including when owned-looking path metadata has disappeared.
- for pid,state in ((20,'Z'),(21,'S'),(22,None)):
+ for pid,state in ((20,'Z'),(21,'S'),(22,None),(23,'X'),(24,'x'),(25,'R'),(26,'D'),(27,'I')):
   proc(pid,'efs-fuse',[])
   if state:(p/str(pid)/'stat').write_text(f'{pid} (efs-fuse) {state} 1 0')
  found={x['pid'] for x in foreign_jobs(src,proc_root=p)}
- assert 20 not in found and {21,22} <= found
+ assert not {20,23,24} & found and {21,22,25,26,27} <= found
  found={x['pid'] for x in foreign_jobs(src,proc_root=p,current_uid=other_uid)}
- assert 20 not in found and {21,22} <= found
+ assert not {20,23,24} & found and {21,22,25,26,27} <= found
+ # Record proven ownership without adopting a same-account unknown PID.
+ owned=[];rows=foreign_jobs(src,proc_root=p,owned_jobs=owned)
+ assert {x['pid'] for x in owned}=={10,12,14}
+ assert {21,22,25,26,27}<={x['pid'] for x in rows}
+ assert all('state' in x for x in rows if 'command' in x)
 print('Task I host guard: all-user EFS/traffic/build discovery, own-source UID proof, unknown metadata refuses quiet PASS')

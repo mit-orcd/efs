@@ -130,7 +130,7 @@ EXCLUSIVE=re.compile(r"rdma|shutdown|client_processes|server_processes|cluster_s
                      r"tsan|leak|make_test|fork_oracle|stage_evict_lru|storage_root_inventory|"
                      r"bench|test_soak\.py|test_pack_dup_candidate|test_w166_authority|test_report_stepdown")
 jobs=max(1,int(os.environ.get("EFS_TEST_JOBS","1")))
-fails=[]; notrun=[]; times=[]; t0=time.time(); done=0
+fails=[]; notrun=[]; times=[]; completed=set(); t0=time.time(); done=0
 import threading
 lock=threading.Lock()
 def one(i,c,tmp=None):
@@ -151,7 +151,7 @@ def one(i,c,tmp=None):
             # A passing command that could not run its gate says so; never a silent pass.
             marks=[l for l in out.splitlines() if re.search(r"\b(NOTRUN|SKIP)\b",l)]
             if marks: notrun.append((i,head,marks[0].strip()[:200]))
-        done+=1
+        done+=1; completed.add(i)
         open("progress.txt","w").write("%d/%d fails=%d notrun=%d\n"%(done,len(cmds),len(fails),len(notrun)))
 if jobs==1:
     for i,c in enumerate(cmds): one(i,c)
@@ -179,6 +179,9 @@ else:
             t=threading.Thread(target=pooled_one,args=(pick[0],pick[1],slots)); t.start(); threads.append(t)
     for t in threads: t.join()
     for i,c in alone: one(i,c)
+# A command whose worker raised left no verdict: it must not count as passed.
+for i in sorted(set(range(len(cmds)))-completed):
+    fails.append((i,1,cmds[i].split("\n")[0][:150],"runner did not complete or capture this command; see the runner's stderr","<runner stderr>"))
 fails.sort(); notrun.sort()
 over=sorted((i,sec,budget(cmds[i])[0],head) for i,sec,rc,head in times if budget(cmds[i])[0] is not None and sec>budget(cmds[i])[0])
 with open("timings.tsv","w") as f:

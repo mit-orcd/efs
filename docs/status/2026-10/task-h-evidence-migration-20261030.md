@@ -1,6 +1,6 @@
 # Task H evidence migration — October 30, 2026
 
-**Purpose:** Task BO. `docs/status/2026-10/branch-disposition-20261030.md` found `agent/task-h-repair` (head `cd822e2f7`) parked only because five evidence pages exist on no other ref. This page records their migration onto devel and which of the branch-only scripts are worth keeping. **Verdict: PASS** (docs only; nothing built, no host used, the branch and its worktree untouched). Method: `git show agent/task-h-repair:docs/status/<name>.md`, each page copied under the same name with one added "Migrated from" line.
+**Purpose:** Task BO. `docs/status/2026-10/branch-disposition-20261030.md` found `agent/task-h-repair` (head `cd822e2f7`) parked only because five evidence pages exist on no other ref. This page records their migration onto devel and which of the branch-only scripts are worth keeping. **Verdict: PASS** (docs only; nothing built, no host used, the branch and its worktree untouched). Method: `git show archive/agent/task-h-repair:docs/status/<name>.md`, each page copied under the same name with one added "Migrated from" line.
 
 ## What moved
 
@@ -14,7 +14,7 @@
 
 Nothing was shortened because none embeds a raw capture: no line exceeds 1000 characters, the only code blocks are reproduction commands, one-line gate summaries and one collection script, and the tables are binary hashes and per-run summaries. Raw captures stay where the pages say they are (nuc `/home/maik/efs-artifacts/taskH-*`, node9901 `/data1/efs/traces/taskH-20261026`) with the hashes the pages give; this migration did not check that those locations still exist. Conclusions are unchanged.
 
-Page content is a historical record of the branch: its "this branch", `EFS_GIT_BRANCH=agent/task-h-repair` and backticked script paths refer to the branch. Backticked paths of scripts and tests in the table below were not rewritten (hundreds of mentions); read them as `agent/task-h-repair:<path>`. The one markdown link to a branch-only file (`scripts/task_h_truncate_probe.py` in the Finding-B page) was replaced by that branch path.
+Page content is a historical record of the branch: its "this branch", `EFS_GIT_BRANCH=agent/task-h-repair` and backticked script paths refer to the branch. Backticked paths of scripts and tests in the table below were not rewritten (hundreds of mentions); read them as `archive/agent/task-h-repair:<path>`. The one markdown link to a branch-only file (`scripts/task_h_truncate_probe.py` in the Finding-B page) was replaced by that branch path.
 
 ## Links fixed on devel
 

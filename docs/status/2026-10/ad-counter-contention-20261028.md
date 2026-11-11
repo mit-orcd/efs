@@ -359,3 +359,5 @@ Bulk store deletion forfeits replaying the exact former workload state; the
 source/method recreates fresh fixtures. Counter attribution remains replayable
 without them. This closes AD's measurement/no-change outcome, not any other
 alpha release, recovery or zero-error gate.
+
+**Nov 11 addendum (ported when branch `agent/devel-taskad` was deleted; its head is kept as tag `archive/agent/devel-taskad`):** that branch held a second measurement on node9901 with the same verdict (`efs_iostats_add` at 0.00, 0.00 and 0.01 % of daemon CPU at 8, 16 and 32 writers). Its raw files were on node9901 under `/data1/efs/traces/taskAD-20261028/` (24 files, manifest hash `8ed809ede5349e0c78c9e787b13686ea`, 32 hex characters); whether that directory still exists was not checked. Its driver `scripts/ad_measure.py` was not ported; it is on the tag.

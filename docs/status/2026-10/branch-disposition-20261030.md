@@ -67,7 +67,7 @@ Head `127231eb3`, 77 ahead, base `9c4bfd171`. Worktree `/Users/mike/Documents/Co
 - **Dropped by me:** `ef514fbd8`, `99262765b` (stderr diagnostics only, no behaviour); `a80065c60` and its revert `66daccd4d` (net zero).
 - **Undecided: none.**
 - **Only on this branch:** `tests/test_dir_migration_materialization.py` (the synthetic K48 harness the AN report's reproduction line names), `tests/test_getchunks_retry_record.py` (F08 duplicate), `tests/retained_tmp.py`. K48 stays OPEN on the checklist; if the 640-cut synthetic result matters later, save the file first:
-  `git show agent/devel-task-an:tests/test_dir_migration_materialization.py > /tmp/test_dir_migration_materialization.py`.
+  `git show archive/agent/devel-task-an:tests/test_dir_migration_materialization.py > /tmp/test_dir_migration_materialization.py`.
 
 ```sh
 git worktree remove /Users/mike/Documents/Codex/2026-10-08/efs/work/agent-devel-task-an

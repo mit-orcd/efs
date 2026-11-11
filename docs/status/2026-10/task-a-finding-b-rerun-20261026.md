@@ -82,7 +82,7 @@ no deleted executable. This analysis is retained in
 
 The original case accepts an open-time EIO/EBUSY if the old 300 MiB file
 remains exact. Its PASS alone cannot prove that the later fsync ran. The
-committed observer (`agent/task-h-repair:scripts/task_h_truncate_probe.py`, branch only; see [migration page](task-h-evidence-migration-20261030.md)) executes that
+committed observer (`archive/agent/task-h-repair:scripts/task_h_truncate_probe.py`, branch only; see [migration page](task-h-evidence-migration-20261030.md)) executes that
 unchanged function ten times, retaining its 300 MiB initial file, 10 MiB
 rewrite and 180-second case budget. Python C-return events must show exactly
 one successful `os.open` and `os.fsync` in the target function. An allowed

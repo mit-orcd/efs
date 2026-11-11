@@ -15,7 +15,7 @@
       "output_tokens": 0,
       "schema": 1,
       "self_call_edges": 34,
-      "source_commit": "f7b983b8b8d601b4394db741d57250262b96e5d2"
+      "source_commit": "e0411e3c1db16ccfea1a860225d930fcf4fffa77"
     }
   },
   "links": [
@@ -315231,7 +315231,7 @@
       "relation": "contains",
       "source": "scripts_task_i_host_sample",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L89",
+      "source_location": "L94",
       "target": "scripts_task_i_host_sample_main",
       "weight": 1.0
     },
@@ -315244,7 +315244,7 @@
       "relation": "indirect_call",
       "source": "scripts_task_i_host_sample_foreign_jobs",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L85",
+      "source_location": "L90",
       "target": "tests_live_gc_reclamation_error",
       "weight": 1.0
     },
@@ -315256,7 +315256,7 @@
       "relation": "calls",
       "source": "scripts_task_i_host_sample_main",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L98",
+      "source_location": "L103",
       "target": "scripts_task_i_host_sample_background_identity",
       "weight": 1.0
     },
@@ -315268,7 +315268,7 @@
       "relation": "calls",
       "source": "scripts_task_i_host_sample_main",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L103",
+      "source_location": "L109",
       "target": "scripts_task_i_host_sample_foreign_jobs",
       "weight": 1.0
     },
@@ -315281,7 +315281,7 @@
       "relation": "indirect_call",
       "source": "scripts_task_i_host_sample_main",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L102",
+      "source_location": "L107",
       "target": "tests_live_gc_reclamation_error",
       "weight": 1.0
     },
@@ -786218,7 +786218,7 @@
       "relation": "contains",
       "source": "tests_test_make_test_summary_runner",
       "source_file": "tests/test_make_test_summary_runner.py",
-      "source_location": "L82",
+      "source_location": "L95",
       "target": "tests_test_make_test_summary_runner_child",
       "weight": 1.0
     },
@@ -786251,7 +786251,7 @@
       "relation": "method",
       "source": "tests_test_make_test_summary_runner_child",
       "source_file": "tests/test_make_test_summary_runner.py",
-      "source_location": "L84",
+      "source_location": "L97",
       "target": "tests_test_make_test_summary_runner_child_communicate",
       "weight": 1.0
     },
@@ -997107,7 +997107,7 @@
       "id": "scripts_task_i_host_sample_main",
       "label": "main()",
       "source_file": "scripts/task_i_host_sample.py",
-      "source_location": "L89"
+      "source_location": "L94"
     },
     {
       "_origin": "ast",
@@ -1124527,7 +1124527,7 @@
       "id": "tests_test_make_test_summary_runner_child",
       "label": "Child",
       "source_file": "tests/test_make_test_summary_runner.py",
-      "source_location": "L82"
+      "source_location": "L95"
     },
     {
       "_callable": true,
@@ -1124539,7 +1124539,7 @@
       "id": "tests_test_make_test_summary_runner_child_communicate",
       "label": ".communicate()",
       "source_file": "tests/test_make_test_summary_runner.py",
-      "source_location": "L84"
+      "source_location": "L97"
     },
     {
       "_callable": true,

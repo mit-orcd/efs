@@ -55,6 +55,19 @@ try:
     assert len(s) == 1, s
     assert not list(Path(d, 'tmp').iterdir()), 'a passing run left failure logs'
 
+    # A pooled worker that raises (here: its failure log cannot be written)
+    # must not vanish: without a verdict the command counts as failed.
+    d = tempfile.mkdtemp(prefix='efs-summary-runner-'); dirs.append(d)
+    Path(d, 'cmds.txt').write_text("exit 3\n")
+    Path(d, 'tmp/fail-0.log').mkdir(parents=True)
+    broken = subprocess.run([sys.executable, '-c', runner], cwd=d, timeout=60,
+                            env=dict(os.environ, TMPDIR=str(Path(d, 'tmp')), EFS_TEST_JOBS='2'),
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    lines = Path(d, 'summary.txt').read_text().splitlines()
+    assert broken.returncode == 1 and 'IsADirectoryError' in broken.stdout.decode(), broken.stdout
+    head(lines[0], 1, 1, 0, 'FAIL')
+    assert 'did not complete or capture' in lines[1], lines
+
     # A failure keeps every output line, not only the last one.
     rc, s, d = run("true\nfor i in 1 2 3; do echo line$i; done; echo err >&2; exit 4\n"); dirs.append(d)
     assert rc == 1, rc
