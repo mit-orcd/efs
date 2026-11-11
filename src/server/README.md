@@ -4,6 +4,7 @@
 
 - `efsd.c` — daemon entry, startup/stop; `cluster.c` — cluster formation and membership wiring; `discovery.c/.h` — local-subnet discovery (never defines membership).
 - `raft_host.c` — the production Raft host (hosted groups, apply pump, ReadIndex, publication, GC, sessions, transactions); owns every hosted group's state. **The file the [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md) splits next** (the split waits for W123). ReadIndex code (`host_read_*`, `host_wait_*`, the view, the waiter slots, the follower RPC): [entry map](../../docs/status/2026-11/readindex-entry-map-20261108.md#entry-map), checked by `make docs-check`.
+- `group_view.c/.h` — the published group view and its sleepers (what handlers read without `h->mu`, and the wait bracket); extracted from `raft_host.c` in Task V3; contract in `group_view.h`, guide below.
 - Concern map of `raft_host.c` (every function under one concern, with state, mutex, entry points, logs and tests; the lock order): [raft-host-map.md](../../docs/how-it-works/raft-host-map.md), checked by `make docs-check`. Start there for a defect in the file.
 - `handler.c` — request dispatch per connection; `thread.c` — conn/writer thread stacks; `writer.c` — writer pool; `peer_pool.c` — persistent server→server connections.
 - `server_internal.h` — shared `g_server`-style state, export lifetime (use-count guarded by `s->lock`); the anti-example in developing.md.
@@ -62,6 +63,7 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py server/cluster`
 - `python3 scripts/tests_for.py server/directory_sync_group`
 - `python3 scripts/tests_for.py server/efsd`
+- `python3 scripts/tests_for.py server/group_view`
 - `python3 scripts/tests_for.py server/handler`
 - `python3 scripts/tests_for.py server/member_store`
 - `python3 scripts/tests_for.py server/packer`
@@ -76,6 +78,23 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py server/storage_roots`
 - `python3 scripts/tests_for.py server/store`
 - `python3 scripts/tests_for.py server/writer`
+
+**Group view (`group_view.c`, `group_view.h`).** Owns each hosted group's published view (a sequence-locked copy of commit, applied, term, role, leader, read round and proof) and the table of 512 sleeper slots with their condition variables, the locks `view_mu` and `cv_mu` and the shared `applied_cv`. `raft_host.c` embeds one `struct group_views` and never names those fields (`scripts/check_group_view_privacy.py` fails the fast suite if it or any other file does). Contract in [`group_view.h`](group_view.h): lock order `h->mu`, then `cv_mu`, then `view_mu`; `host_view_get` is a coherent copy with no lock held on return, and after 64 odd sequence loads it waits on `view_mu` (K107); the three waits have three different predicates, so the owner exposes the lock bracket `group_view_wait_lock` / `host_view_get` / the caller's test / `host_waiter_sleep` / `group_view_wait_unlock` and no single wait operation. Interface test: [`tests/test_group_view.c`](../../tests/test_group_view.c) (links the real `group_view.c` over stub core getters; `--list` prints the cases). Page: [group-view-ownership-20261111.md](../../docs/status/2026-11/group-view-ownership-20261111.md).
+
+| Operation or invariant | Cases | Command |
+|---|---|---|
+| `host_publish_view` with an unchanged core leaves the stamp (and the sequence) alone | `test_unchanged_publish_keeps_stamp` | `make tests/test_group_view && ./tests/test_group_view test_unchanged_publish_keeps_stamp` |
+| A changed publish is seen whole with every field, and moves the stamp once | `test_changed_publish_moves_stamp_and_shows_fields` | `make tests/test_group_view && ./tests/test_group_view test_changed_publish_moves_stamp_and_shows_fields` |
+| An absent replica (NULL core) clears `has` and the proof fields; the stamp moves only if `has` was set | `test_absent_replica_clears_has_and_proof` | `make tests/test_group_view && ./tests/test_group_view test_absent_replica_clears_has_and_proof` |
+| An unknown or never-published group reads as absent with leader -1 | `test_unknown_group_reads_as_absent` | `make tests/test_group_view && ./tests/test_group_view test_unknown_group_reads_as_absent` |
+| `host_view_get` racing a publisher never returns a mixed round, term and completion (count-bounded) | `test_reader_never_sees_a_mixed_publish` | `make tests/test_group_view && ./tests/test_group_view test_reader_never_sees_a_mixed_publish` |
+| The pure predicates `host_view_covers`, `host_view_wait_apply`, `host_view_quorum_index`, `host_read_wait_ready` | `test_predicates` | `make tests/test_group_view && ./tests/test_group_view test_predicates` |
+| `host_read_floor_ready` for wait modes 2 and 3: the floor freezes the first proof; a changed context refuses; an idle round wakes mode 2 and not mode 3 | `test_floor_ready_modes_2_and_3` | `make tests/test_group_view && ./tests/test_group_view test_floor_ready_modes_2_and_3` |
+| The wait bracket with a true predicate returns at once and leaves `cv_mu` free | `test_bracket_true_predicate_returns_at_once` | `make tests/test_group_view && ./tests/test_group_view test_bracket_true_predicate_returns_at_once` |
+| A publish before the bracket is seen by the re-read under the lock (no lost wakeup, single-threaded) | `test_publish_before_bracket_is_seen_no_sleep` | `make tests/test_group_view && ./tests/test_group_view test_publish_before_bracket_is_seen_no_sleep` |
+| `host_waiter_sleep` with a passed deadline leaves no slot occupied and the floor as it was | `test_passed_deadline_sleep_leaves_no_slot` | `make tests/test_group_view && ./tests/test_group_view test_passed_deadline_sleep_leaves_no_slot` |
+| `host_waiters_wake` with no sleeper changes nothing | `test_wake_without_sleeper_changes_nothing` | `make tests/test_group_view && ./tests/test_group_view test_wake_without_sleeper_changes_nothing` |
+| The wake of a blocked sleeper (modes 0 and 1), the signal after `cv_mu` is released, the fall-back to `applied_cv` when all 512 slots are busy | none (needs another thread known to be blocked) | `python3 scripts/tests_for.py server/group_view` |
 
 ## Open findings
 

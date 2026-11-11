@@ -6,11 +6,6 @@ import csrc
 root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');r=(root/'src/raft/raft.c').read_text()
 def func(src,name):
  a=src.index(name+'(');a=src.rfind('\n',0,a)+1;return src[a:src.index('\n}',a)+2]
-a=s.index('    uint64_t v_seq;');b=s.index('\n};',a)
-group=s[a:b]
-a=s.index('struct host_view {');b=s.index('\n};',a)+3
-view=s[a:b]
-tries=re.search(r'#define HOST_VIEW_TRIES[^\n]*',s).group(0)
 pub=s[s.index('static int host_publication_committed('):s.index('\n}',s.index('static int host_publication_committed('))]
 condition=pub[pub.index('if (v.read_done'):pub.index(') break;',pub.index('if (v.read_done'))][4:]
 code=r'''
@@ -20,7 +15,6 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
-'''+tries+r'''
 struct efs_raft {int recv_persisting,role,storage_failed,quorum,leader,pending;uint64_t recv_stable_commit,commit,applied,current_term,read_round,read_index;
  uint64_t read_epoch,read_proven_round,read_proven_index,read_proven_term;uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
  uint64_t read_applied_round,read_applied_index,read_applied_term;
@@ -43,29 +37,23 @@ static int efs_raft_read_quorum(const struct efs_raft*r){
  if(slow_quorum){entered=1;pthread_cond_broadcast(&slow_cv);while(!released)pthread_cond_wait(&slow_cv,&slow_mu);}
  pthread_mutex_unlock(&slow_mu);return !r->recv_persisting&&!r->storage_failed&&r->role==EFS_RAFT_LEADER&&r->quorum;
 }
-''' +func(r,'efs_raft_read_context')+func(r,'efs_raft_read_proven')+'\nstruct host_group {struct efs_raft*r;\n'+group+r'''
-};
-struct efs_raft_host {struct host_group g[1];pthread_mutex_t view_mu;};
-static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(!g);return h->g;}
-#define V_LOAD(p) __atomic_load_n(&(p), __ATOMIC_ACQUIRE)
-#define V_STORE(p,v) __atomic_store_n(&(p),(v),__ATOMIC_RELEASE)
-''' +view+'\n'+func(s,'host_publish_view')+'\n'+func(s,'host_view_get')+'\n'+func(s,'host_view_covers')+'\n'+r'''
-static int publication_ready(struct host_view v,uint64_t round,uint64_t want){return '''+condition+r''';}
+''' +func(r,'efs_raft_read_context')+func(r,'efs_raft_read_proven')+'\n'+csrc.group_view_header()+'\n'+csrc.group_view_func('host_publish_view')+r'''
+static struct group_views host = {.view_mu = PTHREAD_MUTEX_INITIALIZER};
+'''+r'''static int publication_ready(struct host_view v,uint64_t round,uint64_t want){return '''+condition+r''';}
 static struct efs_raft core;
-static struct efs_raft_host host = {.view_mu = PTHREAD_MUTEX_INITIALIZER};
 static int done;
 static void set_view(int ready){
  core=(struct efs_raft){.role=2,.leader=0,.quorum=ready,.pending=!ready,
  .read_epoch=7,.current_term=9,.commit=60,.applied=ready?60:50,.read_round=12,.read_index=60,
  .read_proven_round=11,.read_proven_index=50,.read_proven_term=9,
  .read_proven_cfg_old=7,.log_old=7};
- host.g[0].r=&core;host_publish_view(&host,0);
+ host_publish_view(&host,0,&core);
 }
 static void *publish(void *unused){(void)unused;
  for(int i=0;i<100000;i++)set_view(i&1);
  __atomic_store_n(&done,1,__ATOMIC_RELEASE);return NULL;
 }
-static void *slow_publish(void *u){(void)u;host_publish_view(&host,0);return NULL;}
+static void *slow_publish(void *u){(void)u;host_publish_view(&host,0,&core);return NULL;}
 int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
  assert(host_view_covers(&v,50,11,9));
  assert(!host_view_covers(&v,60,12,9));
@@ -77,24 +65,24 @@ int main(void){struct host_view v;set_view(0);host_view_get(&host,0,&v);
   * published leader/quorum view before the host handoff exposes it. Core
   * getter fencing is independently exercised by the real-core phase test. */
  core.recv_persisting=1;core.recv_stable_commit=60;core.role=1;core.current_term=10;
- host_publish_view(&host,0);host_view_get(&host,0,&v);
+ host_publish_view(&host,0,&core);host_view_get(&host,0,&v);
  assert(v.role==1&&v.term==10&&!v.read_context&&!v.read_done&&!v.proven_done);
  assert(!host_view_covers(&v,60,12,9));
  set_view(1);
- core.storage_failed=1;core.quorum=0;host_publish_view(&host,0);host_view_get(&host,0,&v);
+ core.storage_failed=1;core.quorum=0;host_publish_view(&host,0,&core);host_view_get(&host,0,&v);
  assert(!v.read_context&&!v.proven_done&&!host_view_covers(&v,50,11,9));
- host.g[0].r=NULL;host_publish_view(&host,0);host_view_get(&host,0,&v);
+ host_publish_view(&host,0,NULL);host_view_get(&host,0,&v);
  assert(!v.has&&!v.read_done&&!v.proven_done&&!v.proven_index&&!v.proven_round);
  set_view(1);
- uint64_t seq=host.g[0].v_seq,stamp=host.g[0].v_stamp;
- host_publish_view(&host,0);assert(host.g[0].v_seq==seq && host.g[0].v_stamp==stamp);
+ uint64_t seq=host.slot[0].v_seq,stamp=host.slot[0].v_stamp;
+ host_publish_view(&host,0,&core);assert(host.slot[0].v_seq==seq && host.slot[0].v_stamp==stamp);
  /* A blocked core/storage getter must not leave readers spinning on odd
   * sequence. The old coherent proof cannot cover an arrival after its send. */
  core.current_term=10;core.quorum=0;core.pending=1;core.read_round=13;
  pthread_mutex_lock(&slow_mu);slow_quorum=1;pthread_mutex_unlock(&slow_mu);
  pthread_t slow;assert(!pthread_create(&slow,NULL,slow_publish,NULL));
  pthread_mutex_lock(&slow_mu);while(!entered)pthread_cond_wait(&slow_cv,&slow_mu);pthread_mutex_unlock(&slow_mu);
- assert(!(__atomic_load_n(&host.g[0].v_seq,__ATOMIC_ACQUIRE)&1));
+ assert(!(__atomic_load_n(&host.slot[0].v_seq,__ATOMIC_ACQUIRE)&1));
  host_view_get(&host,0,&v);assert(v.term==9 && v.read_round==12);
  assert(!host_view_covers(&v,60,13,9));
  pthread_mutex_lock(&slow_mu);released=1;pthread_cond_broadcast(&slow_cv);pthread_mutex_unlock(&slow_mu);

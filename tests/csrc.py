@@ -22,6 +22,7 @@ root = Path(__file__).resolve().parents[1]
 # module name -> (override environment variable, source files in order)
 MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
+    'group_view': ('EFS_GROUP_VIEW_SOURCE', ['src/server/group_view.h', 'src/server/group_view.c']),
     'efs_fuse': ('EFS_FUSE_SOURCE', [
         'src/client/efs_fuse/support.c',
         'src/client/efs_fuse/find_res.c',
@@ -133,3 +134,20 @@ if __name__ == '__main__':
         assert module('write', 'EFS_CSRC_TEST') == 'int alt;\n'
     assert upto('a static int f(', 'int f(') == 2 and upto('a int f(', 'int f(') == 2
     print('csrc self-check ok')
+
+
+def group_view_header():
+    """Task V3: the product text of src/server/group_view.h from the first
+    #define on (constants, structs, the inline predicates and host_view_get,
+    the wait bracket, the prototypes), without the include lines and the guard,
+    so a splice test compiles the real owner declarations against stub core getters."""
+    s = module('group_view')
+    a = s.index('#define GROUP_VIEW_NGROUPS')
+    return s[a:s.index('\n#endif', a)] + '\n'
+
+
+def group_view_func(name):
+    """The body of one non-inline function of src/server/group_view.c."""
+    s = module('group_view')
+    a = s.index('\n' + 'void ' + name + '(', s.index('#include "group_view.h"')) + 1
+    return s[a:s.index('\n}', a) + 2]

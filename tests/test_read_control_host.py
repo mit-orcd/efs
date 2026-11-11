@@ -20,7 +20,9 @@ void efs_batch_obs_count(enum efs_batch_counter k){counts[k]++;}
 #include <stdio.h>
 #include <string.h>
 struct efsd_server {int unused;};
-struct efs_raft_host {pthread_mutex_t mu,inbox_mu;int inbox_n;struct efsd_server *s;};
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu,inbox_mu;int inbox_n;struct efsd_server *s;};
 static int result,calls,published,woken,decode_fail;
 static uint64_t read_context;
 int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,uint8_t *b,uint32_t z) {
@@ -29,7 +31,7 @@ int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,uint
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return NULL;}
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
 static void host_publish_group(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;published++;}
-static void host_waiters_wake(struct efs_raft_host *h){(void)h;woken++;}
+static void host_waiters_wake(struct group_views *gv){(void)gv;woken++;}
 /* A handled ACK may free the next requested read round; it is started
  * before the publish, under the h->mu this path already holds. */
 static int starts;

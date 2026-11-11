@@ -37,7 +37,8 @@ code=r'''
 struct efs_raft {int group;};
 struct efs_raft_msg {int group;};
 struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
-struct efs_raft_host {pthread_mutex_t mu;struct {struct efs_raft*r;int hosted;}g[2];};
+struct group_views {int unused;}; /* the owner is stubbed: only the calls of the handoff are checked */
+struct efs_raft_host {pthread_mutex_t mu;struct {struct efs_raft*r;int hosted;}g[2];struct group_views gv;};
 static unsigned batches,handoffs,published,wakes,active,fail_batch,probe_batches;
 static atomic_int observer_seen;
 static int kv_hold=1;
@@ -46,8 +47,8 @@ static struct efs_raft *group_raft(struct efs_raft_host*h,int group){return h->g
 static void __attribute__((unused)) host_pending_reads(struct efs_raft_host*h){
  (void)h;assert(!active && kv_hold && batches==probe_batches+1);probe_batches++;
 }
-static void __attribute__((unused)) host_publish_view(struct efs_raft_host*h,int gi){(void)h;assert(!active && kv_hold && gi>=0 && gi<2);published|=1u<<gi;}
-static void __attribute__((unused)) host_waiters_wake(struct efs_raft_host*h){(void)h;assert(published==3 && !active);wakes=batches;}
+static void __attribute__((unused)) host_publish_view(struct group_views*gv,int gi,struct efs_raft*r){(void)gv;(void)r;assert(!active && kv_hold && gi>=0 && gi<2);published|=1u<<gi;}
+static void __attribute__((unused)) host_waiters_wake(struct group_views*gv){(void)gv;assert(published==3 && !active);wakes=batches;}
 static int host_inbox_take(struct efs_raft_host*h,struct host_inbox_item*i){
  (void)h;for(unsigned j=0;j<5;j++){i[j]=(struct host_inbox_item){.buf=calloc(1,5),.len=5};assert(i[j].buf);i[j].buf[0]=(j%2)*2;}return 5;
 }

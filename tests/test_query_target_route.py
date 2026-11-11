@@ -32,7 +32,9 @@ code=r"""
 struct efs_raft {int leader;uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;int retired;};
 struct efs_server_query_view {void *catalog;};
-struct efs_raft_host {pthread_mutex_t mu;pthread_rwlock_t query_lock;
+/* the owner is stubbed; its struct is the host's first member so a stub can find the host */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;pthread_mutex_t mu;pthread_rwlock_t query_lock;
  int n,raft_id,query_error,capable;struct host_group groups[2];struct efs_server_query_view query_view;};
 static struct efs_raft_host *g_host;
 static int barriers,consumed,barrier_rc,lose_capability;
@@ -40,7 +42,7 @@ static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(g=
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){return group_slot(h,g)->r;}
 struct host_view {int has,leader;uint32_t voters;};
 /* Published routing snapshot of a local replica. */
-static void host_view_get(struct efs_raft_host*h,uint8_t g,struct host_view*v){struct efs_raft*r=group_raft(h,g);v->has=r!=NULL;v->leader=r?r->leader:-1;v->voters=r?r->voters:0;}
+static void host_view_get(struct group_views*gv,uint8_t g,struct host_view*v){struct efs_raft*r=group_raft((struct efs_raft_host*)gv,g);v->has=r!=NULL;v->leader=r?r->leader:-1;v->voters=r?r->voters:0;}
 static uint32_t efs_raft_voters(struct efs_raft*r){return r->voters;}
 static uint32_t group_voters(uint8_t g,int n){return g==0||n<4?7:14;}
 static int hosts_group(int id,uint32_t voters){return id>=0&&id<32&&(voters&(1u<<id));}

@@ -196,11 +196,14 @@ static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1
 static int verdict, nonempty, selections, proposals, applied, ring_hit=1, ring_term=1;
 static int empty_on_recheck,recheck_error;
 static const uint8_t *proposed;
+/* the owner is stubbed: the host is a null pointer here and only its view member's address is taken */
+struct group_views {int unused;};
+struct efs_raft_host {struct group_views gv;};
 static int host_pack_session_cleanup(void *h,const uint8_t *cmd,uint32_t len,
  uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
 {assert(!h && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT && len==26 && group==0);selections++;*hint=2;*size=nonempty && !(empty_on_recheck&&selections>1)?26:0;memcpy(packed,cmd,26);packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;return selections>1&&recheck_error?recheck_error:verdict;}
-static void host_view_get(void *h,uint8_t group,struct host_view *v)
-{assert(!h && !group);v->applied=17;}
+static void host_view_get(struct group_views *gv,uint8_t group,struct host_view *v)
+{assert(!gv && !group);v->applied=17;}
 static int host_propose_mode(void *h,uint8_t group,const uint8_t *cmd,uint32_t len,
  uint64_t *idx,uint64_t *term,int *hint,int local)
 {assert(!h && !group && len==26 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH && hint && local==1);proposals++;proposed=cmd;*idx=40;*term=3;return EFS_OK;}
@@ -209,7 +212,7 @@ static int host_wait_verdict(void *h,uint8_t group,uint64_t idx,uint64_t term,in
 static int host_arc_read(void *h,uint8_t group,uint64_t idx,struct efs_arc_view *v)
 {assert(!h && !group && idx==40);v->idx=ring_hit?40:41;v->term=ring_term?3:4;v->rc=applied;return 1;}
 static void dispatch(const uint8_t *cmd,uint32_t clen,struct efs_msg_raft_mkfs_reply *out)
-{void *h=NULL;uint8_t group=0,cleanup_cmd[128];int hint=-1,rc;memset(out,0,sizeof(*out));
+{struct efs_raft_host *h=NULL;uint8_t group=0,cleanup_cmd[128];int hint=-1,rc;memset(out,0,sizeof(*out));
 '''+route+r'''
  assert(0 && "the cleanup route answers every LEASE_LOCK_NEXT");(void)cleanup_cmd;(void)clen;(void)cmd;
 }

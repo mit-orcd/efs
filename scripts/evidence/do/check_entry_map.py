@@ -9,7 +9,7 @@ Reads the `## Entry map` section of PAGE and checks, against the tree:
    and `host_wait_*` functions defined in src/server/raft_host.c and
    src/server/read_index_pair_remote.h (a renamed, removed or new one fails);
 2. the first column of the support table names functions defined in
-   src/server/raft_host.c or src/raft/raft.c;
+   src/server/raft_host.c, src/server/group_view.c/.h or src/raft/raft.c;
 3. every other backticked name in the section is a path that exists or a C
    expression whose identifiers all occur in the ReadIndex sources;
 4. the test table is exactly `scripts/tests_for.py server/raft_host.read_index`.
@@ -21,7 +21,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[3]
 page = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'docs/status/2026-11/readindex-entry-map-20261108.md'
-host = (root / 'src/server/raft_host.c').read_text()
+# the group view owner (Task V3) holds host_view_get, the wait predicates and the sleepers
+host = (root / 'src/server/raft_host.c').read_text() + '\n' + (root / 'src/server/group_view.c').read_text() + '\n' + (root / 'src/server/group_view.h').read_text()
 pair = (root / 'src/server/read_index_pair_remote.h').read_text()
 raft = (root / 'src/raft/raft.c').read_text()
 corpus = '\n'.join([host, raft] + [p.read_text() for p in sorted((root / 'src/server').glob('*.h'))]

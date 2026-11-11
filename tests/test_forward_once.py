@@ -140,12 +140,13 @@ code = r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
-struct efs_raft_host { int raft_id, hosted, has, role, leader; };
+struct group_views { int has, role, leader; }; /* the owner is stubbed: a settable answer */
+struct efs_raft_host { int raft_id, hosted; struct group_views gv; };
 struct host_view { int has, role, leader; };
 static int host_serving_forward, remote_calls, local_calls, remote_rc;
 static int host_hosts(struct efs_raft_host *h,uint8_t group){(void)group;return h->hosted;}
-static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v)
-{(void)group;*v=(struct host_view){h->has,h->role,h->leader};}
+static void host_view_get(struct group_views *gv,uint8_t group,struct host_view *v)
+{(void)group;*v=(struct host_view){gv->has,gv->role,gv->leader};}
 static int host_remote_cmd(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,
                           uint32_t clen,struct efs_msg_raft_mkfs_reply *out,int hint)
 {(void)h;(void)out;(void)hint;assert(group==0 && clen==1 && cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS);remote_calls++;return remote_rc;}
@@ -159,16 +160,16 @@ static void run(struct efs_raft_host *h,struct efs_msg_raft_mkfs_reply *out)
 static void reset(void){remote_calls=local_calls=remote_rc=0;}
 int main(void)
 {
-    struct efs_raft_host h={.raft_id=0,.hosted=1,.has=1,.role=EFS_RAFT_FOLLOWER,.leader=1};
+    struct efs_raft_host h={.raft_id=0,.hosted=1,.gv={.has=1,.role=EFS_RAFT_FOLLOWER,.leader=1}};
     struct efs_msg_raft_mkfs_reply out={0};
     reset();host_serving_forward=0;run(&h,&out);assert(remote_calls==1 && !local_calls);
     reset();host_serving_forward=1;run(&h,&out);assert(!remote_calls && !local_calls && out.rc==EFS_ERR_NOT_PRIMARY && out.leader_hint==1);
     reset();h.hosted=0;run(&h,&out);assert(!remote_calls && !local_calls && out.rc==EFS_ERR_NOT_PRIMARY && out.leader_hint==1);
-    reset();h.leader=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
-    reset();h.has=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
+    reset();h.gv.leader=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
+    reset();h.gv.has=0;run(&h,&out);assert(!remote_calls && out.leader_hint==-1);
     reset();host_serving_forward=0;run(&h,&out);assert(remote_calls==1 && !local_calls);
     reset();remote_rc=EFS_ERR_STALE;run(&h,&out);assert(remote_calls==1 && out.rc==EFS_ERR_STALE);
-    reset();h.hosted=h.has=1;h.role=EFS_RAFT_LEADER;host_serving_forward=1;run(&h,&out);assert(!remote_calls && local_calls==1);
+    reset();h.hosted=h.gv.has=1;h.gv.role=EFS_RAFT_LEADER;host_serving_forward=1;run(&h,&out);assert(!remote_calls && local_calls==1);
     puts("STATUS route: hosted/unhosted one-hop refusal, unknown/self hints, complete delegation and semantic refusal PASS");
 }
 '''

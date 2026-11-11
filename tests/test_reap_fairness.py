@@ -29,14 +29,16 @@ void efs_telemetry_log(int critical, const char *format, ...) {
 #define REAP_ENTRY_BYTES (48u * 1024u)
 #define REAP_KEY_LEN 11u
 #define GC_FRAG_BUDGET_US 200000
-#define HOST_WAITERS 512
 #define HOST_NGROUPS 2
 #define efs_kv_get fake_kv_get
 #define efs_kv_key_lane fake_key_lane
 #define efs_kv_lane_shard fake_lane_shard
 #define efs_kv_inode_shard fake_inode_shard
 struct fake_server {pthread_mutex_t lock;uint64_t quota,gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
-struct efs_raft_host {struct fake_server *s;struct efs_kv *kv;pthread_mutex_t cv_mu,wait_mu;void *wait_head;struct {uint8_t active;} waiters[HOST_WAITERS];int gc_running,running;uint8_t reap_cursor[2][11];uint32_t reap_cursor_len[2];};
+/* The owner is stubbed: this test runs host_gc_metadata_waiting's text over a settable answer. */
+struct group_views {int busy;};
+static int group_view_waiting(struct group_views *gv){return gv->busy;}
+struct efs_raft_host {struct fake_server *s;struct efs_kv *kv;pthread_mutex_t wait_mu;void *wait_head;struct group_views gv;int gc_running,running;uint8_t reap_cursor[2][11];uint32_t reap_cursor_len[2];};
 struct reap_times {uint64_t scan,sweep,fence,done;};
 static struct efs_node node;static int missing_node,scan_error,refuse,busy_lane;
 static uint64_t clock_us;static unsigned handed[4],reaped[4],dead[4],chunks[4],rounds_of[4];
@@ -107,9 +109,9 @@ static void reset(struct efs_raft_host *h,unsigned c){
  for(unsigned i=0;i<4;i++)chunks[i]=c;
  memset(h->reap_cursor_len,0,sizeof(h->reap_cursor_len));clock_us=0;scan_error=refuse=busy_lane=missing_node=0;node.used=100;
  tombs=0;page=4096;pages=0;page_cost_us=0;
- h->wait_head=NULL;memset(h->waiters,0,sizeof(h->waiters));h->waiters[HOST_WAITERS-1].active=1;h->gc_running=h->running=1;h->s->quota=1000;}
+ h->wait_head=NULL;h->gv.busy=1;h->gc_running=h->running=1;h->s->quota=1000;}
 static unsigned total(unsigned *v){return v[0]+v[1]+v[2]+v[3];}
-int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server};pthread_mutex_init(&server.lock,NULL);pthread_mutex_init(&h.cv_mu,NULL);pthread_mutex_init(&h.wait_mu,NULL);
+int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server};pthread_mutex_init(&server.lock,NULL);pthread_mutex_init(&h.wait_mu,NULL);
  for(unsigned group=0;group<=2;group+=2){unsigned gi=group/2;struct reap_times times={0};
   /* Capped scans: two markers per pass, the cursor moves past the batch. */
   reset(&h,1);host_gc_reap_pass(&h,group,1,&times);
@@ -124,10 +126,10 @@ int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server}
   /* A lane that stays busy blocks only its own inode. */
   reset(&h,1);busy_lane=11;host_gc_reap_pass(&h,group,1,&times);assert(!handed[0]&&reaped[1]);busy_lane=0;
   /* Metadata waiting: yield between sweep rounds after the budget. */
-  reset(&h,24);h.waiters[HOST_WAITERS-1].active=1;host_gc_reap_pass(&h,group,1,&times);
+  reset(&h,24);h.gv.busy=1;host_gc_reap_pass(&h,group,1,&times);
   assert(rounds_of[0]==2&&!handed[0]&&server.gc_reap_capped[gi]); /* 2 x 150 ms >= 200 ms budget */
   /* No waiters, or capacity pressure: the rounds run to completion. */
-  reset(&h,24);h.waiters[HOST_WAITERS-1].active=0;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]&&reaped[1]);
+  reset(&h,24);h.gv.busy=0;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]&&reaped[1]);
   reset(&h,24);node.used=950;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]); /* capacity pressure must reclaim */
   reset(&h,24);missing_node=1;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]); /* unknown usage is no proof of free space */
   /* W124: tombstones before the markers are crossed in bounded pages within
@@ -149,7 +151,7 @@ int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server}
   reset(&h,1);scan_error=EFS_ERR_IO;uint64_t before=server.gc_scan_errors;host_gc_reap_pass(&h,group,1,&times);
   assert(!total(rounds_of)&&!h.reap_cursor_len[gi]&&server.gc_scan_errors==before+1);
  }
- pthread_mutex_destroy(&h.cv_mu);pthread_mutex_destroy(&h.wait_mu);pthread_mutex_destroy(&server.lock);
+ pthread_mutex_destroy(&h.wait_mu);pthread_mutex_destroy(&server.lock);
  puts("actual batched REAP fairness: capped round-robin cursor, per-inode refusal/busy isolation, metadata budget between rounds, quota speed, bounded tombstone pages with a resumable cursor, shutdown and scan errors PASS");
 }
 '''

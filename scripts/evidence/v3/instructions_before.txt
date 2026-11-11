@@ -1,0 +1,21 @@
+# Task V3 before: instruction lines per function, inlining off, intel2 (gcc 14.3.1), raft_host.c at 1d93d6965
+# produced by: scripts/evidence/v3/instruction_counts.sh <tree> src/server/raft_host.c <out> <functions>
+host_publish_view 229
+host_publish_group 27
+host_view_get 89
+host_halted_hint 18
+host_view_covers 22
+host_view_quorum_index 33
+host_view_wait_apply 33
+host_read_wait_ready 61
+host_read_floor_ready 78
+host_waiter_sleep 93
+host_waiters_wake 171
+host_local_leader 26
+host_local_view 29
+host_is_leader 14
+host_leader_hint 30
+server_raft_host_active 9
+server_raft_host_formed 6
+server_raft_host_unresponsive_voters 71
+server_raft_host_group_commit 42
