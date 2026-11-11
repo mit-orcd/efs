@@ -295,7 +295,7 @@ static int rv_ledgers(void)
         char path[EFS_MAX_PATH + 320];
         snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
         if (strstr(e->d_name, ".tmp.")) {
-            if (unlink(path) && errno != ENOENT) {
+            if (server_put_session_recover_tmp(rv.s, e->d_name) != EFS_OK) {
                 bad = 1;
                 snprintf(badname, sizeof(badname), "%.64s", e->d_name);
                 break;

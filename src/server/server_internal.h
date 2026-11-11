@@ -174,6 +174,8 @@ int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d);
 int server_raft_host_degraded_check(const uint8_t mark[EFS_REBUILD_MARK_LEN]);
 int server_raft_host_degraded_now(uint8_t group, uint64_t *chunks);
 /* D31: this member's durable storage session floor for uuid (0: none). */
+/* K36 sweep: removes an abandoned seal temp file under that UUID's seal lock. */
+int server_put_session_recover_tmp(struct efsd_server *, const char *name);
 int server_put_session_floor(struct efsd_server *, const uint8_t uuid[16], uint32_t *floor);
 /* D31 + K13: EFS_MSG_PUT_ORPHAN_DELETE (src/server/put_orphan.c). */
 int server_put_orphan_delete(struct efsd_server *, const uint8_t *, uint32_t);
