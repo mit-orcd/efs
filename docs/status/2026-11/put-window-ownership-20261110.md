@@ -108,7 +108,7 @@ Reproduce: `git archive <commit> | ssh intel1 'tar -x -C <dir>'`, compile `src/c
 
 ## Round 2 (Task V1)
 
-**Verdict: PARTIAL** (steps 2 to 7 done and run on intel1 for the build, the caller test and the mutation table; the remaining step 8 commands are NOTRUN, see below). Source commit tested: `09b9fd13a` (on devel `68e2778a4`), `git archive` copy under `~/efs-taskV1/` on intel1 (8 cpus), `make -j8` rc 0. Linux binaries built with the Makefile defaults; the caller test compiles its own binary with `cc -O1 -g` (gcc).
+**Verdict: PASS** for the work of this task; the one TSan failure is the known intermittent `k37_segment_rebuild`, not part of this change. Source commit tested: `09b9fd13a` (on devel `68e2778a4`; the later commit only adds this page, the ledger entry and the rebuilt graph), `git archive` copy on intel1 (8 cpus, gcc), `make -j8` rc 0. The caller test compiles its own binary with `cc -O1 -g`.
 
 **What changed.**
 
@@ -137,9 +137,7 @@ Reproduce: `git archive <commit> | ssh intel1 'tar -x -C <dir>'`, compile `src/c
 
 All nine are covered; none survives deletion. Raw output: `~/efs-artifacts/taskV1-20261111/mutation.log` and the per-test logs on intel1 (not committed).
 
-**Results on intel1** (`~/efs-artifacts/taskV1-20261111/*.log`): `make -j8` rc 0; `./tests/test_put_window_interface` rc 0; all seven scenarios rc 0; `test_put_window_deadline.py`, `test_writer_fence_merge.py`, `test_client_memory.py`, `test_read_refs_window.py`, `test_read_failure_admission.py` rc 0.
-
-**Not run (NOTRUN).** After those runs, intel1 refused every ssh connection ("Not allowed at this time" banner from sshd, for the rest of the session; other hosts answered). So on intel1 these were not run: `scripts/tests_for.py client/put_window --run`, `client/write --run`, `make test`, `tests/test_make_test_recipe.py`, `tests/sanitizer_check.sh asan` and `tsan`. The new entries therefore have no sanitizer verdict yet, and the artifacts directory has no `SHA256SUMS`; `~/efs-taskV1` was not removed. The caller test was run without a sanitizer on the Mac only as a cross-check.
+**Results on intel1** (raw logs and `SHA256SUMS` in `~/efs-artifacts/taskV1-20261111/` on intel1, not committed; the tree `~/efs-taskV1` is removed): `make -j8` rc 0; `./tests/test_put_window_interface` rc 0 (12 cases); all seven scenarios rc 0; `test_put_window_deadline.py`, `test_writer_fence_merge.py`, `test_client_memory.py`, `test_read_refs_window.py`, `test_read_failure_admission.py` rc 0; `scripts/tests_for.py client/put_window --run` rc 0; `client/write --run` rc 0 on the second run (the first ran before `make test` had built `tests/faults/efsd` and stopped at `test_k35_fsync_degraded.py` with "efsd missing: run make first"; ordering of my run script, not the code); `make test` rc 0; `tests/test_make_test_recipe.py` rc 0; `tests/sanitizer_check.sh asan`: VERDICT PASS (72 run, 0 failed, 389 s), the interface test and all seven caller scenarios PASS; `tsan`: 49 run, 1 failed, 662 s, the failure is `k37_segment_rebuild` (the known intermittent), the interface test and all seven caller scenarios PASS. Mac: `check_concern_map.py`, `gen_diagnostics.py`, `rebuild-code-graph.sh` (19,290 nodes, 81,508 edges), `test_code_graph.py`, `gen-architecture-full.py`, `make docs-check`, `check_doc_links.py`, `test_tests_for.py`, `csrc.py`, `check_guide_counts.py` all rc 0. intel1 refused ssh for a while mid-task ("Not allowed at this time" from sshd) and the long runs were started after it returned.
 
 **Still not shown.**
 
