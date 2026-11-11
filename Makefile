@@ -471,6 +471,7 @@ docs-check:
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
 	python3 scripts/check_failure_routes.py
+	python3 scripts/check_put_lifecycle.py
 
 # Developer navigation validation needs the pinned graphify environment and a
 # real Git index, unlike archived Linux code-gate trees. Keep it explicit.

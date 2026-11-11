@@ -62,7 +62,7 @@ Tests: `tests/test_pressure_cohort.py` `tests/test_client_memory.py` `tests/test
 
 ## PUT window
 
-Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole. Owned by `src/client/put_window.c` behind [`put_window.h`](../../src/client/put_window.h), which carries the contract; `write.c` calls `put_win_open`, `put_win_close` and `put_win_wait` and never reads the state.
+Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole. Owned by `src/client/put_window.c` behind [`put_window.h`](../../src/client/put_window.h), which carries the contract; `write.c` calls `put_win_open`, `put_win_close` and `put_win_wait` and never reads the state. What bounds the PUT itself (deadline, retries, quorum, completion) is in [put-lifecycle.md](put-lifecycle.md).
 
 State: `put_win[]`, `put_win_overflow` under `put_win_mu`/`put_win_cv` (all private to `put_window.c`); `put_win_total` atomic (lock-free fast path for readers).
 

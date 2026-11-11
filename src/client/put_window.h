@@ -53,7 +53,10 @@
  *                    wakes it at once.
  *   efs_dcache_put_win_wait  the reader's wait: 0 at once, without the
  *                    mutex, when no window of any inode is open; otherwise
- *                    put_win_wait(ino, 8000). */
+ *                    put_win_wait(ino, 8000).
+ *
+ * The window does not tell you what bounds the PUT itself (its deadline,
+ * retries, quorum and completion): that is docs/how-it-works/put-lifecycle.md. */
 
 void put_win_open(efs_ino_t ino);
 void put_win_close(efs_ino_t ino);
