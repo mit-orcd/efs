@@ -1,0 +1,3 @@
+# Task V4 read-proof ownership design
+
+[Task V4 read-proof ownership design](../read-proof-ownership-20261111.md): **design only, no code moved** (Nov 11, 2026, devel `0bffb131d`). One owner for the whole life of a metadata read (admission, wait, completion, cancellation, leadership change): state table with file and line for 11 states, a boundary of 7 public operations, 12 private and 4 staying functions of the 23 left in candidate A, 4 hooks instead of an internal header, 8 open decisions and 10 findings (host stop wakes no read sleeper; the direct mode is dead in production, about 105 lines). Before-numbers in `scripts/evidence/v4/`. Linked item: structure review; no K row; blocks alpha: no. Phase 2 waits for the coordinator.

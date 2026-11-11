@@ -1,0 +1,70 @@
+source: src/server/raft_host.c (26314 lines); 647 functions with a body
+struct efs_raft_host: 163 fields; struct host_group: 51 fields
+fields whose name also occurs in another struct (ambiguous): 53 of 214
+duplicate field names across the two structs: none
+references by name: 3111; of them on ambiguous names: 2206, kept after the base-type check: 1722, dropped (wrong or unknown base): 484, of which base unknown: 481
+file-scope variables found: 58
+
+=== Candidate A_readindex: 23 functions, 703 lines ===
+b. fields used: 20 (host: 15, group: 5; 11 have an ambiguous name); used only inside: 2
+   refs inside 82 of 1080 = 8% (refined: ambiguous names counted only when the base is a known host or group expression)
+   without hub fields (>= 100 references in the file; 6 of the used fields dropped): fields 14, private 2, refs inside 54 of 227 = 24%
+   raw name match, no refinement: inside 97 of 1397 = 7%
+   only inside: ri_begun ri_request
+   field: inside/outside (* = ambiguous name, refined count)
+       gv: 19/42
+     * mu: 12/140
+       inbox_mu: 8/12
+     * s: 6/183
+       inbox: 5/10
+       inbox_n: 5/12
+     * g: 4/269
+     * group: 3/77
+       ri_begun: 3/0
+       ri_request: 3/0
+       apply_progress: 2/1
+     * r: 2/127
+     * raft_id: 2/47
+       telemetry: 2/8
+     * hosted: 1/29
+       inbox_bytes: 1/5
+     * n: 1/29
+     * obs_wait_extends: 1/2
+     * obs_wait_timeouts: 1/3
+     * obs_wait_timeouts_own: 1/2
+b2. file-scope variables used: 2; only inside: 1; refs inside 15 of 49
+     g_read_prof:14/34 g_ri_coal:1/0
+c. locks and atomics (24 total):
+        7  __atomic_load_n
+        5  pthread_mutex_lock(mu)
+        4  __atomic_fetch_add
+        4  pthread_mutex_lock(inbox_mu)
+        1  __atomic_compare_exchange_n
+        1  __atomic_store_n
+        1  pthread_cond_timedwait
+        1  pthread_mutex_trylock(mu)
+d. outside callers: 72 distinct callers; 12 of 23 functions have one; non-static entry points 0 (named in other src files: 0)
+     host_read_begin_tracked (L5132): 1 calls from 1: host_publication_committed x1 [first L25361]
+     host_read_start_requested (L5176): 3 calls from 1: host_pump x3 [first L8595]
+     host_read_index_admitted (L5196): 1 calls from 1: server_raft_host_submit x1 [first L16076]
+     host_read_index (L5385): 87 calls from 55: server_raft_host_rename_at x6, server_raft_host_submit x5, host_expiry_update_txn x4, host_unlink_txn x4, server_raft_host_link x3, server_raft_host_publication x3 +49 more [first L2335]
+     host_read_pair_capacity (L5395): 1 calls from 1: <file scope> x1 [first L5404]
+     host_read_pair_note (L5399): 1 calls from 1: <file scope> x1 [first L5405]
+     host_read_index_pair (L5415): 7 calls from 7: host_append_authority x1, host_query_source_once x1, host_read_inode_lanes_mask x1, server_raft_host_lookup x1, server_raft_host_mkdir x1, server_raft_host_query_page x1 +1 more [first L7475]
+     host_wait_applied_own (L5583): 5 calls from 5: host_bg_propose x1, host_pub_batch_wait x1, host_wait_refs x1, host_wait_settled x1, host_wait_verdict x1 [first L6086]
+     host_read_probe (L1345): 1 calls from 1: host_send x1 [first L1530]
+     host_pending_reads (L8423): 3 calls from 2: host_pump x2, host_inbox_batch_handoff x1 [first L7599]
+     host_note_queued_reads (L7524): 1 calls from 1: drain_inbox x1 [first L7613]
+     host_read_control (L14041): 1 calls from 1: server_raft_host_inbox x1 [first L14103]
+   functions with no outside caller: host_wait_applied host_ri_complete host_ri_remove host_remote_read_index host_follower_read_result host_read_admit host_read_probe_needed host_read_note_begin host_read_admit_view host_read_request host_wait_applied_mode
+   non-static entry points named in other src files: none
+e. outside static callees: 17 distinct (65 calls)
+     now_us_(13) group_raft(10) read_prof_add(8) host_publish_group(6) host_pump_kick(5) outbox_pure_read_control(4) group_slot(3) host_deadline_us(2) host_group_incompatible(2) host_halted_hint(2) host_remote_cmd(2) outbox_nentries(2) read_prof_on(2) host_fwd_leader_pick(1) host_group_retired(1) host_past_deadline(1) rd64be(1)
+f. tests: 54 files name at least one function; 1 of 23 functions are named by no test
+   no test names: host_read_pair_note
+   of those, 3 files also read raft_host.c as text or include it (they break when a function moves): tests/test_apply_ring.py tests/test_host_batch_handoff.py tests/test_put_ticket_batch.py
+
+=== Summary ===
+| candidate | functions | lines | fields used | only inside | file-scope vars | vars only inside | refs inside % | refs inside % raw | fields w/o hubs | private w/o hubs | refs inside % w/o hubs | outside callers | fns with outside caller | outside callees | test files | fns no test | lock calls | atomics |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A_readindex | 23 | 703 | 20 | 2 | 2 | 1 | 8 | 7 | 14 | 2 | 24 | 72 | 12 | 17 | 54 | 1 | 10 | 13 |
