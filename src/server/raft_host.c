@@ -4088,18 +4088,6 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     return EFS_ERR_BUSY;
 }
 
-/* 1 while a finished import has a step to take and the KV did not just
- * refuse one: the pump then skips its wait. A refused batch (import_stall)
- * leaves the normal wait, so an L0 stall is never polled in a loop. */
-static int host_snap_import_work(struct efs_raft_host *h)
-{
-    for (int i = 0; i < HOST_NGROUPS; i++)
-        if (__atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE &&
-            !__atomic_load_n(&h->g[i].import_stall, __ATOMIC_RELAXED))
-            return 1;
-    return 0;
-}
-
 /* Pump, h->mu held: one bounded import step per group per cycle, whether or
  * not the leader still asks for that image. A finished import is installed in
  * the Raft core here (the leader may have moved on to a newer image that
@@ -4118,9 +4106,18 @@ static void host_snap_import_pump(struct efs_raft_host *h)
         incl = g->import_incl;
         term = g->import_term;
         pthread_mutex_unlock(&h->snap_mu);
-        if (st != SNAP_IMP_DONE || !snap_import_poll(h, g, incl, term, &rc) ||
-            rc != EFS_OK)
+        if (st != SNAP_IMP_DONE || !snap_import_poll(h, g, incl, term, &rc))
             continue;
+        if (rc != EFS_OK) {
+            /* More to do and the KV accepted the batch: the next step runs
+             * on the next cycle without the timer wait. A refused batch
+             * (import_stall, an L0 stall) keeps the normal wait. */
+            pthread_mutex_lock(&h->snap_mu);
+            if (g->import_state == SNAP_IMP_DONE && !g->import_stall)
+                host_pump_kick(h);
+            pthread_mutex_unlock(&h->snap_mu);
+            continue;
+        }
         rc = efs_raft_snap_imported(g->r, incl, term);
         efs_telemetry_log(0, "raft-snap: import installed group=%u incl=%llu "
                 "rc=%d\n", g->group, (unsigned long long)incl, rc);
@@ -9141,7 +9138,7 @@ static void *host_pump(void *arg)
         memset(&pfd, 0, sizeof(pfd));
         pfd.fd = h->pump_efd;
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, host_snap_import_work(h) ? 0 : host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
+        if (poll(&pfd, 1, host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
             ssize_t drained;
             do { drained = read(h->pump_efd, &sink, sizeof(sink)); }
             while (drained < 0 && errno == EINTR);

@@ -2440,6 +2440,8 @@ static void test_snapshot_imported_without_retry(void)
     CHECK(efs_raft_applied(n.r[follower])==incl&&efs_raft_snap_index(n.r[follower])==incl,
           "snapshot and applied index are the image's");
     CHECK(efs_raft_snap_imported(n.r[follower],incl,term)==EFS_ERR_INVAL,"installed once");
+    for(int i=0;i<n.ndeferred;i++){msg_free_deep(n.deferred[i]);n.deferred[i]=NULL;}
+    n.ndeferred=0;
     free_n(&n,st,3);
 }
 

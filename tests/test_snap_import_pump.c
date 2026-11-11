@@ -5,6 +5,7 @@
  * file's own checks run first, unchanged. */
 #define main snap_import_host_main
 #include "test_snap_import_host.c"
+#include <sys/eventfd.h>
 #undef main
 
 /* K113: the pump installs a finished import in the Raft core. */
@@ -21,7 +22,7 @@ int __wrap_efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t te
 
 /* The KV refuses the batch (L0 stall): one step per pump call, and the pump
  * goes back to its normal wait instead of polling with timeout 0. */
-static int step_busy_left, step_calls;
+static int step_busy_left, step_progress_left, step_calls;
 int __real_efs_kv_import_step(struct efs_kv_import *, int *);
 int __wrap_efs_kv_import_step(struct efs_kv_import *im, int *done)
 {
@@ -31,7 +32,20 @@ int __wrap_efs_kv_import_step(struct efs_kv_import *im, int *done)
         *done = 0;
         return EFS_ERR_BUSY;
     }
+    if (step_progress_left > 0) {   /* an accepted batch that is not the last */
+        step_progress_left--;
+        *done = 0;
+        return EFS_OK;
+    }
     return __real_efs_kv_import_step(im, done);
+}
+
+/* 1 if the pump was kicked since the last call (drains the eventfd). */
+static int kicked(struct efs_raft_host *h)
+{
+    uint64_t v;
+
+    return read(h->pump_efd, &v, sizeof(v)) == (ssize_t)sizeof(v);
 }
 
 static void test_kv_busy_does_not_spin_the_pump(void)
@@ -46,20 +60,24 @@ static void test_kv_busy_does_not_spin_the_pump(void)
     CHECK(send_chunk(&f) == EFS_ERR_BUSY, "queued");
     host_snap_import_pass(f.h);
     CHECK(g->import_state == SNAP_IMP_DONE, "importer is open");
-    CHECK(host_snap_import_work(f.h), "a finished import with work to do: no wait");
+    f.h->pump_efd = eventfd(0, EFD_NONBLOCK);
+    CHECK(f.h->pump_efd >= 0, "eventfd");
     step_busy_left = 5;
+    step_progress_left = 1;
     step_calls = 0;
     imported_calls = 0;
     for (i = 1; i <= 5; i++) {
         host_snap_import_pump(f.h);
         CHECK(step_calls == i, "one step per pump call");
-        CHECK(!host_snap_import_work(f.h),
-              "the KV refused the batch: the pump keeps its normal wait");
+        CHECK(kicked(f.h) == 0, "the KV refused the batch: the pump keeps its normal wait");
     }
     CHECK(!imported_calls && g->import_state == SNAP_IMP_DONE, "nothing installed while refused");
+    host_snap_import_pump(f.h);
+    CHECK(kicked(f.h) == 1, "an accepted step that is not the last: the next cycle runs at once");
     for (i = 0; i < 64 && !imported_calls; i++)
         host_snap_import_pump(f.h);
     CHECK(imported_calls == 1 && converged(&f), "the import finishes once the KV accepts");
+    close(f.h->pump_efd);
     fixture_free(&f);
 }
 
@@ -74,6 +92,7 @@ static void test_newer_chunk_keeps_import_and_pump_installs(void)
     fixture_make(&f);
     g = &f.h->g[0];
     g->r = (struct efs_raft *)&f;           /* only passed to the wrapped install */
+    f.h->pump_efd = -1;
     CHECK(send_chunk(&f) == EFS_ERR_BUSY, "chunk of X queues the import");
     host_snap_import_pass(f.h);
     CHECK(g->import_state == SNAP_IMP_DONE && g->import_im, "X's importer is open");
