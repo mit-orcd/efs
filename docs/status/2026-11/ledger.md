@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K114 uncovered-waits design](ledger/20261111-002-k114-uncovered-waits-design.md): **design study, Nov 11 (Task FY), no code changed**
 - [Wave 79 merge](ledger/20261111-001-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `c518bc8d4`)**
 - [W123 branch review and second set of ports](ledger/20261110-048-w123-ports.md): **PASS on the port branch, no K row yet for three devel defects, blocks alpha: coordinator to rule**
 - [PUT-window ownership](ledger/20261110-047-put-window-ownership.md): **PASS, no K row, blocks alpha: no**
