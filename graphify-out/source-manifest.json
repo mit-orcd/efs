@@ -356,6 +356,7 @@
     "scripts/evidence/task-v/task_v_ssh.sh": 1,
     "scripts/evidence/v2/lifecycle_inventory.py": 10,
     "scripts/evidence/v3/instruction_counts.sh": 1,
+    "scripts/evidence/v4/lifecycle_inventory.py": 10,
     "scripts/evidence/w123-ports/prefix_bench.py": 2,
     "scripts/evidence/w125/bigdir_readdir_repro.sh": 1,
     "scripts/evidence/w125/w0a_lane_lag_repro.sh": 3,
@@ -1965,6 +1966,7 @@
     "scripts/evidence/task-v/task_v_ssh.sh": "dde14748b6a98a57eeb5afd9347145691580ecf606c1202667c48da4fe6fa63d",
     "scripts/evidence/v2/lifecycle_inventory.py": "636b198e6e3d039d15584fd6edec2b060f1615b2f1f18d77334ee749d22e980b",
     "scripts/evidence/v3/instruction_counts.sh": "d402f0faa7ad5eba6c8807c66dd03f89ec4121d8e4b5d24d5a9a93e1be33b316",
+    "scripts/evidence/v4/lifecycle_inventory.py": "636b198e6e3d039d15584fd6edec2b060f1615b2f1f18d77334ee749d22e980b",
     "scripts/evidence/w123-ports/prefix_bench.py": "b705983b1607fc7872138db405de93bcef165ec61e682ab21c3eab860a75869d",
     "scripts/evidence/w125/bigdir_readdir_repro.sh": "43d81c7072025dc4e7e6bbb85dfd7bb462bacfefdecc810740eb73caef4b788b",
     "scripts/evidence/w125/w0a_lane_lag_repro.sh": "8b713fd893e89ba973b610e708dde30f92c7fb12a6a9f36c2b01dc4c28aaf912",
@@ -3189,10 +3191,10 @@
   },
   "input_tokens": 0,
   "omitted_unresolved_edges": {
-    "calls": 1884
+    "calls": 1888
   },
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "0bffb131d6c6b1f0cfe0628800241f6b8de7a9f4"
+  "source_commit": "26ca83690333479d0c3c21228177de9065575684"
 }
