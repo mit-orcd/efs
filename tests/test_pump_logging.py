@@ -8,7 +8,7 @@ least half the drained phase's rate: both phases pay the same injected fsync
 and the same host load, so the ratio measures K72, not the host (Task FD: an
 absolute count of 50 is only 7 below what an idle host gives). The existing W159
 40 ms serialized fsync interposer forces >20 ms waits, exercising the
-read/apply wait diagnostics that formerly logged while holding cv_mu, and
+read/apply wait diagnostics that formerly logged inside the group view wait lock, and
 makes every REPORT take >=100 ms so it reaches its slow-report line: K81, a
 synchronous fprintf(stderr) in the connection thread withheld the reply behind
 the stdio lock the telemetry reporter holds on a full pipe (fsync EIO).

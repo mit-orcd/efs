@@ -3,10 +3,13 @@
 from pathlib import Path
 import os,subprocess,tempfile
 import csrc
-root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
+root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host');gv=csrc.module('group_view')
 def fn(name):
  a=s.index('static int '+name+'(');return s[a:s.index('\n}',a)+2]
-a=s.index('struct host_view {');view=s[a:s.index('\n};',a)+3]
+def gfn(name):
+ a=gv.index('int '+name+'(');return 'static '+gv[a:gv.index('\n}',a)+2]
+a=gv.index('struct host_view {');view=gv[a:gv.index('\n};',a)+3]
+a=gv.index('struct host_read_floor {');floor=gv[a:gv.index('\n',a)]
 code=r'''
 #include "efs/raft.h"
 #include <pthread.h>
@@ -21,12 +24,16 @@ void efs_telemetry_log(int critical, const char *format, ...) {
 #define HOST_READ_TRIES 1
 #define HOST_TICK_US 5000
 struct server {int unused;};
-struct efs_raft_host {void *telemetry;struct server *s;pthread_mutex_t mu,cv_mu;int raft_id,n;};
+/* The owner is stubbed: this test runs the caller's text, with the wait lock a plain mutex. */
+struct group_views {pthread_mutex_t lock;};
+static void group_view_wait_lock(struct group_views *gv){pthread_mutex_lock(&gv->lock);}
+static void group_view_wait_unlock(struct group_views *gv){pthread_mutex_unlock(&gv->lock);}
+struct efs_raft_host {void *telemetry;struct server *s;pthread_mutex_t mu;struct group_views gv;int raft_id,n;};
 struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};
 static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader,ri_lock,ri_begin,ri_sleep_apply,ri_sleep_quorum;} g_read_prof;
 '''+view+r'''
-struct host_read_floor {uint64_t index,context;};
+'''+floor+r'''
 static uint64_t efs_batch_obs_now_us(void){return 0;}
 static int host_read_admit_view(struct efs_raft_host *h,uint8_t g,const struct host_view *v,struct host_read_admission *a){(void)h;(void)g;(void)v;(void)a;assert(0);return 0;}
 static void host_read_request(struct efs_raft_host *h,uint8_t g,uint64_t round){(void)h;(void)g;(void)round;assert(0);}
@@ -40,7 +47,7 @@ static uint64_t now_us_(void){return 0;}
 static void read_prof_add(struct read_prof_acc*a,uint64_t n){(void)a;(void)n;}
 static void host_deadline_us(struct timespec*t,long us){(void)us;*t=(struct timespec){0};}
 static int host_past_deadline(const struct timespec*t){(void)t;return deadline;}
-static void host_view_get(struct efs_raft_host*h,uint8_t g,struct host_view*v){(void)h;(void)g;if(cv_progress&&++views==2){current.read_done=1;current.proven_done=1;}*v=current;}
+static void host_view_get(struct group_views*h,uint8_t g,struct host_view*v){(void)h;(void)g;if(cv_progress&&++views==2){current.read_done=1;current.proven_done=1;}*v=current;}
 static int host_remote_read_index(struct efs_raft_host*h,uint8_t g,int l,const struct timespec*t,uint64_t*i,int*hint){(void)h;(void)g;(void)l;(void)t;*i=222;*hint=1;return remote_rc;}
 static int host_wait_applied(struct efs_raft_host*h,uint8_t g,uint64_t i,int*hint){(void)h;(void)g;(void)hint;assert(i==222);return apply_rc;}
 static int host_follower_read_result(int rc,int id,int n,int hint,int*out){(void)id;(void)n;(void)hint;(void)out;return rc;}
@@ -55,15 +62,15 @@ int efs_raft_read_pending(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_quorum(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_covers(const struct efs_raft*r,uint64_t n){(void)r;(void)n;assert(0);return 0;}
 int efs_raft_read_begin(struct efs_raft*r){(void)r;assert(0);return EFS_OK;}
-static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t,uint64_t r,uint64_t term,int proof_only,struct host_read_floor *floor){(void)floor;(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;(void)r;(void)term;(void)proof_only;
+static void host_waiter_sleep(struct group_views*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t,uint64_t r,uint64_t term,int proof_only,struct host_read_floor *floor){(void)floor;(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;(void)r;(void)term;(void)proof_only;
  if(delayed_floor){deadline=1;assert(any==2&&r==11&&term==2);*floor=(struct host_read_floor){110,7};
  current.read_done=1;current.read_round=12;current.read_index=900;
  current.proven_done=1;current.proven_round=10;current.proven_index=100;
  current.applied=110;current.read_context=delayed_floor==2?8:delayed_floor==3?0:7;
  return;}assert(0);}
-'''+'static int halted; static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return halted;}\n'+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_wait_ready')+fn('host_read_floor_ready')+fn('host_halted_hint')+fn('host_read_index_admitted')+r'''
+'''+'static int halted; static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return halted;}\n'+gfn('host_view_covers')+gfn('host_view_wait_apply')+gfn('host_view_quorum_index')+gfn('host_read_wait_ready')+gfn('host_read_floor_ready')+fn('host_halted_hint')+fn('host_read_index_admitted')+r'''
 int main(void){
- struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
+ struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.gv={.lock=PTHREAD_MUTEX_INITIALIZER},.n=4};
  struct host_read_admission a={101,11,2};int hint;uint64_t proof=9999;
  halted=1;current.leader=0;
  assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_NOT_PRIMARY && hint==-1 && proof==0);
@@ -89,7 +96,7 @@ int main(void){
  assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,1)==EFS_ERR_NOT_PRIMARY&&proof==0); /* proof server never forwards during role change */
  apply_rc=EFS_ERR_BUSY;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_ERR_BUSY&&proof==0);
  apply_rc=0;remote_rc=EFS_ERR_IO;assert(host_read_index_admitted(&h,0,&hint,NULL,&proof,0)==EFS_ERR_IO&&proof==0);
- /* Proof becomes ready in the cv_mu recheck after the outer test. This
+ /* Proof becomes ready in the wait-bracket recheck after the outer test. This
   * must skip sleep; the sleep stub asserts if registration parks it. */
  deadline=0;cv_progress=1;views=0;remote_rc=apply_rc=0;
  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=110,.applied=109,.proven_done=0,.proven_index=110,.proven_round=11,.read_pending=1,.read_done=0,.read_round=11,.read_index=110};
@@ -102,7 +109,7 @@ int main(void){
   assert(rc==(delayed_floor==1?EFS_OK:EFS_ERR_NOT_PRIMARY));
   assert(proof==(delayed_floor==1?110u:0u));
  }
- pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.cv_mu);return 0;
+ pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.gv.lock);return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-result-') as d:

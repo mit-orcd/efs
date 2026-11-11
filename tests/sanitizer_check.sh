@@ -128,6 +128,8 @@ open_interface|tests/test_open_interface
 find_res_interface|tests/test_find_res_interface
 # Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
 put_window_interface|tests/test_put_window_interface
+# Task V3: the real group view (publish, coherent reader race, predicates, wait bracket) through group_view.h.
+group_view_interface|tests/test_group_view
 # Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
 put_window_callers_ok|tests/test_put_window_callers.py ok
 put_window_callers_fail|tests/test_put_window_callers.py fail
@@ -225,6 +227,8 @@ open_interface|tests/test_open_interface
 find_res_interface|tests/test_find_res_interface
 # Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
 put_window_interface|tests/test_put_window_interface
+# Task V3: the real group view (publish, coherent reader race, predicates, wait bracket) through group_view.h.
+group_view_interface|tests/test_group_view
 # Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
 put_window_callers_ok|tests/test_put_window_callers.py ok
 put_window_callers_fail|tests/test_put_window_callers.py fail

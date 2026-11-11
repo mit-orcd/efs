@@ -165,8 +165,8 @@ TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c tests/test_kv_manifest_order.c tests/test_kv_fold_reopen.c
-TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c
-TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface
+TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c tests/test_group_view.c
+TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface tests/test_group_view
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import tests/test_kv_manifest_order tests/test_kv_fold_reopen
 TEST_BINS += tests/test_snap_import_host tests/test_snap_import_pump
 
@@ -175,7 +175,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
-              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c src/server/segment_rebuild.c \
+              src/server/raft_host.c src/server/group_view.c src/server/reclaim.c src/server/segment_store.c src/server/segment_rebuild.c \
               src/server/packer.c src/server/member_store.c src/server/discovery.c \
               src/server/recovery.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
@@ -467,7 +467,7 @@ docs-check:
 	python3 scripts/gen_ledger.py
 	python3 scripts/check_guide_counts.py
 	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c src/client/put_window.c
-	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c
+	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c src/server/group_view.c src/server/group_view.h
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
 	python3 scripts/check_failure_routes.py
@@ -897,6 +897,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_open_interface
 	./tests/test_find_res_interface
 	./tests/test_put_window_interface
+	./tests/test_group_view
+	python3 scripts/check_group_view_privacy.py
 	python3 tests/test_tests_for.py
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
@@ -1022,6 +1024,11 @@ tests/test_find_res_interface: tests/test_find_res_interface.c src/client/efs_fu
 # symbol the module takes from elsewhere (the RPC deadline), so no $(LIB).
 tests/test_put_window_interface: tests/test_put_window_interface.c src/client/put_window.c src/client/put_window.h src/client/client_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -o $@ $< src/client/put_window.c $(LDFLAGS)
+
+# Task V3: the real group view through group_view.h; the test defines the Raft core getters
+# it takes, so no $(LIB).
+tests/test_group_view: tests/test_group_view.c src/server/group_view.c src/server/group_view.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/server -o $@ $< src/server/group_view.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)
@@ -1174,6 +1181,7 @@ tests/test_data_commit tests/test_data_commit_index: %: %.c tests/test_data_comm
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 src/server/raft_host.o: src/server/read_index_pair_remote.h
+src/server/raft_host.o src/server/group_view.o: src/server/group_view.h
 src/server/raft_host.o: src/server/write_prof.h src/server/apply_ring.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.
