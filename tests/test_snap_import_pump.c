@@ -277,6 +277,8 @@ static void test_queued_import_dropped(uint64_t applied, int role, int expect_dr
     }
     stub_applied = 0;
     stub_role = EFS_RAFT_FOLLOWER;
+    if (g->import_im)
+        snap_import_free_diff(g);
     fixture_free(&f);
 }
 
