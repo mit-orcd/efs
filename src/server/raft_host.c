@@ -3934,13 +3934,6 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         g->import_stall = *rc == EFS_ERR_BUSY;
         if (step_us > g->import_step_max_us)
             g->import_step_max_us = step_us;
-        if (g->import_state != SNAP_IMP_APPLY) {
-            snap_import_free_diff(g);
-            __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
-            pthread_mutex_unlock(&h->snap_mu);
-            *rc = EFS_ERR_BUSY;
-            return 1;
-        }
         if (*rc == EFS_ERR_BUSY) { /* batch refused for now: same batch again */
             g->import_state = SNAP_IMP_DONE;
             pthread_mutex_unlock(&h->snap_mu);
@@ -4031,8 +4024,9 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     if (offset == 0 && snap_import_active(h, g))
         /* An image is being imported: a chunk of any snapshot at offset 0
          * would throw that work away. Refuse it (the leader retries) until
-         * the import is installed; no byte of the newer image is kept. */
-        return EFS_ERR_BUSY;
+         * the import is installed; no byte of the newer image is kept. The
+         * core must tell this from BUSY, which queued a closing chunk. */
+        return EFS_ERR_AGAIN;
     if (offset == 0) {
         snap_import_cancel(h, g);
         if (g->part_fd >= 0) {
@@ -4110,6 +4104,16 @@ static void host_snap_import_pump(struct efs_raft_host *h)
         pthread_mutex_unlock(&h->snap_mu);
         if (st != SNAP_IMP_DONE || !snap_import_poll(h, g, incl, term, &rc))
             continue;
+        if (rc != EFS_OK && rc != EFS_ERR_BUSY) {
+            /* Hard error: the importer is dropped and the state is IDLE, so
+             * the next chunk at offset 0 starts afresh. The KV may hold part
+             * of the image: ask the leader for a new one. */
+            efs_telemetry_log(0, "raft-snap: import failed group=%u "
+                    "incl=%llu rc=%d\n", g->group, (unsigned long long)incl,
+                    rc);
+            (void)efs_raft_request_resync(g->r);
+            continue;
+        }
         if (rc != EFS_OK) {
             /* More to do and the KV accepted the batch: the next step runs
              * on the next cycle without the timer wait. A refused batch

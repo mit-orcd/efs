@@ -1396,7 +1396,7 @@ tests/test_kv_seg_stdio: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=setvbu
 tests/test_kv_snap_import: override LDFLAGS += -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=free
 # Compiles the real raft_host.c in this TU, like tests/decoders/apply; --wrap lets the
 # test cancel an import from inside its open and see that the pass takes h->mu before its export.
-tests/test_snap_import_pump: override LDFLAGS += -Wl,--wrap=efs_kv_import_step -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=efs_raft_snap_imported
+tests/test_snap_import_pump: override LDFLAGS += -Wl,--wrap=efs_kv_import_step -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock -Wl,--wrap=efs_raft_snap_imported -Wl,--wrap=efs_raft_request_resync
 tests/test_snap_import_pump: tests/test_snap_import_pump.c tests/test_snap_import_host.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_snap_import_pump.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)
 tests/test_snap_import_host: override LDFLAGS += -Wl,--wrap=efs_kv_import_open -Wl,--wrap=efs_kv_lsm_flush -Wl,--wrap=pthread_mutex_lock

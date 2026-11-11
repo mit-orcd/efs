@@ -2167,6 +2167,8 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
     m->vote_granted = 1;
     m->match_index = incl;
     m->prev_index = r->rx_off;
+    if (m->to < 0) /* efs_raft_snap_imported with no known leader: nobody to ack */
+        return EFS_OK;
     return send_msg(r, m);
 }
 
@@ -2176,6 +2178,7 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     uint64_t last_i = 0, last_t = 0, incl, incl_t, offset;
     const uint8_t *pay = NULL, *user = NULL;
     uint32_t plen = 0, ulen = 0;
+    uint32_t new_old = 0, new_new = 0;
     int done, rc;
 
     if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
@@ -2228,11 +2231,8 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
         if (!efs_raft_voters_valid(efs_load_be32(pay)) ||
             (efs_load_be32(pay + 4) && !efs_raft_voters_valid(efs_load_be32(pay + 4))))
             return snap_reject(r, &m, last_i);
-        r->rx_incl = incl;
-        r->rx_term = incl_t;
-        r->rx_off = 0;
-        r->rx_old = efs_load_be32(pay);
-        r->rx_new = efs_load_be32(pay + 4);
+        new_old = efs_load_be32(pay);
+        new_new = efs_load_be32(pay + 4);
         user = pay + 8;
         ulen = plen - 8;
     } else {
@@ -2249,11 +2249,28 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
             return snap_reject(r, &m, last_i);
     }
     rc = r->snap_chunk(r->app, incl, incl_t, offset, user, ulen, done);
+    if (rc == EFS_ERR_AGAIN) {
+        /* The host refused chunk 0 of this image: another image is still
+         * importing and nothing of this one was kept. rx_* and imp_* stay
+         * with the image that is running; the leader retries. */
+        m.success = 1;
+        m.vote_granted = 0;
+        m.prev_index = offset;
+        return send_msg(r, &m);
+    }
+    if (offset == 0) {
+        /* The host did not refuse chunk 0: this is the image now. */
+        r->rx_incl = incl;
+        r->rx_term = incl_t;
+        r->rx_off = 0;
+        r->rx_old = new_old;
+        r->rx_new = new_new;
+    }
     if (rc == EFS_ERR_BUSY) {
         /* Chunk is on disk; the KV diff is still running off this thread.
          * Ack this same offset so the leader retries it. snap_reject would
          * clear rx_off and the next chunk would restart from byte 0. */
-        if (done && incl == r->rx_incl && incl_t == r->rx_term) {
+        if (done) {
             r->imp_incl = incl;
             r->imp_term = incl_t;
             r->imp_old = r->rx_old;
@@ -2291,12 +2308,12 @@ int efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t term)
 {
     struct efs_raft_msg m;
 
-    if (!r || incl == 0 || incl != r->imp_incl || term != r->imp_term ||
-        incl <= r->last_applied || incl < r->snap_idx)
+    if (!r || r->role == EFS_RAFT_LEADER || incl == 0 || incl != r->imp_incl ||
+        term != r->imp_term || incl <= r->last_applied || incl < r->snap_idx)
         return EFS_ERR_INVAL;
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_SNAP_REP;
-    m.to = r->leader >= 0 ? r->leader : 0;
+    m.to = r->leader;
     r->imp_incl = 0;
     return snap_installed(r, &m, incl, term, r->imp_old, r->imp_new, 1);
 }

@@ -2445,6 +2445,114 @@ static void test_snapshot_imported_without_retry(void)
     free_n(&n,st,3);
 }
 
+/* K113 round 2: the host answers the refusal code to chunk 0 of a newer image
+ * while another one is still importing. The core must keep the image whose
+ * closing chunk it queued. */
+#ifndef K113_REFUSE
+#define K113_REFUSE EFS_ERR_AGAIN
+#endif
+struct k113_app { uint64_t busy_for; uint64_t refuse_for; };
+
+static int k113_chunk(void *app_, uint64_t incl, uint64_t incl_term,
+                      uint64_t offset, const uint8_t *data, uint32_t len,
+                      int done)
+{
+    struct k113_app *a = app_;
+
+    (void)incl_term; (void)data; (void)len;
+    if (offset == 0 && incl == a->refuse_for)
+        return K113_REFUSE;
+    if (done && incl == a->busy_for)
+        return EFS_ERR_BUSY;
+    return EFS_OK;
+}
+
+static int k113_send(struct efs_raft *r, uint64_t incl, uint64_t off, int done,
+                     uint32_t voters, uint8_t *buf)
+{
+    struct efs_raft_msg m = {0};
+
+    memset(buf, 0, 16);
+    if (off == 0) wr32_t(buf, voters);
+    m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 1;
+    m.last_log_index = incl; m.last_log_term = 1; m.leader_commit = incl;
+    m.prev_index = off; m.success = done; m.nentries = 1;
+    m.entries[0].cmd = buf; m.entries[0].clen = off == 0 ? 11 : 3;
+    return efs_raft_recv(r, &m);
+}
+
+static void k113_fixture(struct efs_raft_cfg *cfg, struct efs_raft_store **st,
+                         struct k113_app *app, uint32_t n)
+{
+    memset(cfg, 0, sizeof(*cfg));
+    *st = efs_raft_mem_create();
+    cfg->n = n; cfg->id = 1; cfg->voters = n == 1 ? 1 : 7;
+    cfg->store = *st; cfg->store_ctx = *st; cfg->send = discard_send;
+    cfg->apply = apply_cmd; cfg->app = app; cfg->snap_chunk = k113_chunk;
+    cfg->election_ticks = 10; cfg->heartbeat_ticks = 2;
+}
+
+static void test_snapshot_refused_image_keeps_import(void)
+{
+    struct efs_raft_cfg cfg; struct efs_raft_store *st;
+    struct k113_app app = { .busy_for = 5, .refuse_for = 9 };
+    struct efs_raft *r;
+    uint8_t buf[16];
+
+    k113_fixture(&cfg, &st, &app, 3);
+    r = test_raft_new(&cfg);
+    CHECK(r != NULL, "k113 fixture");
+    if (!r) { efs_raft_mem_free(st); return; }
+    CHECK(k113_send(r, 5, 0, 0, 7, buf) == EFS_OK, "X chunk 0");
+    CHECK(k113_send(r, 5, 3, 0, 7, buf) == EFS_OK, "X chunk 1");
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK, "X closing chunk queued (BUSY)");
+    CHECK(k113_send(r, 9, 0, 1, 7, buf) == EFS_OK, "Y one-chunk image refused");
+    CHECK(efs_raft_snap_index(r) == 0, "nothing installed yet");
+    CHECK(efs_raft_snap_imported(r, 9, 1) == EFS_ERR_INVAL, "Y was not queued");
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_OK, "X installs after Y was refused");
+    CHECK(efs_raft_snap_index(r) == 5 && efs_raft_applied(r) == 5,
+          "snapshot and applied index are X's");
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_ERR_INVAL, "installed once");
+    efs_raft_free(r); efs_raft_mem_free(st);
+
+    /* b: a refusal does not break the retry of X's closing chunk */
+    app.busy_for = 5; app.refuse_for = 9;
+    k113_fixture(&cfg, &st, &app, 3);
+    r = test_raft_new(&cfg);
+    if (!r) { efs_raft_mem_free(st); return; }
+    (void)k113_send(r, 5, 0, 0, 7, buf);
+    (void)k113_send(r, 5, 3, 0, 7, buf);
+    (void)k113_send(r, 5, 6, 1, 7, buf);
+    (void)k113_send(r, 9, 0, 1, 7, buf);
+    app.busy_for = 0;
+    CHECK(k113_send(r, 5, 6, 1, 7, buf) == EFS_OK && efs_raft_snap_index(r) == 5,
+          "retry of X's closing chunk after the refusal installs X");
+    efs_raft_free(r); efs_raft_mem_free(st);
+}
+
+static void test_snap_imported_guards(void)
+{
+    struct efs_raft_cfg cfg; struct efs_raft_store *st;
+    struct k113_app app = { .busy_for = 5 };
+    struct efs_raft *r;
+    uint8_t buf[16];
+
+    /* single voter: it leads again after the snapshot chunks, and
+     * a leader never installs a host import */
+    k113_fixture(&cfg, &st, &app, 1);
+    r = test_raft_new(&cfg);
+    CHECK(r != NULL, "k113 leader fixture");
+    if (!r) { efs_raft_mem_free(st); return; }
+    CHECK(k113_send(r, 5, 0, 0, 1, buf) == EFS_OK, "chunk 0");
+    CHECK(k113_send(r, 5, 3, 0, 1, buf) == EFS_OK, "chunk 1");
+    CHECK(k113_send(r, 5, 6, 1, 1, buf) == EFS_OK, "closing chunk queued");
+    for (int i = 0; i < 40 && efs_raft_role(r) != EFS_RAFT_LEADER; i++)
+        (void)efs_raft_tick(r);
+    CHECK(efs_raft_role(r) == EFS_RAFT_LEADER, "member leads");
+    CHECK(efs_raft_snap_imported(r, 5, 1) == EFS_ERR_INVAL, "a leader refuses the import");
+    efs_raft_free(r); efs_raft_mem_free(st);
+}
+
 /* Compacting without a snap_get blob must not skip a learner ahead.
  * wait_voters stays BUSY — match never reaches commit. */
 static void test_install_snapshot_needs_blob(void)
@@ -3934,6 +4042,8 @@ int main(int argc, char **argv)
         RUN(test_ae_catchup_flow_control);
         RUN(test_snapshot_busy_survives_delayed_append);
         RUN(test_snapshot_imported_without_retry);
+        RUN(test_snapshot_refused_image_keeps_import);
+        RUN(test_snap_imported_guards);
         RUN(test_install_snapshot);
         RUN(test_install_snapshot_needs_blob);
         RUN(test_install_snapshot_restarted_leader);

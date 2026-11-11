@@ -382,7 +382,8 @@ int efs_raft_resync_pending(const struct efs_raft *r);
 /* The host finished importing the image (incl, term) whose closing chunk it
  * answered BUSY, without a further retry of that chunk by the leader:
  * install it (snapshot index, applied index, membership). EFS_ERR_INVAL when
- * it is not the image the core last saw closed or applied has passed it. */
+ * it is not the image the core last saw closed, applied has passed it, or
+ * this member leads. With no known leader it installs and sends no ack. */
 int efs_raft_snap_imported(struct efs_raft *r, uint64_t incl, uint64_t term);
 
 /* A resyncing peer pulled its match to 0: the pump must export an image
