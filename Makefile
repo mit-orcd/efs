@@ -788,6 +788,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_publication_session
 	./tests/test_publication_ack
 	./tests/test_publication_recovery
+	./tests/test_meta_apply test_k114_truncate_identity
+	./tests/test_append_transaction k114
 	./tests/test_append_receipt
 	./tests/test_append_cleanup
 	./tests/test_append_interleave
@@ -1300,6 +1302,10 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
 	python3 tests/test_k42_peer_stop_open.py
+	python3 tests/test_k114_false_cut.py truncate
+	python3 tests/test_k114_false_cut.py append
+	python3 tests/test_k114_false_cut.py create
+	python3 tests/test_k114_false_cut.py report
 	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py

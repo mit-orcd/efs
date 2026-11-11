@@ -6965,6 +6965,101 @@ static void test_truncate_lazy(void)
     efs_kv_mem_free(kv);
 }
 
+/* K114 fix 1: a SETATTR truncate sent twice under one identity has one effect,
+ * in every order a false cut can produce. The host builds each copy's
+ * preconditions from the row it reads when it proposes, so a copy is modelled
+ * with the preconditions of its own moment. */
+static int k114_trunc(struct efs_kv *kv, efs_ino_t ino, uint8_t who, uint8_t kind,
+                      uint64_t size, uint64_t seq, uint64_t ack,
+                      const struct efs_meta_row *seen, uint64_t *e)
+{
+    struct efs_meta_truncate_lazy t;
+    memset(&t, 0, sizeof(t));
+    t.ino = ino;
+    t.inode_gen = seen->generation;
+    t.expect_epoch = seen->content_epoch;
+    t.expect_base_size = seen->base_size;
+    t.size = size;
+    t.mtime_ns = T0 + 100 + seq;
+    t.kind = kind;
+    t.q.id.client_uuid[15] = who;
+    t.q.id.session_epoch = 1;
+    t.q.id.seq = seq;
+    t.q.ack = ack;
+    return efs_meta_apply_truncate_lazy(kv, &t, e);
+}
+
+static void test_k114_truncate_identity(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_row r0, r1, r2, r3, now;
+    struct efs_meta_stat st;
+    struct efs_fence_history h;
+    efs_ino_t ino = 0;
+    uint64_t e = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "k114", &ino) == EFS_OK, "create");
+    for (uint32_t ci = 0; ci < 4; ci++)
+        pub(kv, ino, ci * 64, (ci * 64 + 1) * cs, 0xE0 + ci, 0, T0 + 1, "fill");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r0) == EFS_OK, "row");
+
+    /* (i) the second copy after the first was applied: the first answer, one
+     * effect. The client maps EFS_OK to success (efs_client_rpc_setattr). */
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0,
+                     &r0, &e) == EFS_OK && e == 1, "first copy shrinks, epoch 1");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r1, &h) == EFS_OK &&
+              r1.content_epoch == 1 && h.count == 1 && h.revision == 1, "one epoch");
+    e = 0;
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0,
+                     &r1, &e) == EFS_OK && e == 1, "second copy gets the first answer");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &now, &h) == EFS_OK &&
+              now.content_epoch == 1 && now.base_size == r1.base_size &&
+              h.count == 1 && h.revision == 1, "and changes nothing");
+
+    /* (ii) another client truncates between the two copies: the repeat does
+     * not undo it and does not run again. */
+    CHECK(k114_trunc(kv, ino, 10, EFS_META_TRUNCATE_SHRINK, 10 * cs, 1, 0, &r1, &e) ==
+              EFS_OK && e == 2, "other client shrinks, epoch 2");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r2, &h) == EFS_OK &&
+              r2.content_epoch == 2, "epoch 2");
+    e = 0;
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0,
+                     &r2, &e) == EFS_OK && e == 1,
+          "repeat after the other change still answers its own first result");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &now, &h) == EFS_OK &&
+              now.content_epoch == 2 && now.base_size == r2.base_size &&
+              efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 10 * cs, "other client's size and epoch stand");
+
+    /* (iii) false cut: the repeat is applied first, the client goes on, the
+     * original copy (built from an older row) arrives last. */
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 5 * cs, 2, 1, &r2, &e) ==
+              EFS_OK && e == 3, "repeat of seq 2 applied first, epoch 3");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r3, &h) == EFS_OK &&
+              r3.content_epoch == 3, "epoch 3");
+    e = 0;
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 5 * cs, 2, 1, &r2, &e) ==
+              EFS_OK && e == 3, "late original, client not yet acknowledged: same answer");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &now, &h) == EFS_OK &&
+              now.content_epoch == 3, "still epoch 3");
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 2 * cs, 3, 2, &r3, &e) ==
+              EFS_OK && e == 4, "client goes on: seq 3 acknowledges seq 2, epoch 4");
+    CHECK(k114_trunc(kv, ino, 9, EFS_META_TRUNCATE_SHRINK, 5 * cs, 2, 1, &r2, &e) ==
+              EFS_ERR_STALE, "late original after the acknowledgement is refused");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &now, &h) == EFS_OK &&
+              now.content_epoch == 4 &&
+              efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 2 * cs, "no second effect");
+    efs_kv_mem_free(kv);
+}
+
 /* D25 step 4: the truncate sweep, SWEEP_DONE and RETIRE. */
 static int sweep_lane(struct efs_kv *kv, efs_ino_t ino, uint8_t lane)
 {
@@ -7369,6 +7464,7 @@ int main(int argc, char **argv)
     run_init(argc, argv);
     RUN(test_trunc_sweep);
     RUN(test_truncate_lazy);
+    RUN(test_k114_truncate_identity);
     RUN(test_lane_adoption);
     RUN(test_reaped_sweep_no_gc);
     RUN(test_reap_cleanup_deferred);

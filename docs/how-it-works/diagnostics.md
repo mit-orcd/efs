@@ -5,7 +5,7 @@ Generated page: any source change that adds, renames or moves a diagnostic key m
 
 Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`. Recurring failures have a route that says what the line proves: [failure routes](failure-routes.md).
 
-Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
+Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 374 `fprintf(stderr` calls carry no key and are not listed.
 
 ## Error codes
 

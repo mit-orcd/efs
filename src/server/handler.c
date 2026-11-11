@@ -25,6 +25,7 @@
 #include <poll.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 #include <time.h>
 #include "efs/telemetry.h"
 
@@ -265,6 +266,40 @@ void server_handle_conn(struct efs_conn *conn)
             free(to_free);
             continue;
         }
+#if EFS_FAULTS
+        int fault_held = 0;
+        /* K114 fix 1 (test only): EFS_FAULT_HOLD_REQUEST_FILE holds "<message type> <offset> <byte> <fifo
+         * path>" (offset -1: any body). The first request of that type whose body has <byte> at <offset>
+         * is held before it is dispatched until the test opens the fifo for writing (a blocking open and
+         * read: no timer), so the test can stop this member while the request is in flight and let the
+         * first copy run late. Fires once. */
+        {
+            const char *gate = getenv("EFS_FAULT_HOLD_REQUEST_FILE");
+            FILE *gf = gate ? fopen(gate, "r") : NULL;
+            unsigned ht = 0, hb = 0;
+            int ho = -1;
+            char fifo[512];
+            if (gf) {
+                int ok = fscanf(gf, "%u %d %u %511s", &ht, &ho, &hb, fifo) == 4;
+                fclose(gf);
+                if (ok && ht == type &&
+                    (ho < 0 || ((uint32_t)ho < payload_len && ((const uint8_t *)payload)[ho] == hb)) &&
+                    unlink(gate) == 0) {
+                    char b;
+                    int fd;
+                    /* sync: test-only fault or debug hook */
+                    fprintf(stderr, "handler: EFS_FAULT_HOLD_REQUEST_FILE holds type=%u\n", type);
+                    while ((fd = open(fifo, O_RDONLY)) < 0 && errno == EINTR) {}
+                    fault_held = 1;
+                    if (fd >= 0) {
+                        while (read(fd, &b, 1) < 0 && errno == EINTR) {}
+                        close(fd);
+                    }
+                    fprintf(stderr, "handler: EFS_FAULT_HOLD_REQUEST_FILE released type=%u\n", type);
+                }
+            }
+        }
+#endif
         switch (type) {
         case EFS_MSG_HEARTBEAT: {
             efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
@@ -1527,6 +1562,11 @@ void server_handle_conn(struct efs_conn *conn)
         }
         }
 
+#if EFS_FAULTS
+        if (fault_held)
+            /* sync: test-only fault or debug hook */
+            fprintf(stderr, "handler: EFS_FAULT_HOLD_REQUEST_FILE dispatched type=%u\n", type);
+#endif
         if (rdma_frame)
             efs_rdma_message_release(conn->rc);
         free(to_free);

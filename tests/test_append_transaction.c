@@ -1060,5 +1060,55 @@ static void lagging_lanes(void)
  assert(efs_meta_get_lane_epoch(kv,ino,gen,1,&lane_epoch)==EFS_OK && lane_epoch==1);
  free(a);efs_kv_mem_free(kv);
 }
-int main(void)
-{atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();lagging_lanes();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+/* K114 fix 1: an APPEND (reserve or abandon) sent twice under one identity has
+ * one effect, in every order a false cut can produce. The client maps the
+ * repeat's EFS_OK to the first start offset (efs_client_rpc_append_reserve). */
+static void k114_append_identity(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,off=999,wm;uint32_t open;
+ fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *a=malloc(sizeof(*a)),*b=malloc(sizeof(*b));assert(a&&b);
+ struct efs_opid_req q=identity(1,0),other=identity(1,0);other.id.client_uuid[0]=43;
+ struct efs_txid t={{231}};
+ /* (iii) two copies of one reservation planned from the same state; the repeat
+  * is applied first, the original plan is stale and does nothing. */
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && a->offset==200 && a->count);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_OK && b->offset==200 && b->count);
+ assert(efs_meta_execute_append(b,&t,&ops,kv)==EFS_OK);
+ t.bytes[1]=1;assert(efs_meta_execute_append(a,&t,&ops,kv)!=EFS_OK);
+ assert(efs_meta_apply_append_state(kv,ino,&wm,NULL,&open)==EFS_OK && wm==208 && open==1);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && !a->count && a->offset==200);
+ /* (i) the second copy after the first was applied: same offset, no effect. */
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_OK && off==200);
+ /* (ii) the first reservation completes, another client appends between the
+  * copies; the repeat still answers 200 and adds no extent. */
+ t.bytes[1]=7;assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_capture_append(kv,ino,8,&other,decision,kv,b)==EFS_OK && b->offset==208);
+ t.bytes[1]=2;assert(efs_meta_execute_append(b,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && !a->count && a->offset==200);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_OK && off==200);
+ assert(efs_meta_apply_append_state(kv,ino,&wm,NULL,&open)==EFS_OK && wm==216 && open==1);
+ /* The same identity with another length is refused, never a second extent. */
+ assert(efs_meta_capture_append(kv,ino,9,&q,decision,kv,a)==EFS_ERR_INVAL);
+ /* (iii) the client goes on and acknowledges seq 1: the late original is STALE. */
+ t.bytes[1]=8;assert(efs_meta_finish_append(kv,ino,208,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+ q=identity(2,1);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_OK && b->offset==216);
+ t.bytes[1]=3;assert(efs_meta_execute_append(b,&t,&ops,kv)==EFS_OK);
+ struct efs_opid_req late=identity(1,0);
+ assert(efs_meta_capture_append(kv,ino,8,&late,decision,kv,a)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_state(kv,ino,&wm,NULL,&open)==EFS_OK && wm==224 && open==1);
+ /* Abandon: first copy retires, the repeat answers OK without retiring again,
+  * a late reserve copy is STALE. */
+ q=identity(3,2);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_OK && b->offset==224);
+ t.bytes[1]=4;assert(efs_meta_execute_append(b,&t,&ops,kv)==EFS_OK);
+ unsigned retired=9;
+ t.bytes[1]=5;assert(efs_meta_abandon_append(kv,ino,8,&q,&t,&ops,kv,&retired)==EFS_OK && retired==1);
+ retired=9;t.bytes[1]=6;
+ assert(efs_meta_abandon_append(kv,ino,8,&q,&t,&ops,kv,&retired)==EFS_OK && !retired);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_ERR_STALE);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_STALE);
+ assert(efs_meta_apply_check(kv)==EFS_OK);
+ free(a);free(b);efs_kv_mem_free(kv);
+}
+int main(int argc,char **argv)
+{if(argc==2&&!strcmp(argv[1],"k114")){k114_append_identity();puts("append transaction: K114 identity sent twice, three orders PASS");return 0;}k114_append_identity();atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();lagging_lanes();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
