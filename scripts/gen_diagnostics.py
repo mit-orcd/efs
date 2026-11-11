@@ -122,7 +122,9 @@ def render():
            'Scanned: every `.c` and `.h` under `src/` and `include/`; the calls '
            '`fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` '
            'functions take no literal key or are not diagnostics). A key is the leading '
-           '`word-word` token of the literal, followed by a space or `:`.',
+           '`word-word` token of the literal, followed by a space or `:`. '
+           'Recurring failures have a route that says what the line proves: '
+           '[failure routes](failure-routes.md).',
            '',
            'Found: %d diagnostic keys in %d (key, function) rows, %d error codes; '
            '%d `fprintf(stderr` calls carry no key and are not listed.' % (nkeys, len(keys), len(errs), nokey),

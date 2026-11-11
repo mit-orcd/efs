@@ -108,23 +108,23 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
 #define EFS_INO_PATH_SEGS    5
 
 #define EFS_OK               0
-#define EFS_ERR_IO          -1
-#define EFS_ERR_NOMEM       -2
-#define EFS_ERR_NOT_FOUND   -3
-#define EFS_ERR_EXIST       -4
-#define EFS_ERR_INVAL       -5
-#define EFS_ERR_NET         -6
-#define EFS_ERR_PROTO       -7
-#define EFS_ERR_NO_QUORUM   -8
-#define EFS_ERR_DECODE      -9
-#define EFS_ERR_CHECKSUM   -10
-#define EFS_ERR_QUOTA      -11
-#define EFS_ERR_NOT_EMPTY  -12
-#define EFS_ERR_BUSY       -13
-#define EFS_ERR_STALE      -14
+#define EFS_ERR_IO          -1 /* local file or storage I/O failed, or stored data unreadable */
+#define EFS_ERR_NOMEM       -2 /* allocation or table growth failed; whether a retry helps is not determined */
+#define EFS_ERR_NOT_FOUND   -3 /* the looked-up key, inode or entry is absent (or only a tombstone) */
+#define EFS_ERR_EXIST       -4 /* target already exists (name taken or identity already abandoned) */
+#define EFS_ERR_INVAL       -5 /* argument or request rejected as invalid; the operation did not proceed */
+#define EFS_ERR_NET         -6 /* no connection, or send/receive to a peer failed; peer state unknown */
+#define EFS_ERR_PROTO       -7 /* received or supplied bytes violate the expected format or protocol rules */
+#define EFS_ERR_NO_QUORUM   -8 /* peers reachable but no majority answered; callers wait or retry as for BUSY */
+#define EFS_ERR_DECODE      -9 /* encoded bytes or an erasure-decoded segment could not be decoded */
+#define EFS_ERR_CHECKSUM   -10 /* computed hash differs from the recorded one: content mismatch */
+#define EFS_ERR_QUOTA      -11 /* a configured quota or aggregate size limit would be exceeded */
+#define EFS_ERR_NOT_EMPTY  -12 /* directory still has children; removal or replace refused */
+#define EFS_ERR_BUSY       -13 /* not determined: byte or size limit reached vs queue/resource still in use */
+#define EFS_ERR_STALE      -14 /* request's expected state, epoch or revision no longer matches current state */
 /* Phase 2b: a metadata mutation was sent to a non-primary node; the client
  * should re-resolve the primary and retry. */
-#define EFS_ERR_NOT_PRIMARY -15
+#define EFS_ERR_NOT_PRIMARY -15 /* this node does not lead the group; the caller must re-resolve the leader */
 #define EFS_ERR_ACCES       -16 /* EACCES (search/execute denied) */
 #define EFS_ERR_NAMETOOLONG -17 /* ENAMETOOLONG (component > 255) */
 #define EFS_ERR_AGAIN      -18 /* retry: TCP side-channel has a frame */
@@ -136,23 +136,23 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
 /* A log entry this build cannot apply: unknown tag or sub-tag, malformed or
  * truncated encoding. Fatal for its Raft group; never a business verdict and
  * never normalized to success (W127-W129). */
-#define EFS_ERR_UNSUPPORTED -24
+#define EFS_ERR_UNSUPPORTED -24 /* log entry or command this build cannot apply (unknown tag or bad length) */
 /* I25 fragment record refusals (fragment format 2, efs/frag_record.h):
  * an unknown/older on-disk record format, and a well-formed record naming a
  * different immutable object than the reader asked for. Never served, never
  * reconstruction input; distinct from payload corruption (EFS_ERR_CHECKSUM). */
-#define EFS_ERR_FRAG_FORMAT   -25
-#define EFS_ERR_FRAG_IDENTITY -26
+#define EFS_ERR_FRAG_FORMAT   -25 /* fragment record format unknown or older; the record is not served */
+#define EFS_ERR_FRAG_IDENTITY -26 /* fragment record names a different object than requested; not served */
 /* Session refusals (I23, K5). FENCED: the request epoch is below the shard's
  * durable rejection floor or below the epoch established there; the mount
  * must stop mutating and never resend under that epoch. UNREGISTERED: the
  * shard has no established row for this (uuid, epoch); the client admits
  * the shard (REGISTER + ESTABLISH) and resends the same identity. */
-#define EFS_ERR_FENCED      -27
-#define EFS_ERR_UNREGISTERED -28
+#define EFS_ERR_FENCED      -27 /* not determined: epoch below the session floor vs data-commit reply not OK */
+#define EFS_ERR_UNREGISTERED -28 /* request has no valid or established session identity (uuid, epoch) */
 /* W153: the cluster has not committed its formation membership yet
  * (efs-mgmt raft-mkfs); no client metadata is served before it. */
-#define EFS_ERR_UNFORMED    -29
+#define EFS_ERR_UNFORMED    -29 /* cluster formation membership not committed yet; no client metadata served */
 
 typedef uint64_t efs_ino_t;
 
