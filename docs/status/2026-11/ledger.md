@@ -4,6 +4,8 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K106 (a): a request in flight to a member that halts (Task FR)](ledger/20261110-043-k106a-inflight-wait.md): **PASS for the covered paths on a branch, K106 (a) not closed for the uncovered ones**
+- [K112 retire below the frontier (Task FS)](ledger/20261110-042-k112-retire-below-frontier.md): **change committed on a task branch (unmerged); unit tests fail on devel and pass, 120 of 120 clean stops pass, WAIT_OPEN replies 0 (devel 86 to 103 in slow loops), maximum revoke 3.5 to 4.7 s against 6.4 to 7.4 s on devel, not back to the 0.3 s of a conflict-free loop; K112 not shown closed**
 - [K113: a member that rejoins by snapshot finishes under sustained load (Task FT)](ledger/20261110-041-k113-snapshot-rejoin-under-load.md): **PASS; fix proposed, K113 left OPEN for the coordinator's ruling**
 - [K109: a clean unmount past a stalled storage member (Task FO)](ledger/20261110-040-k109-stalled-member-unmount.md): **PASS on xorinox (three private members, loopback); the K109 row and the multi-host check are not yet ruled**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**

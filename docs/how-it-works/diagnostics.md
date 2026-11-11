@@ -5,7 +5,7 @@ Generated page: any source change that adds, renames or moves a diagnostic key m
 
 Look a log key or `rc` up here, then `graphify explain <Component>`. Scanned: every `.c` and `.h` under `src/` and `include/`; the calls `fprintf(stderr, "...")` and `efs_telemetry_log(level, "...")` (the other `*log*` functions take no literal key or are not diagnostics). A key is the leading `word-word` token of the literal, followed by a space or `:`.
 
-Found: 102 diagnostic keys in 263 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
+Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 371 `fprintf(stderr` calls carry no key and are not listed.
 
 ## Error codes
 
@@ -99,6 +99,7 @@ Found: 102 diagnostic keys in 263 (key, function) rows, 29 error codes; 371 `fpr
 | `lookup-reply` | `src/client/efs_fuse/lookup.c` | `lookup_reply_barrier` | `client/efs_fuse.lookup` |
 | `mtime-pin` | `src/client/write.c` | `efs_client_mtime_pin` | `client/write` |
 | `namespace-prof` | `src/server/raft_host.c` | `server_raft_host_mkdir` | `server/raft_host` |
+| `node-waiter-cut` | `src/client/node_cache.c` | `efs_client_conn_await_reply` | `client/node_cache` |
 | `opid-admission` | `src/client/inode_rpc.c` | `opid_begin` | `client/inode_rpc` |
 | `opid-append-rpc` | `src/client/inode_rpc.c` | `efs_client_rpc_append_reserve` | `client/inode_rpc` |
 | `opid-begin` | `src/client/inode_rpc.c` | `opid_begin` | `client/inode_rpc` |
