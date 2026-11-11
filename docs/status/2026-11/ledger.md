@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [W123 branch review and second set of ports](ledger/20261110-040-w123-ports.md): **PASS on the port branch, no K row yet for three devel defects, blocks alpha: coordinator to rule**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
 - [Ledger split into one file per entry (Task T2)](ledger/20261110-038-ledger-split.md): **PASS, no K row, blocks alpha: no**
 - [K register split](ledger/20261110-037-k-register-split.md): **PASS except the 170 KB size target, no K row, blocks alpha: no**

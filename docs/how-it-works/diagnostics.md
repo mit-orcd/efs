@@ -266,7 +266,7 @@ Found: 102 diagnostic keys in 259 (key, function) rows, 29 error codes; 371 `fpr
 | `read-fragments` | `src/client/read.c` | `efs_client_decode_placed_chunk_attempts` | `client/read` |
 | `read-prof` | `src/server/raft_host.c` | `read_prof_tick` | `server/raft_host` |
 | `readdir-trace` | `src/common/protocol.c` | `efs_readdir_trace` | `common/protocol` |
-| `rebuild-put` | `src/server/put_upload.c` | `server_rebuild_put` | `server/put_upload` |
+| `rebuild-put` | `src/server/put_upload.c` | `server_rebuild_put_parts` | `server/put_upload` |
 | `reply-buffer` | `src/client/reply_buffers.h` | `reply_buffers_event` | `client/reply_buffers` |
 | `reply-buffer` | `src/client/reply_buffers.h` | `reply_buffers_fault` | `client/reply_buffers` |
 | `report-admission` | `src/client/write.c` | `efs_client_report_admit` | `client/write` |
