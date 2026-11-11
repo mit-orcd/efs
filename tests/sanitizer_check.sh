@@ -106,6 +106,9 @@ cat <<'LEOF'
 telemetry|tests/test_telemetry
 kv_lsm_concurrent|tests/test_kv_lsm_concurrent 4
 kv_lsm|tests/test_kv_lsm
+# W123 ports: MANIFEST order at load; a real fold and flush overlap through SIGKILL and reopen.
+kv_manifest_order|tests/test_kv_manifest_order
+kv_fold_reopen|tests/test_kv_fold_reopen
 kv_reader_gate|tests/test_kv_reader_gate
 raft_store|tests/test_raft_store
 # Task EM: sequence binaries whose stores start KV compactor threads.
@@ -211,6 +214,9 @@ data_commit|tests/test_data_commit
 retained_namespace_audit|tests/test_retained_namespace_audit
 wire|tests/test_wire
 kv_lsm|tests/test_kv_lsm
+# W123 ports: MANIFEST order at load; a real fold and flush overlap through SIGKILL and reopen.
+kv_manifest_order|tests/test_kv_manifest_order
+kv_fold_reopen|tests/test_kv_fold_reopen
 kv_snap_import|tests/test_kv_snap_import
 snap_import_host|tests/test_snap_import_host
 raft|tests/test_raft

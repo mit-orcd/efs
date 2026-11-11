@@ -6,7 +6,6 @@
 #include "../src/kv/kv_lsm_internal.h"
 #include "test_tmpdir.h"
 #include <assert.h>
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +35,7 @@ static int scan(void *arg,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t
 int main(void)
 {
     char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-manifest-order-XXXXXX");
-    assert(mkdtemp(dir));segment(dir,30,0);segment(dir,20,1);
+    assert(efs_test_mkdtemp(dir));segment(dir,30,0);segment(dir,20,1);
     char path[EFS_TEST_PATH+256];snprintf(path,sizeof(path),"%s/MANIFEST",dir);
     FILE *f=fopen(path,"w");assert(f);
     assert(fprintf(f,"KVLSM1 31\n0 20\n0 30\n")>0);assert(!fclose(f));
@@ -52,10 +51,5 @@ int main(void)
         assert(!efs_kv_lsm_compact(kv));
         efs_kv_lsm_close(kv);
     }
-    DIR *d=opendir(dir);assert(d);struct dirent *e;
-    while((e=readdir(d)))if(strcmp(e->d_name,".")&&strcmp(e->d_name,"..")){
-        snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));
-    }
-    closedir(d);assert(!rmdir(dir));
     puts("KV MANIFEST order PASS: cold read, replacement, tombstone and compact/reopen");
 }

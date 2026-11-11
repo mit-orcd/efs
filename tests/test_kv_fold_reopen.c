@@ -7,7 +7,6 @@
 #include "../src/kv/kv_lsm_internal.h"
 #include "test_tmpdir.h"
 #include <assert.h>
-#include <dirent.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -108,8 +107,8 @@ static int scan(void *arg,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t
 int main(void)
 {
     alarm(60);
-    char dir[EFS_TEST_PATH],path[EFS_TEST_PATH+256];
-    efs_test_path(dir,sizeof(dir),"efs-fold-reopen-XXXXXX");assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];
+    efs_test_path(dir,sizeof(dir),"efs-fold-reopen-XXXXXX");assert(efs_test_mkdtemp(dir));
     int p[2];assert(!pipe(p));pid_t pid=fork();assert(pid>=0);
     if(!pid){close(p[0]);child(dir,p[1]);_exit(1);}
     close(p[1]);char ready;assert(read(p[0],&ready,1)==1&&ready=='R');close(p[0]);
@@ -120,10 +119,5 @@ int main(void)
         int rc=efs_kv_lsm_compact(kv);assert(rc==EFS_OK||rc==EFS_ERR_BUSY);
         efs_kv_lsm_close(kv);
     }
-    DIR *d=opendir(dir);assert(d);struct dirent *e;
-    while((e=readdir(d)))if(strcmp(e->d_name,".")&&strcmp(e->d_name,"..")){
-        snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));
-    }
-    closedir(d);assert(!rmdir(dir));
     puts("KV async fold SIGKILL/reopen PASS: real manifest, warm/cold TIP and tombstones");
 }
