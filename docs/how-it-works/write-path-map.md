@@ -62,17 +62,17 @@ Tests: `tests/test_pressure_cohort.py` `tests/test_client_memory.py` `tests/test
 
 ## PUT window
 
-Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole.
+Does: Counts, per inode, the PUTs that have already marked a slot clean but not yet recorded the chunk in a dirty set. During that gap a REPORT snapshot sees nothing dirty. The flusher waits for the inode's windows to close (`put_win_wait`, bounded by the RPC deadline) and readers wait via `efs_dcache_put_win_wait` so a stolen body is never read as a hole. Owned by `src/client/put_window.c` behind [`put_window.h`](../../src/client/put_window.h), which carries the contract; `write.c` calls `put_win_open`, `put_win_close` and `put_win_wait` and never reads the state.
 
-State: `put_win[]`, `put_win_overflow` under `put_win_mu`/`put_win_cv`; `put_win_total` atomic (lock-free fast path for readers).
+State: `put_win[]`, `put_win_overflow` under `put_win_mu`/`put_win_cv` (all private to `put_window.c`); `put_win_total` atomic (lock-free fast path for readers).
 
-Entry points: `efs_dcache_put_win_wait`.
+Entry points: `put_win_open` `put_win_close` `put_win_wait` `efs_dcache_put_win_wait` (header `put_window.h`).
 
-Functions: `put_win_open` `put_win_close` `put_win_busy_locked` `put_win_wait` `efs_dcache_put_win_wait`
+Functions: `put_win_clock_ms` `put_win_open` `put_win_close` `put_win_busy_locked` `put_win_wait` `efs_dcache_put_win_wait`
 
 Logs: none.
 
-Tests: `tests/test_put_window_deadline.py` `tests/test_writer_fence_merge.py` `tests/test_read_failure_admission.py` `tests/test_read_refs_window.py` `tests/test_client_memory.py`
+Tests: `tests/test_put_window_interface.c` `tests/test_put_window_deadline.py` `tests/test_writer_fence_merge.py` `tests/test_read_failure_admission.py` `tests/test_read_refs_window.py` `tests/test_client_memory.py`
 
 ## Dcache publication hand-off
 
@@ -295,5 +295,5 @@ Outer lock first. Only pairs held together in this file are listed; each is show
 5. `g_client.idx_mu` is never taken under `dcache_mu`: `export_chunk_gen_of` is called before the slot lock for that reason.
 6. `g_putid_mu` is released before `dcache_mu` is taken: `efs_client_put_referenced`.
 7. `g_unit_mu` should come before the putid and dcache locks (comment above `struct unit_span`); no function of this file holds it while taking them, so the order is stated, not exercised: not determined beyond the comment.
-8. `put_win_mu`, `g_dgobj_mu`, `g_wb_error_mu`, `g_reclaim.mu` and the `g_put_sh[]` queue mutexes are taken alone: none of their functions takes a second mutex while holding one.
+8. `put_win_mu` (a leaf in `put_window.c`, taken by `put_win_open` and `put_win_close` under `dcache_io_mu` and `dcache_mu`), `g_dgobj_mu`, `g_wb_error_mu`, `g_reclaim.mu` and the `g_put_sh[]` queue mutexes are taken alone: none of their functions takes a second mutex while holding one.
 

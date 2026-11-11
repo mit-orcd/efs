@@ -50,7 +50,7 @@ MODULES = {
         'src/client/efs_fuse/lookup.h',
         'src/client/efs_fuse/ll_run.h',
     ]),
-    'write': ('EFS_WRITE_SOURCE', ['src/client/write.c']),
+    'write': ('EFS_WRITE_SOURCE', ['src/client/write.c', 'src/client/put_window.c']),
     'meta_apply': ('EFS_META_SOURCE', [
         'src/meta/meta_apply/rows.c',
         'src/meta/meta_apply/lookup.c',

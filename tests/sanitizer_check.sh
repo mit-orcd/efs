@@ -123,6 +123,8 @@ wb_interface|tests/test_wb_interface
 open_interface|tests/test_open_interface
 # Task EC: the real .find result cache (per-caller results, slots, byte budget, fetch limit) through find_res.h.
 find_res_interface|tests/test_find_res_interface
+# Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
+put_window_interface|tests/test_put_window_interface
 # Harnesses that build their own TSan binary (W138 rules: run or fail).
 apply_ring|tests/test_apply_ring.py
 session_latch|tests/test_session_latch_tsan.py
@@ -197,6 +199,8 @@ wb_interface|tests/test_wb_interface
 open_interface|tests/test_open_interface
 # Task EC: the real .find result cache (per-caller results, slots, byte budget, fetch limit) through find_res.h.
 find_res_interface|tests/test_find_res_interface
+# Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
+put_window_interface|tests/test_put_window_interface
 frag_record|tests/test_frag_record
 small_segment|tests/test_small_segment
 packed_segment|tests/test_packed_segment

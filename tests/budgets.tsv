@@ -651,3 +651,4 @@ python3 tests/test_rename_budget.py	30	1	fast suite, 30 s ceiling	test	client/op
 ./tests/test_verification_matrix	30	1	fast suite, 30 s ceiling	test	server/storage_roots,server/reclaim,server/segment_store,server/store	AZ: one fixture matrix through every real verification wrapper
 ./tests/test_conn_fd	30	1	fast suite, 30 s ceiling	test	common/network	Pool fd-identity: a conn must not outlive the socket it wrapped
 python3 tests/csrc.py	30	1	fast suite, 30 s ceiling	test	harness	W171 2a: csrc.module() equals the source files it names and the per-module override is honoured
+./tests/test_put_window_interface	5	1	U1: three solo runs on intel1 0.28/0.28/0.28 s, 1.25x rounded up to 5 s as test_find_res_interface	test	client/write	Task U1: the real PUT window through put_window.h: open/close counts, other inodes, immediate return, close wake, own bound, RPC deadline, reader wait, overflow past 512 slots, concurrent churn
