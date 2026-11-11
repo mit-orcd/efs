@@ -67,7 +67,15 @@ Making chmod cut (`mask & (SIZE|MODE)`) fails `gating` (`setattr mask 1 cut=1`);
 
 ## Verification (intel1, gcc 14, tree of the commit)
 
-Written in the commit that follows (the run on the tree of the first commit).
+Run on intel1 from `git archive` of commit `33d594c3f` (raw logs kept outside Git in `~/efs-artifacts/taskFZ-20261111/final/` on intel1):
+
+- `make`, the unit tests (`test_meta_apply`, `test_append_transaction`, full and the K114 cases), the seven scenarios of `tests/test_node_waiter_cut.py` (halted, slow, two, noreply, deadline, race, gating), the four splice tests (`test_create_retry_identity`, `test_metadata_retry_budget`, `test_w155_identified_resolve`, `test_w155_report_resolve`), `scripts/tests_for.py client/inode_rpc --run` and `client/node_cache --run`, `make test` and `tests/test_make_test_recipe.py`: all rc=0.
+- Mutation proofs on the final predicate: with chmod (mask MODE) made cuttable the `gating` scenario fails (rc=1); with XATTR made cuttable it fails (rc=1); with both reverted it passes (rc=0).
+- `tests/test_k114_false_cut.py` three times, all four kinds each: rc=0, operation time 6.06 to 6.13 s in every kind.
+- Solo wall times, three runs per kind (s): truncate 12.2/11.7/11.5, append 11.7/13.9/12.6, create 12.6/13.0/13.9, report 11.8/11.7/12.6. Slowest 13.9 s, times 1.25 is 17.4 s, rounded up to 5 s: budget 20 s for each kind in `tests/budgets.tsv`.
+- `tests/sanitizer_check.sh asan`: VERDICT PASS (76 run, 0 failed).
+- `tests/sanitizer_check.sh tsan`: VERDICT FAIL (52 run, 1 failed): `k37_segment_rebuild`, the known TSan intermittent, not touched by this change and not fixed here. All other lanes, including the new ones, passed.
+- Not run: the full `make test-long` gate.
 
 ## What K114 still leaves open
 
