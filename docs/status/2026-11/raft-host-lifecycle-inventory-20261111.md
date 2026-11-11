@@ -1,6 +1,6 @@
 # Lifecycle inventory of `src/server/raft_host.c` for one substantial extraction (Task V2)
 
-**Merge state (Nov 11):** merged into devel in wave 80. No extraction is chosen yet; the reader trial on the committed question has not been run. The line counts are from devel `68e2778a4`, before the K113 and K109 fixes changed `raft_host.c`.
+**Merge state (Nov 11):** merged into devel in wave 80. Since then: candidate D, the published group view, was extracted in wave 81 ([group view ownership](group-view-ownership-20261111.md)), and the reader trial on the committed question was run before and after that extraction ([reader trials](reader-trials-20261111.md)): the reading was not reduced, because the question also follows the read loop that is still in `raft_host.c`. The next server boundary is therefore candidate A, the read-proof lifecycle. The line counts below are from devel `68e2778a4`, before the K113 and K109 fixes and before the extraction.
 
 *The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
 
