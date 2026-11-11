@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 73.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10): PASS.** Source commit `696dbad58` (devel `862a78945` plus the
 page, script and pointer line). The trial gate on fstor007 ended
 `TOTAL 599 FAIL 0 NOTRUN 3 STATUS COMPLETE (617s) HOSTLIMIT 3 BUILD 13s`.

@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 73; K107 from OPEN to FIXED at the merge. The merge initialised `view_mu` in `tests/test_readindex_publish.py` (it was zero-initialised, which is not a valid mutex on macOS).
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Verdict: PASS on the targeted entry; K107 fix proposed, blocks alpha: no (the coordinator rules at the merge; the K row and the counts line are not edited here).**
 `host_view_get` waits on a leaf mutex after 64 odd-sequence loads instead of spinning. `k96_status_slots_live` under TSan
 failed 3 of 3 on devel `cff8eb424` on amd and passes 5 of 5 on the fixed tree; the full ASan lane passes (59 of 59), the full

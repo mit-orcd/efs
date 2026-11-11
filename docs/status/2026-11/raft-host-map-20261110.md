@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 75; the merge added `host_recover_thread` (new in the same wave) to the map's transaction-recovery concern, and `make docs-check` checks this map from here on.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10, 2026):** source commit devel `bbe93d148` (the `raft_host.c` of that commit: 26,277 lines). Verdict: **PASS**, docs only; no source, test or checker changed. Remaining failures: none. Active run: none. Next action: the sessions that merge the `raft_host.c` fix branches update the map for functions they add (`make docs-check` names them). Merge state: branch `claude/nifty-rubin-4351a8`, unmerged.
 
 ## Purpose

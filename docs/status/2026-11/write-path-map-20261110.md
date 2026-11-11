@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 73; `scripts/check_concern_map.py` is part of `make docs-check` from here on.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10, 2026):** source commit devel `862a78945` (the `write.c` of that commit: 9,812 lines). Verdict: **PASS**, docs and one checker only. Remaining failures: none. Active run: none. Next action: the merging session updates the map for functions added to `write.c` after that commit; `make docs-check` names them. Merge state: branch `claude/modest-cray-29bc32`, unmerged.
 
 ## Purpose

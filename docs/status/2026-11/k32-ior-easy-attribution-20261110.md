@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 73 as Stage 3 input (D50); K32 stays DECIDED.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 Task FI, Nov 10 2026. Input to Stage 3 after decision
 [D50](../decisions.md#d50--k32-moves-to-stage-3-user-nov-10) (K32 moved to Stage 3). **Verdict: PARTIAL.** The gap
 reproduces on a private three-member RDMA cluster, three commit ranges carry

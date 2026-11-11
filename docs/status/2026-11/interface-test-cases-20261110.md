@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 74.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 - **Source commit:** `7e6902d12` on `claude/competent-hermann-01b16e` (on devel `862a78945`).
 - **Verdict:** PASS. Test and documentation change only.
 - **Remaining failures:** none.

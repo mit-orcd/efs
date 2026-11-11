@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 75 after a review round; K106 stays OPEN for part (a) only, parts (b) and (c) are fixed.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10):** on branch `claude/stoic-feynman-fae89a` (devel `cff8eb424`), not merged. K106 stays OPEN in both
 tables of [the checklist](../alpha-1.0-2plus1-checklist.md); the coordinator rules at the merge.
 

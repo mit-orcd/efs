@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 73; the page was regenerated at the merge for the keys the other branches of the wave added, and `gen_diagnostics.py --check` is part of `make docs-check` from here on.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status:** source commit `862a78945` plus this branch's commits; verdict
 **PASS** (macOS host only; Linux hash not run, see limitations); remaining
 failures: none; active run: none; next action: the merging session reruns

@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 76. The merge regenerated the entry files from the ledger as it stood then (124 entries) with `gen_ledger.py --split` and added this task's own entry with `--add-line`; `docs/status/README.md` now points to `ledger/README.md`.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status.** Source commit `06bfdb393` (devel, wave 74). Verdict: PASS, no K row, blocks alpha: no. Remaining failures: none. Active run: none. Next action: coordinator converts open branches with `--split`/`--add-line` and updates the places listed under "Outside my file list". Merge state: branch `claude/focused-nobel-e2ee65`, unmerged.
 
 ## Purpose

@@ -2,6 +2,8 @@
 
 **Merge state (Nov 11):** merged into devel in wave 79 with its second round (Task FW). The merge added one repair from the verification review: the shutdown at the connection's own receive bound marks the connection as cut, so a late reply cannot put it back in the pool. K106 is VERIFY; the waits this change does not cover are row K114.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10):** source commit `66f71aa51` on branch `claude/loving-chebyshev-3e1e81` (devel `67fc3b4a1`), **unmerged, not pushed**.
 Verdict: **PASS for the covered paths, K106 (a) not closed for the uncovered ones**: the first `mkdir` after SIGSTOP of the leader waits 6.06 to 6.11 s (5 runs) instead of 30.09 to 30.52 s (5 runs on devel), the slow-live-peer test shows no cut, the 8-job gate ran no exchange and cut no conn outside the four tests of this task. Remaining failures: none caused by this change. TSan lane: `k37_segment_rebuild` fails (`packer moved 0 of 4`), the test race recorded in Task FL's page (it fails on devel too); gate `NOTRUN` rows are RDMA/host limits. Left waiting by design: the paths in design note 1 and 3. Next action: the coordinator merges and changes row K106 and the counts (this task did
 not touch them); a distinct-host run is owed (see "What is not verified"). Row [K106](../k/K106.md) stays OPEN until then.

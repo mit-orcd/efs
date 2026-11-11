@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 78 after an independent review of all 42 summaries against the newest dated statements of their rows. The merge corrected 39 lines in 24 rows. Five of them stated something the row contradicts: the titles of K17 and K18, the Owed lines of K2 and K15, and the Cause of K33. It gave K106, K109, K112 and K113 defect titles, added a dated line on the held fix to row K109, and extended `docs/status/k/README.md` (when to rewrite the block, "not determined" and "inferred", the title rule). The summaries of K106, K109, K112 and K113 describe devel before wave 77 and are rewritten when that wave merges.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 - Source commit: devel `67fc3b4a1` plus the commits of branch `claude/task-u3-k-summaries-54f183` (Task U3).
 - Verdict: PASS (documentation and one checker; no source code read, no host used).
 - Remaining failures: none.

@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 74. At the merge the K110 and K42 rows got a clause from this page, and the third peer-stop loop (20 of 20 stops refused with `uncertified-busy` or `append-open-by-other-session`) became row K112, OPEN, blocks alpha: yes; where this page says K42 for that loop, read K112.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Verdict: FAIL (Nov 9-10, final).** Two product failures, both owned by the coordinator: K42 recurred on RDMA (clean stops refused in `rdma-4x1` and in one of three peer-stop loops, 20 of 20 stops), and the H1 kill modes end in a final-fsync `EIO` on both transports (K110, number assigned at merge). H15 failed on its fixture and is owed. Every other cell gate and own run that ran passed, apart from harness NOTRUNs. Per-row consequences are in the dated batch D clauses in the [checklist](../alpha-1.0-2plus1-checklist.md).
 
 - Purpose: [Stage 1 acceptance matrix](../stage1-acceptance-matrix-20261030.md) batch D (D-TCP then D-RDMA): the D46 cell gates on distinct hosts and the own runs H1-H10, H12-H15, for the K rows the matrix lists against batch D in the [checklist](../alpha-1.0-2plus1-checklist.md).

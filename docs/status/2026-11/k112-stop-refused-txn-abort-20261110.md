@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 76 as a diagnosis; K112 stays OPEN. An independent analysis for the coordinator found the safe form of the proposal (only the stop's own retirement, only the revoked session's completed rows at or below the smaller of the file size and the frontier); the fix is a task of its own.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status**
 - Source commit: devel `06bfdb393` (no code change on this branch).
 - Verdict: **DIAGNOSIS PARTIAL, NO FIX.** The failing state is reproduced as slowness, the cause is narrowed to the append-row retirement of the stop, and no change was made because the safe change needs a protocol decision (below).

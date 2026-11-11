@@ -2,6 +2,8 @@
 
 **Merge state (Nov 10):** merged into devel in wave 74; K105 from OPEN to VERIFY, blocks alpha: no, at the merge.
 
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 10):** fix committed on branch `claude/wizardly-lehmann-3525bb`, not merged.
 
 **Verdict: PASS for the fix, case C by inference, not reproduced. A packer pass reads a candidate's metadata, then its
