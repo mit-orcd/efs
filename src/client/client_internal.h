@@ -625,10 +625,6 @@ int efs_dcache_flush_all(void);
 int efs_dcache_drain_pending(void);
 int efs_dcache_flush_pressure_ino(efs_ino_t ino);
 int efs_dcache_flush_ino(efs_ino_t ino);
-/* Wait for the inode's in-flight PUT windows (a stolen full-image body is
- * readable nowhere until its PUT lands). 0 = none open, 1 = waited,
- * EFS_ERR_BUSY = still open after 8 s. */
-int efs_dcache_put_win_wait(efs_ino_t ino);
 void efs_dcache_reclaim_stop(void);
 void efs_dcache_drop(efs_ino_t ino, uint32_t ci);
 /* Drop a cached chunk only if it is not dirty (peer layout change). */

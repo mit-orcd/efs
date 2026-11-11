@@ -464,6 +464,13 @@ python3 tests/test_put_reply_deadline.py	30	1	fast suite, 30 s ceiling	test	clie
 python3 tests/test_k35_placement.py	30	1	fast suite, 30 s ceiling	test	client/write,common/placement	K35 (D42): on four or more members, writes place all three fragments on available members, so a member that
 python3 tests/test_put_tcp_frame.py	30	1	fast suite, 30 s ceiling	test	common/protocol	Production TCP PUT frame watcher with real fragmented socket delivery
 python3 tests/test_put_window_deadline.py	30	1	fast suite, 30 s ceiling	test	client/put_window,client/write	Actual read/PUT window wait honors caller deadline and releases its mutex
+python3 tests/test_put_window_callers.py ok	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: a PUT that succeeds (pipeline and direct) closes its window
+python3 tests/test_put_window_callers.py fail	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: a PUT that fails and re-dirties closes its window
+python3 tests/test_put_window_callers.py retired	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: an inode removed on the server during the flush closes its window
+python3 tests/test_put_window_callers.py drain	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: a failed batch drain in flush_pipe_add closes the window of every queued job and of the new one
+python3 tests/test_put_window_callers.py nomem	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: an allocation failure of the merge base closes the window (steal and direct)
+python3 tests/test_put_window_callers.py fetch	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: a failed merge-base fetch closes the window (steal and direct)
+python3 tests/test_put_window_callers.py fetch_retired	5	1	5 s per scenario (Task V1)	test	client/put_window,client/write	Task V1: a merge-base fetch that finds the inode gone closes the window
 python3 tests/test_write_budget.py	30	1	fast suite, 30 s ceiling	test	client/efs_fuse.write	Both production FUSE write entry points scope one inherited call budget
 python3 tests/test_append_session_admission.py	30	1	fast suite, 30 s ceiling	test	client/inode_rpc	Actual client registration cache: immutable identity, failures never cache
 python3 tests/test_append_session_host.py	30	1	fast suite, 30 s ceiling	test	server/raft_host.session	Actual host append admission: global errors/fencing never become permission

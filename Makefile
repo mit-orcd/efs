@@ -295,6 +295,13 @@ test-report-pressure:
 	python3 tests/test_k35_placement.py
 	python3 tests/test_put_tcp_frame.py
 	python3 tests/test_put_window_deadline.py
+	python3 tests/test_put_window_callers.py ok
+	python3 tests/test_put_window_callers.py fail
+	python3 tests/test_put_window_callers.py retired
+	python3 tests/test_put_window_callers.py drain
+	python3 tests/test_put_window_callers.py nomem
+	python3 tests/test_put_window_callers.py fetch
+	python3 tests/test_put_window_callers.py fetch_retired
 	python3 tests/test_write_budget.py
 	python3 tests/test_append_session_admission.py
 	python3 tests/test_append_session_host.py

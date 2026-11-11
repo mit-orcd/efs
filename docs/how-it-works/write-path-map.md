@@ -72,7 +72,7 @@ Functions: `put_win_clock_ms` `put_win_open` `put_win_close` `put_win_busy_locke
 
 Logs: none.
 
-Tests: `tests/test_put_window_interface.c` `tests/test_put_window_deadline.py` `tests/test_writer_fence_merge.py` `tests/test_read_failure_admission.py` `tests/test_read_refs_window.py` `tests/test_client_memory.py`
+Tests: `tests/test_put_window_interface.c` `tests/test_put_window_callers.py` `tests/test_put_window_deadline.py` `tests/test_writer_fence_merge.py` `tests/test_read_failure_admission.py` `tests/test_read_refs_window.py` `tests/test_client_memory.py`
 
 ## Dcache publication hand-off
 
@@ -295,5 +295,5 @@ Outer lock first. Only pairs held together in this file are listed; each is show
 5. `g_client.idx_mu` is never taken under `dcache_mu`: `export_chunk_gen_of` is called before the slot lock for that reason.
 6. `g_putid_mu` is released before `dcache_mu` is taken: `efs_client_put_referenced`.
 7. `g_unit_mu` should come before the putid and dcache locks (comment above `struct unit_span`); no function of this file holds it while taking them, so the order is stated, not exercised: not determined beyond the comment.
-8. `put_win_mu` (a leaf in `put_window.c`, taken by `put_win_open` and `put_win_close` under `dcache_io_mu` and `dcache_mu`), `g_dgobj_mu`, `g_wb_error_mu`, `g_reclaim.mu` and the `g_put_sh[]` queue mutexes are taken alone: none of their functions takes a second mutex while holding one.
+8. `put_win_mu` (a leaf in `put_window.c`; its operations take no other lock; `put_win_open` is called with `dcache_io_mu` then `dcache_mu` held, `put_win_close` with both held or with neither, see the lock text in `put_window.h`), `g_dgobj_mu`, `g_wb_error_mu`, `g_reclaim.mu` and the `g_put_sh[]` queue mutexes are taken alone: none of their functions takes a second mutex while holding one.
 

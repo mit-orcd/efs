@@ -128,6 +128,14 @@ open_interface|tests/test_open_interface
 find_res_interface|tests/test_find_res_interface
 # Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
 put_window_interface|tests/test_put_window_interface
+# Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
+put_window_callers_ok|tests/test_put_window_callers.py ok
+put_window_callers_fail|tests/test_put_window_callers.py fail
+put_window_callers_retired|tests/test_put_window_callers.py retired
+put_window_callers_drain|tests/test_put_window_callers.py drain
+put_window_callers_nomem|tests/test_put_window_callers.py nomem
+put_window_callers_fetch|tests/test_put_window_callers.py fetch
+put_window_callers_fetch_retired|tests/test_put_window_callers.py fetch_retired
 # Harnesses that build their own TSan binary (W138 rules: run or fail).
 apply_ring|tests/test_apply_ring.py
 session_latch|tests/test_session_latch_tsan.py
@@ -211,6 +219,14 @@ open_interface|tests/test_open_interface
 find_res_interface|tests/test_find_res_interface
 # Task U1: the real PUT window (counts, bounded wait, overflow, concurrent churn) through put_window.h.
 put_window_interface|tests/test_put_window_interface
+# Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
+put_window_callers_ok|tests/test_put_window_callers.py ok
+put_window_callers_fail|tests/test_put_window_callers.py fail
+put_window_callers_retired|tests/test_put_window_callers.py retired
+put_window_callers_drain|tests/test_put_window_callers.py drain
+put_window_callers_nomem|tests/test_put_window_callers.py nomem
+put_window_callers_fetch|tests/test_put_window_callers.py fetch
+put_window_callers_fetch_retired|tests/test_put_window_callers.py fetch_retired
 frag_record|tests/test_frag_record
 small_segment|tests/test_small_segment
 packed_segment|tests/test_packed_segment
