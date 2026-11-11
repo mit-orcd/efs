@@ -462,6 +462,10 @@ def main(argv):
               "are named by no test"
               % (len(files), len(none), len(names)))
         print("   no test names: %s" % " ".join(none))
+        srct = sorted(f for f in files
+                      if re.search(r'raft_host\.c|raft_host"', test_txt[os.path.join(root, f)]))
+        print("   of those, %d files also read raft_host.c as text or include it "
+              "(they break when a function moves): %s" % (len(srct), " ".join(srct)))
 
         hot_note = ""
         rows[key] = dict(gv=len(gused), gv_in=sum(1 for v in gused.values() if v[1] == 0),
