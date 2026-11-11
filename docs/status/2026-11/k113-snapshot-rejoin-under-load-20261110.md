@@ -77,12 +77,49 @@ Host fstor007 (96 threads, user erbmi1, work under `/tmp/efs-taskFT`, removed af
 | Mac: `check_k_register.py`, `gen_ledger.py`, `check_doc_links.py`, `gen-architecture-full.py`, `make docs-check`, code graph rebuild and `tests/test_code_graph.py` | all pass (K register 113 rows, 0 dangling links, architecture regenerated, `make docs-check` clean); graph checks in the last commit |
 
 
+## Round 2 (Task FU)
+
+An independent review of the Task FT fix found four defects. Task FU repairs them on top of `wave77-base` (`20d58f67c`). Tests: the new cases fail on `wave77-base` and pass on the fixed tree (see "Round 2 verification"). The earlier text of this page stays as written, except the claim in finding 4.
+
+| Finding | Defect | Change |
+|---|---|---|
+| F1 | In `on_snap_req` a chunk at offset 0 overwrote `rx_*` before `snap_chunk` ran. The host answered `BUSY` both for a queued closing chunk and for a refused chunk 0, so a refused one-chunk image Y overwrote `imp_*` with Y. The pump then finished X, `efs_raft_snap_imported(X)` returned `EFS_ERR_INVAL`, the member asked for a resync, and this could repeat with the next image. | `host_snap_chunk` refuses chunk 0 with `EFS_ERR_AGAIN` (no other path of the snapshot callback returns it). The core computes the new membership in locals, assigns `rx_*` only when the host did not refuse, and on `AGAIN` answers as for `BUSY` (`success = 1`, `prev_index = offset`) without touching `rx_*` or `imp_*`. `imp_*` is recorded only in the real `BUSY` branch of a closing chunk. |
+| F2 | `host_snap_import_pump` treated a hard `efs_kv_import_step` error like "more to do": no log, no resync, the core was not told. | The pump separates the hard error (neither OK nor `BUSY`): it logs `raft-snap: import failed group=%u incl=%llu rc=%d`, calls `efs_raft_request_resync`, and does not kick. `snap_import_poll` has already dropped the importer and set the state to IDLE with `import_block` cleared, so the next chunk at offset 0 is not refused (`snap_import_active` is false) and starts a fresh import. |
+| F3 | `efs_raft_snap_imported` had no role guard, and with `leader < 0` it addressed its reply to peer 0. | It returns `EFS_ERR_INVAL` when the member is the leader. With no known leader it installs and sends no reply (`snap_installed` skips the send when `m->to < 0`). |
+| F4 | The page said the member catches up without another snapshot. That holds only while the leader still sends X. | Corrected below. |
+
+**Correction (F4).** The sentence in design note 4, "the member caught up 0 to 1 s later without another snapshot", describes the K22 test, where the leader's retained log still covered X. When the leader has already moved on to Y, `on_snap_rep` (`src/raft/raft.c`) ignores the ack for X, and Y is transferred and imported in full after X is installed. The fix guarantees that an import finishes under load. It does not save the transfer of the next snapshot. Not measured: how often this happens at production caps.
+
+**Cancel branch.** The branch in `snap_import_poll` that handled "state left APPLY while the pump stepped" is deleted. The only writer of the state during a step was `snap_import_cancel`, called from `host_snap_chunk` at offset 0, and that is now refused while the state is APPLY. `host_snap_chunk` and the pump both run with `h->mu` held.
+
+### Round 2 verification
+
+Host intel2 (user maik, 8 threads), work under `~/efs-taskFU/`: `fix` is `git archive` of the fixed tree, `base` is the same tree with `src/raft/raft.c`, `src/server/raft_host.c` and `include/efs/raft.h` taken from `wave77-base`. The new cases fail on `base` and pass on `fix`:
+
+| Check | `wave77-base` sources | Fixed tree |
+|---|---|---|
+| `tests/test_raft.c` `test_snapshot_refused_image_keeps_import` (X queued, newer one-chunk Y refused with the host's refusal code, then `efs_raft_snap_imported(X)`; a retry of X's closing chunk) | FAIL: `Y was not queued`, `X installs after Y was refused`, `snapshot and applied index are X's`, `retry of X's closing chunk after the refusal installs X` (the base host's refusal code is BUSY, so the case is compiled with `K113_REFUSE=EFS_ERR_BUSY`) | pass |
+| `tests/test_raft.c` `test_snap_imported_guards` (a leader refuses the import; a second call and a wrong index are `EFS_ERR_INVAL`) | FAIL: `a leader refuses the import` | pass |
+| `tests/test_snap_import_pump.c` `test_hard_error_requests_resync` (log line, one resync request, no kick, importer dropped, a chunk at offset 0 accepted afterwards) | FAIL: `the failure is logged` | pass |
+| `make`, `./tests/test_raft`, `./tests/test_snap_import_pump`, `tests/test_host_inbox.py`, `tests/test_raft_ack_window.py` | | rc 0 each |
+| `scripts/tests_for.py server/raft_host --run`, `scripts/tests_for.py raft --run` | | rc 0, rc 0 |
+| `tests/test_k22_snapshot_import.py` | | rc 0 |
+| `make test` | | rc 0 (the first run failed `tests/test_tmpdir_hygiene.py` on my new pump case, a bare `mkstemp` and a `/tmp` path; fixed by `efs_test_path` and `efs_test_mkstemp`) |
+| `tests/sanitizer_check.sh asan` | | rc 0 on the first run (before the tmpdir fix in the pump test) |
+| `tests/sanitizer_check.sh tsan` | | first run: only `k37_segment_rebuild` failed (the known intermittent, not mine); the rerun after the tmpdir fix did not finish: see "Not verified" |
+
+Reproduction: `git archive HEAD | ssh intel2 'mkdir -p ~/efs-taskFU && tar -x -C ~/efs-taskFU'`, then in the tree run the commands in the table. For the base column, replace the three source files with `git show wave77-base:<path>` and build `tests/test_raft` with `-DK113_REFUSE=EFS_ERR_BUSY` (edit the default in the test).
+
 ## Not verified
 
 - The production snapshot window (512 MiB; the test uses 1 MiB), where an import of ten million keys takes minutes: whether the leader's retained log then covers the import time is open.
 - Distinct hosts and real network: all members here are loopback on one host. RDMA transport.
 - A second and third import after the member is close to the leader's image (not needed in this test).
 - The leader still re-sends the refused chunk 0 (up to one chunk) every heartbeat while the member imports an older image; unchanged cost, not measured.
+
+- Round 2: the final ASan and TSan rerun on the tree with the pump test's tmpdir fix (intel2 stopped answering SSH during the TSan run). The earlier runs on the tree before that test-only fix: ASan rc 0, TSan only the known `k37_segment_rebuild`.
+- Round 2: no cluster run (the K22 test passes on intel2, where the base passes too); the load that fails the base needs fstor007.
+- Round 2: `efs_raft_snap_imported`'s `incl <= last_applied` refusal has no test of its own (it cannot be reached through the public API without a real apply); the guard cases cover a leader, a wrong index and a second call.
 
 ## Raw output
 
