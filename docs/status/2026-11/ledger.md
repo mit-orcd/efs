@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [Wave 82 merge](ledger/20261111-009-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `814d9b55d`)**
 - [Wave 81 merge](ledger/20261111-008-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `f7b983b8b`)**
 - [Group view ownership Task V3](ledger/20261111-007-group-view-ownership.md): **branch claude/task-v3-group-view-ceb2d8, not merged, Nov 11**
 - [K114 fix 1: safe repeats join the cut](ledger/20261111-006-k114-fix1-safe-repeats.md): **fix, Nov 11 (Task FZ), K114 stays OPEN**
