@@ -432,7 +432,7 @@ State: `host_group.snap_*`, `part_*`, `import_*` under `h->snap_mu`; `import_blo
 
 Entry points: none public. In file: `host_snap_open`, `host_snap_read`, `host_snap_close` (raft core callbacks), `snap_import_poll`.
 
-Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_active` `snap_import_poll` `host_snap_chunk` `host_snap_import_pump` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
+Functions: `host_snap_open` `host_snap_read` `host_snap_close` `snap_import_free_diff` `snap_import_cancel` `snap_import_active` `snap_import_poll` `host_snap_chunk` `host_snap_import_work` `host_snap_import_pump` `host_snap_window_bytes` `host_maybe_snapshot` `host_snap_unlink_other` `host_snap_drop_parts` `host_snap_export_pass` `host_snap_import_pass`
 
 Logs: `raft-snap` (host_snap_open, host_maybe_snapshot, host_snap_export_pass, host_snap_import_pass, host_snap_import_pump); `raft-host` lines from `snap_import_poll`
 

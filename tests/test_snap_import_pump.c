@@ -46,14 +46,14 @@ static void test_kv_busy_does_not_spin_the_pump(void)
     CHECK(send_chunk(&f) == EFS_ERR_BUSY, "queued");
     host_snap_import_pass(f.h);
     CHECK(g->import_state == SNAP_IMP_DONE, "importer is open");
-    CHECK(host_pump_poll_timeout(f.h) == 0, "a finished import with work to do: no wait");
+    CHECK(host_snap_import_work(f.h), "a finished import with work to do: no wait");
     step_busy_left = 5;
     step_calls = 0;
     imported_calls = 0;
     for (i = 1; i <= 5; i++) {
         host_snap_import_pump(f.h);
         CHECK(step_calls == i, "one step per pump call");
-        CHECK(host_pump_poll_timeout(f.h) == (int)(HOST_TICK_US / 1000),
+        CHECK(!host_snap_import_work(f.h),
               "the KV refused the batch: the pump keeps its normal wait");
     }
     CHECK(!imported_calls && g->import_state == SNAP_IMP_DONE, "nothing installed while refused");

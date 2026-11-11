@@ -4088,6 +4088,18 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     return EFS_ERR_BUSY;
 }
 
+/* 1 while a finished import has a step to take and the KV did not just
+ * refuse one: the pump then skips its wait. A refused batch (import_stall)
+ * leaves the normal wait, so an L0 stall is never polled in a loop. */
+static int host_snap_import_work(struct efs_raft_host *h)
+{
+    for (int i = 0; i < HOST_NGROUPS; i++)
+        if (__atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE &&
+            !__atomic_load_n(&h->g[i].import_stall, __ATOMIC_RELAXED))
+            return 1;
+    return 0;
+}
+
 /* Pump, h->mu held: one bounded import step per group per cycle, whether or
  * not the leader still asks for that image. A finished import is installed in
  * the Raft core here (the leader may have moved on to a newer image that
@@ -7861,9 +7873,6 @@ static int host_pump_poll_timeout(struct efs_raft_host *h)
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    for (int i = 0; !pending && i < HOST_NGROUPS; i++)
-        pending = __atomic_load_n(&h->g[i].import_state, __ATOMIC_RELAXED) == SNAP_IMP_DONE &&
-                  !__atomic_load_n(&h->g[i].import_stall, __ATOMIC_RELAXED);
     return pending ? 0 : HOST_TICK_US/1000;
 }
 
@@ -9132,7 +9141,7 @@ static void *host_pump(void *arg)
         memset(&pfd, 0, sizeof(pfd));
         pfd.fd = h->pump_efd;
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
+        if (poll(&pfd, 1, host_snap_import_work(h) ? 0 : host_pump_poll_timeout(h)) > 0 && (pfd.revents & POLLIN)) {
             ssize_t drained;
             do { drained = read(h->pump_efd, &sink, sizeof(sink)); }
             while (drained < 0 && errno == EINTR);
