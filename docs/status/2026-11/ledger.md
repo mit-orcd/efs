@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K row summaries](ledger/20261110-040-k-row-summaries.md): **PASS, no K row, blocks alpha: no**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
 - [Ledger split into one file per entry (Task T2)](ledger/20261110-038-ledger-split.md): **PASS, no K row, blocks alpha: no**
 - [K register split](ledger/20261110-037-k-register-split.md): **PASS except the 170 KB size target, no K row, blocks alpha: no**
