@@ -467,7 +467,7 @@ docs-check:
 	python3 scripts/gen_ledger.py
 	python3 scripts/check_guide_counts.py
 	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c src/client/put_window.c
-	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c src/server/group_view.c src/server/group_view.h
+	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
 	python3 scripts/check_failure_routes.py
@@ -902,6 +902,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_put_window_interface
 	./tests/test_group_view
 	python3 scripts/check_group_view_privacy.py
+	python3 scripts/check_group_view_privacy.py --self-test
 	python3 tests/test_tests_for.py
 	./tests/test_hardlink_alias
 	./tests/test_verification_matrix
@@ -1030,7 +1031,7 @@ tests/test_put_window_interface: tests/test_put_window_interface.c src/client/pu
 
 # Task V3: the real group view through group_view.h; the test defines the Raft core getters
 # it takes, so no $(LIB).
-tests/test_group_view: tests/test_group_view.c src/server/group_view.c src/server/group_view.h
+tests/test_group_view: tests/test_group_view.c src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/server -o $@ $< src/server/group_view.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
@@ -1184,7 +1185,7 @@ tests/test_data_commit tests/test_data_commit_index: %: %.c tests/test_data_comm
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 src/server/raft_host.o: src/server/read_index_pair_remote.h
-src/server/raft_host.o src/server/group_view.o: src/server/group_view.h
+src/server/raft_host.o src/server/group_view.o: src/server/group_view.h src/server/group_view_impl.h
 src/server/raft_host.o: src/server/write_prof.h src/server/apply_ring.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.

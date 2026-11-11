@@ -22,7 +22,7 @@ root = Path(__file__).resolve().parents[1]
 # module name -> (override environment variable, source files in order)
 MODULES = {
     'raft_host': ('EFS_RAFT_HOST_SOURCE', ['src/server/raft_host.c']),
-    'group_view': ('EFS_GROUP_VIEW_SOURCE', ['src/server/group_view.h', 'src/server/group_view.c']),
+    'group_view': ('EFS_GROUP_VIEW_SOURCE', ['src/server/group_view.h', 'src/server/group_view_impl.h', 'src/server/group_view.c']),
     'efs_fuse': ('EFS_FUSE_SOURCE', [
         'src/client/efs_fuse/support.c',
         'src/client/efs_fuse/find_res.c',
@@ -137,13 +137,17 @@ if __name__ == '__main__':
 
 
 def group_view_header():
-    """Task V3: the product text of src/server/group_view.h from the first
-    #define on (constants, structs, the inline predicates and host_view_get,
-    the wait bracket, the prototypes), without the include lines and the guard,
-    so a splice test compiles the real owner declarations against stub core getters."""
+    """Task V3/V6: the product text of the group view declarations from the first
+    #define of src/server/group_view.h (constants, the caller's structs, the
+    prototypes) up to its include of group_view_impl.h, then the text of
+    group_view_impl.h from its first macro (representation, inline bodies), without
+    the include lines and guards, so a splice test compiles the real owner
+    declarations against stub core getters."""
     s = module('group_view')
     a = s.index('#define GROUP_VIEW_NGROUPS')
-    return s[a:s.index('\n#endif', a)] + '\n'
+    i = s.index('#include "group_view_impl.h"', a)
+    j = s.index('#define V_LOAD', i)
+    return s[a:i] + s[j:s.index('\n#endif', j)] + '\n'
 
 
 def group_view_func(name):

@@ -22,7 +22,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[3]
 page = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'docs/status/2026-11/readindex-entry-map-20261108.md'
 # the group view owner (Task V3) holds host_view_get, the wait predicates and the sleepers
-host = (root / 'src/server/raft_host.c').read_text() + '\n' + (root / 'src/server/group_view.c').read_text() + '\n' + (root / 'src/server/group_view.h').read_text()
+host = (root / 'src/server/raft_host.c').read_text() + '\n' + (root / 'src/server/group_view.c').read_text() + '\n' + (root / 'src/server/group_view.h').read_text() + '\n' + (root / 'src/server/group_view_impl.h').read_text()
 pair = (root / 'src/server/read_index_pair_remote.h').read_text()
 raft = (root / 'src/raft/raft.c').read_text()
 corpus = '\n'.join([host, raft] + [p.read_text() for p in sorted((root / 'src/server').glob('*.h'))]
