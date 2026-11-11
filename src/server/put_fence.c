@@ -65,6 +65,34 @@ static int storage_fence_path(struct efsd_server *s,const uint8_t uuid[16],
     pthread_once(&put_session_once,put_session_init);
     *mu=&put_session_mu[hash%PUT_SESSION_STRIPES];return EFS_OK;
 }
+/* Recovery may run while a newly admitted client seals a certificate. The
+ * temporary name is not evidence that its owner has crashed: serialize with
+ * that UUID's seal before deciding whether the file is abandoned. */
+int server_put_session_recover_tmp(struct efsd_server *s,const char *name)
+{
+    if(!name || strlen(name)<38 || strncmp(name+32,".tmp.",5) || strchr(name,'/'))
+        return EFS_ERR_INVAL;
+    uint8_t uuid[16];
+    for(unsigned i=0;i<16;i++) {
+        unsigned value=0;
+        for(unsigned j=0;j<2;j++) {
+            unsigned char c=(unsigned char)name[2*i+j];
+            if(c>='0' && c<='9')value=value*16+c-'0';
+            else if(c>='a' && c<='f')value=value*16+c-'a'+10;
+            else return EFS_ERR_INVAL;
+        }
+        uuid[i]=(uint8_t)value;
+    }
+    char path[EFS_MAX_PATH+80],tmp[EFS_MAX_PATH+320];pthread_mutex_t *mu;
+    int rc=storage_fence_path(s,uuid,path,&mu);if(rc!=EFS_OK)return rc;
+    int n=snprintf(tmp,sizeof(tmp),"%s%s",path,name+32);
+    if(n<0 || (size_t)n>=sizeof(tmp))return EFS_ERR_INVAL;
+    pthread_mutex_lock(mu);
+    /* A live seal has now renamed or discarded its temporary. ENOENT is
+     * normal; never remove the published certificate or weaken its floor. */
+    rc=unlink(tmp)==0 || errno==ENOENT?EFS_OK:EFS_ERR_IO;
+    pthread_mutex_unlock(mu);return rc;
+}
 static int storage_fence_read(const char *path,const uint8_t uuid[16],uint32_t *floor)
 {
     *floor=0;

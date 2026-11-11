@@ -164,10 +164,10 @@ TEST_BINS += tests/test_retained_namespace_audit
 TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
-TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c
+TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c tests/test_kv_manifest_order.c tests/test_kv_fold_reopen.c
 TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c
 TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface
-TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import
+TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import tests/test_kv_manifest_order tests/test_kv_fold_reopen
 TEST_BINS += tests/test_snap_import_host
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
@@ -540,6 +540,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_session_finish_retry.py
 	python3 tests/test_session_revoke_parallel.py
 	./tests/test_put_upload_server
+	python3 tests/test_rebuild_local_authority.py
+	python3 tests/test_recovery_seal_race.py
 	./tests/test_put_orphan_server
 	./tests/test_data_commit
 	./tests/test_data_commit_index
@@ -750,6 +752,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	python3 tests/test_kv_mtab_batch.py
+	python3 tests/test_kv_key_prefix.py
 	./tests/faults/test_kv_compact_crash
 	./tests/test_query_policy
 	./tests/test_query_catalog
@@ -872,6 +875,8 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_kv_snap_import
 	./tests/test_snap_import_host
 	./tests/test_kv_compact_manifest_view
+	./tests/test_kv_manifest_order
+	./tests/test_kv_fold_reopen
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
 	./tests/test_placement
@@ -1322,6 +1327,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	./tests/test_ba_delete_accounting
 	./tests/test_ba_upload_retire put
 	./tests/test_ba_upload_retire rebuild
+	./tests/test_ba_upload_retire local-rebuild
 	python3 tests/test_opid_admission.py
 	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
 	python3 tests/test_raft_ack_window.py
@@ -1409,6 +1415,9 @@ tests/test_snap_import_host: override LDFLAGS += -Wl,--wrap=efs_kv_import_open -
 tests/test_snap_import_host: tests/test_snap_import_host.c src/server/raft_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_snap_import_host.c tests/decoders/efsd.o $(filter-out src/server/efsd.o src/server/raft_host.o,$(SERVER_OBJS)) $(LIB) $(LDFLAGS)
 tests/test_kv_compact_manifest_view: override LDFLAGS += -Wl,--wrap=fsync
+# The wrap holds the fold at its first input row, before it takes its output number.
+tests/test_kv_fold_reopen: override LDFLAGS += -Wl,--wrap=kv_seg_iter_next
+tests/test_kv_manifest_order tests/test_kv_fold_reopen: src/kv/kv_lsm_internal.h
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread

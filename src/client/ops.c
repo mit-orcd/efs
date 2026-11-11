@@ -1711,9 +1711,9 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     int rc = EFS_ERR_BUSY;
     int t;
 
-    /* Held across the RPC and the local apply. mark_ino_dirty runs
-     * before the unlock so the dirty set, not this pin, is what the
-     * report sees. */
+    /* Hold the mirror across the RPC and local apply. Regular-file REPORT
+     * ownership is established before releasing the stripes below; a committed
+     * directory rename needs only a clean mirror, like committed MKDIR. */
     efs_client_stage_pin(ino);
     efs_client_stage_pin(old_parent);
     efs_client_stage_pin(new_parent);
@@ -1760,10 +1760,13 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
         (old_parent != new_parent || strcmp(old_name, new_name) != 0))
         efs_export_forget_name(&g_client.export, old_parent, old_name, ino);
     efs_client_stage_touch(ino);
-    /* Before the unlock: the evictor takes every stripe, then the dirty
-     * lock. A mark after the unlock let it forget the row, and the
-     * report then skipped a name that was no longer staged. */
-    efs_client_mark_ino_dirty(ino);
+    /* The server already committed a directory's rename, parent and nlink
+     * changes. Mirroring it must not manufacture a data REPORT: there is no
+     * directory payload to publish, and fsync of an unrelated open file cannot
+     * drain that mark. Preserve all existing dirty ownership (never clear it).
+     * Keep regular-file staging protected before dropping these stripes. */
+    if (!efs_mode_is_dir(out.mode))
+        efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
     /* Both parent times changed on the server. Refresh their cached attrs

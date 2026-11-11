@@ -205,17 +205,15 @@ int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d)
  * names a published object, so the durable degraded mark is the authority.
  * The fragment must be the mark's one missing fragment, placed on this node,
  * with the published checksum. */
-int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
-                       uint8_t *path_used)
+int server_rebuild_put_parts(struct efsd_server *s,const uint8_t *body,
+                             const uint8_t *data,uint32_t len,uint8_t *path_used)
 {
     if(path_used)*path_used=0xff;
-    if(!s || !body || !path_used || bytes<EFS_REBUILD_PUT_HEADER_LEN)return EFS_ERR_INVAL;
+    if(!s || !body || !data || !path_used)return EFS_ERR_INVAL;
     struct efs_meta_degraded d;
     uint32_t export_id=efs_put_upload_rd32(body);
     if(export_id!=1 || server_degraded_mark_decode(body+4,&d)!=EFS_OK)return EFS_ERR_INVAL;
     uint32_t fi=(uint32_t)__builtin_ctz(d.missing_mask);
-    const uint8_t *data=body+EFS_REBUILD_PUT_HEADER_LEN;
-    uint32_t len=bytes-EFS_REBUILD_PUT_HEADER_LEN;
     if(efs_ino_is_meta_table(d.ino) || d.nodes[fi]!=s->id)return EFS_ERR_INVAL;
     uint8_t checksum[EFS_HASH_SIZE];
     efs_hash(data,len,checksum);
@@ -247,4 +245,15 @@ int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
         efs_telemetry_log(0,"rebuild-put ino=%llu ci=%u fi=%u rc=%d\n",(unsigned long long)d.ino,
                 d.chunk_index,fi,rc);
     return rc;
+}
+
+/* Wire and local rebuilds share the same fresh authority and delayed-write
+ * guard. The split form avoids allocating a second fragment-sized buffer. */
+int server_rebuild_put(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
+                       uint8_t *path_used)
+{
+    if(path_used)*path_used=0xff;
+    if(!body || bytes<EFS_REBUILD_PUT_HEADER_LEN)return EFS_ERR_INVAL;
+    return server_rebuild_put_parts(s,body,body+EFS_REBUILD_PUT_HEADER_LEN,
+                                   bytes-EFS_REBUILD_PUT_HEADER_LEN,path_used);
 }

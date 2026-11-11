@@ -132,12 +132,17 @@ void kv_mtab_clear(struct kv_mtab *m)
  * embedded zeros and different lengths. This is only an in-memory index. */
 static __uint128_t key_pfx(const uint8_t *key, uint32_t klen)
 {
-    __uint128_t v = 0;
+    uint64_t hi = 0, lo = 0;
     uint32_t n = klen < 16 ? klen : 16;
 
-    for (uint32_t i = 0; i < n; i++)
-        v |= (__uint128_t)key[i] << (120 - 8 * i);
-    return v;
+    /* Build each word separately: variable 128-bit shifts need multiple
+     * machine operations on the lookup hot path. Read exactly min(klen,16)
+     * bytes, including unaligned and short keys; ordering is unchanged. */
+    for (uint32_t i = 0; i < n && i < 8; i++)
+        hi |= (uint64_t)key[i] << (56 - 8 * i);
+    for (uint32_t i = 8; i < n; i++)
+        lo |= (uint64_t)key[i] << (120 - 8 * i);
+    return ((__uint128_t)hi << 64) | lo;
 }
 
 /* Index of key, or the insertion point with *found = 0. */
@@ -649,18 +654,12 @@ static int manifest_load(struct kv_lsm *l)
     fclose(f);
     if (rc != EFS_OK)
         return rc;
-    /* L0 newest first: the MANIFEST writes them in that order already, but
-     * sort so a hand-edited or older manifest cannot invert precedence. */
-    if (l->n_l0 > 1) {
-        uint32_t i, j;
-        for (i = 0; i < l->n_l0; i++)
-            for (j = i + 1; j < l->n_l0; j++)
-                if (l->l0[j].seq > l->l0[i].seq) {
-                    struct seg_slot t = l->l0[i];
-                    l->l0[i] = l->l0[j];
-                    l->l0[j] = t;
-                }
-    }
+    /* MANIFEST order is L0 recency authority. An async fold reserves its
+     * output id while unlocked, possibly AFTER a newer concurrent flush.
+     * Publication keeps that newer flush ahead of the older folded values;
+     * sorting by allocation id on restart would reverse that ordering and
+     * resurrect stale values/tombstones.
+     * Keep exactly the order atomically persisted by the publisher. */
     if (l->n_l1 > 1)
         qsort(l->l1, l->n_l1, sizeof(l->l1[0]), kv_l1_cmp);
     kv_candidates_changed(l);
