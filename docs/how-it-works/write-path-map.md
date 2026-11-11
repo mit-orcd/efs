@@ -6,7 +6,7 @@ Mutexes in this file: `g_client.lock` (table), `g_client.idx_mu`, `g_client.dirt
 
 ## PUT pool and write entry
 
-Does: `efs_client_write` splits one FUSE write into chunk jobs, runs them through `client_write_run` and the persistent PUT worker pool (`put_pool_run` enqueues, `put_pool_thread` drains, `chunk_put_worker` stores one chunk into the dcache or PUTs it), then returns the first error. `efs_client_write_no_replicate` is the same path with replication off.
+Does: `efs_client_write` runs `client_write_run`, which PUTs each chunk in order on the calling thread and returns the first error. `efs_client_write_no_replicate` runs `write_chunks_no_replicate`, which sends batches of up to 32 chunk jobs through the persistent PUT worker pool (`put_pool_run` enqueues, `put_pool_thread` drains, `chunk_put_worker` stores one chunk into the dcache or PUTs it); the flush pipe is the pool's other caller.
 
 State: `g_put_sh[]` (per-worker FIFO of `chunk_put_job`, each with its own `mu`/`cv`); `g_put_pool` (thread ids, `ready`, `shutdown`, `rr`) started once under `g_put_init`.
 
