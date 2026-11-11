@@ -4088,6 +4088,8 @@ static int host_snap_chunk(void *app, uint64_t incl, uint64_t incl_term,
     return EFS_ERR_BUSY;
 }
 
+static void host_pump_kick(struct efs_raft_host *h);
+
 /* Pump, h->mu held: one bounded import step per group per cycle, whether or
  * not the leader still asks for that image. A finished import is installed in
  * the Raft core here (the leader may have moved on to a newer image that
