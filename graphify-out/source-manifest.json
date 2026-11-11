@@ -1544,7 +1544,7 @@
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
   "input_sha256": {
-    "Makefile": "315b3310af299f8dab8abbbfbf3b76524ccecbe9554e4b343c4188fbb0fcb7a1",
+    "Makefile": "7cbe93d7747c737280aa1065692cbe26b51c3e65a827e097c4365f991388428d",
     "README.md": "f646cf19b6605664ea80ee9a539ea8c7938be322ee12ba520447204095e3d216",
     "docs/backlog/crash-safe-durable-versions.md": "b57a8c2376ec9e85d9403196a237c57b69f7515a60e73ceb2ac997788016d6b3",
     "docs/backlog/decision-contracts.md": "7121e53344d3c3b9a04667991a7d9b030fdd7ac1d346251171fa0c941091a5af",
@@ -1554,7 +1554,7 @@
     "docs/how-it-works/architecture.md": "26eb516309515030ca9312e99a77be8ad38bf4b7345f102613afcb07ebafbb5d",
     "docs/how-it-works/design-rationale.md": "839a9fd92895b7f84e13b761e5bc48473f3ea35e37c364cee372a39e177db55f",
     "docs/how-it-works/developing.md": "e916e77d094c84c7df43967a25d83de1e20684837350ee2d50c060c6eb00700d",
-    "docs/how-it-works/diagnostics.md": "41c5fb1761e96edf482be33a7cb0e20e70583e0ab2215a71c28d3a17cd40e070",
+    "docs/how-it-works/diagnostics.md": "9e6990ba0e64849608f4164152f2a5d239bfbfd15a3f5d4159c827102772846d",
     "docs/how-it-works/failure-tolerance.md": "4d2adb1e3c21f81b5fe4b6391fc701f49ee5f8260e0788f7a6a2a48c36df89ed",
     "docs/how-it-works/naming.md": "e71f66d282fe0ee6ee9f8fae4e37c6eeafa2d1948b10de267ad2586721ce8a3c",
     "docs/how-it-works/performance.md": "c07edeefa36188ec7aeb7f063b5f8ada4e239c80027580f3aa2d015fa9939d2d",
@@ -1589,7 +1589,7 @@
     "include/efs/checksum.h": "ebaa683d44735eddb9ed4ae3f0e8d28fcbedded155633bf3cd75817ae5fc6fba",
     "include/efs/cli_help.h": "fbe85986df7e6ad3ac76de3181083a11708f5fbe6bfb4df18f6b19133bbcf0ae",
     "include/efs/command_path.h": "1e469a259485ec77a5ba4b2bd039a3ad1fcd0bcc4a51e54afe630791094d7091",
-    "include/efs/common.h": "8e7079142268190abe488ff25609b1b9336f111ee12990259cb00be6c02e14f6",
+    "include/efs/common.h": "c854b92869312efe3d971e87cfb1c698afc9d3202956309ba2fa753319c596c1",
     "include/efs/dir_layout.h": "f953dc6f8fdb3ba4d6152d3df4d8a1c35f78247a6e015e49f3d0eab357e6de9b",
     "include/efs/dir_spread.h": "fc77c9c6c8897c0e67c086a5655e31230fde85f97a9b1802420df3fe356eb7cd",
     "include/efs/dirty_ranges.h": "0b26b67ec5e4552fa4405115ce2e14d6573a17dd1a21b9572fe9d07ceea9d903",
@@ -1979,7 +1979,7 @@
     "scripts/evidence/w166/w166_flush_diagnostic.py": "54208386076637072bf7c47f51a21ea95bdf292de15daa51d118569e6da1152d",
     "scripts/evidence/w166/w166_trace_summary.py": "c2679e7afb8c34b30815c450b7023b655bef5ba8636543360eec6a668b1cf91d",
     "scripts/evidence/w166/w166_verify_retained.py": "ee7564175cb51282ce515a9db31597665852a1cba06af2f8705ea6b66cc9bfe6",
-    "scripts/gen_diagnostics.py": "b8d6157bdd86f4785a42ca4a0570952d591f71a8a5e7cf5c3fe90a9e2787ab84",
+    "scripts/gen_diagnostics.py": "2eb88d3cfc5b63bfa6e17ee03665d200996438145a05b7070cf6aeb1031b8fb8",
     "scripts/gen_ledger.py": "59e12cc28ecb4a145a6c590eec7168e97fa6ced8fea9bd3bc844c93e19ccf3c9",
     "scripts/gen_settings.py": "fa6bc15427c87bbc76fe67e71610321e6602db8a0b65fe5f5929eb8a11a14232",
     "scripts/graph-community-labels.py": "f06ed2e51fe653159b5fe9625e6731e2b86ffca1ef761fd4bfafee86f9021dd6",
@@ -3145,5 +3145,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "b35ab8dd2c8f17359edb39afd5a41c68ffeb39b4"
+  "source_commit": "67fc3b4a1fc25a9d7efc32c8e75179a6acf23856"
 }
