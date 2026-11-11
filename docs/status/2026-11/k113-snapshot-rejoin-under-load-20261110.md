@@ -1,5 +1,9 @@
 # K113: a member that rejoins by snapshot finishes under sustained load (Task FT)
 
+**Merge state (Nov 11):** merged into devel in wave 80 with all three rounds (Tasks FT, FU and FX) and the K109 fix, after three independent reviews; the last found nothing blocking. K113 is VERIFY: the production snapshot window, distinct hosts and RDMA are owed. What the last review left as a separate defect is row K119 (a failed import keeps the member blocked until a leader sends an image).
+
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status**
 - Source commit: `fc5566962` (all code and tests; the commits after it change only this page, the ledger and the graph). Branch `claude/beautiful-sinoussi-b869f2`, on `k113-base` `cdd20885c` = devel `fe81bb0e7` plus the K109 fix. Tested tree: `git archive fc5566962`, tar sha256 `6b2a8edf6234e5e0…` (full value in the raw directory's `tar-sha256.txt`), built on fstor007 with the host's libfuse, build id `unknown` (no git metadata in the shipped tree).
 - Verdict: **PASS**: `tests/test_k22_snapshot_import.py` (unchanged) fails 0 of 3 on the base and passes 3 of 3 on the fixed tree on fstor007, alone; the full gate on the fixed tree ends `FAIL 0`; `make test`, ASan and TSan pass.

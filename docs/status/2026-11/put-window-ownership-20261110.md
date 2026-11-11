@@ -1,6 +1,6 @@
 # PUT window ownership (Task U1)
 
-**Current state (Nov 11):** the PUT-window owner (`put_window.c`, `put_window.h`, `tests/test_put_window_interface.c`) is in devel since wave 79 (`68e2778a4`). Task V1, on branch `claude/task-v1-put-window-2ace19` (not merged), finishes the boundary: `efs_dcache_put_win_wait` is declared once (in `put_window.h`; `read.c` includes it), the header states what a close without an open really does and which locks callers hold, `tests/test_put_window_callers.py` proves that every one of the nine `put_win_close` calls in `write.c` is reached by a scenario and that deleting any one fails it, and the interface test pins the stray-close behaviour. See "Round 2 (Task V1)".
+**Current state (Nov 11):** the PUT-window owner (`put_window.c`, `put_window.h`, `tests/test_put_window_interface.c`) is in devel since wave 79 (`68e2778a4`). Task V1, merged in wave 80, finishes the boundary: `efs_dcache_put_win_wait` is declared once (in `put_window.h`; `read.c` includes it), the header states what a close without an open really does and which locks callers hold, `tests/test_put_window_callers.py` proves that every one of the nine `put_win_close` calls in `write.c` is reached by a scenario and that deleting any one fails it, and the interface test pins the stray-close behaviour. See "Round 2 (Task V1)". The wave 80 merge added `read.o` to the header's dependency line and stopped the second stray-close case from pinning the reader's wrong answer as contract.
 
 ## Purpose
 

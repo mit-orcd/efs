@@ -1,5 +1,9 @@
 # Lifecycle inventory of `src/server/raft_host.c` for one substantial extraction (Task V2)
 
+**Merge state (Nov 11):** merged into devel in wave 80. No extraction is chosen yet; the reader trial on the committed question has not been run. The line counts are from devel `68e2778a4`, before the K113 and K109 fixes changed `raft_host.c`.
+
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Verdict: PASS, inventory recorded; no extraction chosen** (Nov 11, 2026). Purpose: the numbers for the coordinator's choice of ONE lifecycle extraction from `raft_host.c`, from the structure review's four candidates (read proof, apply and persistence, publication, published group view). Read-and-measure only: no file under `src/`, `include/` or `tests/` changed, nothing built, no host used. No K row; blocks alpha: no. Status Nov 11: remaining failures none; active run none; next action: the coordinator chooses a candidate; the reader trial in [its own page](raft-host-lifecycle-reader-trial-20261111.md) is written and not run.
 
 - Tested tree: `devel` at `68e2778a4`; `src/server/raft_host.c` is 26,348 lines. The script is [scripts/evidence/v2/lifecycle_inventory.py](../../../scripts/evidence/v2/lifecycle_inventory.py) with the four function lists beside it: `scripts/evidence/v2/candidate_A_readindex.txt`, `scripts/evidence/v2/candidate_B_apply_persist.txt`, `scripts/evidence/v2/candidate_C_publication.txt` and `scripts/evidence/v2/candidate_D_view.txt` (one function name per line). Line numbers on this page are a snapshot of that commit.

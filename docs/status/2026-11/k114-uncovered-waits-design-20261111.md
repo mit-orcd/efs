@@ -1,5 +1,9 @@
 # K114: which uncovered reply waits may be cut (Task FY, design study)
 
+**Merge state (Nov 11):** merged into devel in wave 80. Row K114 now carries the study's result; the resend of a blocking FLOCK is the new row K120. No fix task is started yet.
+
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 **Status (Nov 11):** source commit `acc7aab2f` (devel head), branch `claude/task-fy-k114-design-445aad`.
 Verdict: **design only, no code changed** (nothing under `src/`, `include/` or `tests/` was touched; nothing was built or run).
 Every statement about the code was found by reading, with the file and line given. Row [K114](../k/K114.md) is not changed by this page.

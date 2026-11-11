@@ -1,5 +1,9 @@
 # K109: a clean unmount past a stalled storage member (Task FO)
 
+**Merge state (Nov 11):** merged into devel in wave 80 together with the K113 fix; it was held out of devel since wave 76 because with it the K22 snapshot test met K113. K109 is VERIFY: the S2 method gate with clean unmounts during the stall is owed.
+
+*The paragraph above is the current state. Everything below is the task's report as it was written before the merge: where it says "unmerged", "not merged" or names a next action, the paragraph above replaces it.*
+
 Task FO, Nov 10 2026. Purpose: fix the finding Task EZ's batch S soak recorded as
 K109 (drafted on Task EZ's branch as K121; the coordinator rules at the merge): while
 one of three members was alive and reachable but its apply was stalled, 6,832
