@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K113: a member that rejoins by snapshot finishes under sustained load (Task FT)](ledger/20261110-041-k113-snapshot-rejoin-under-load.md): **PASS; fix proposed, K113 left OPEN for the coordinator's ruling**
 - [K109: a clean unmount past a stalled storage member (Task FO)](ledger/20261110-040-k109-stalled-member-unmount.md): **PASS on xorinox (three private members, loopback); the K109 row and the multi-host check are not yet ruled**
 - [Wave 76 merge](ledger/20261110-039-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 10 (gate at `fe81bb0e7`, second build)**
 - [Ledger split into one file per entry (Task T2)](ledger/20261110-038-ledger-split.md): **PASS, no K row, blocks alpha: no**
