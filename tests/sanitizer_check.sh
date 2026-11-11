@@ -113,6 +113,7 @@ kv_reader_gate|tests/test_kv_reader_gate
 raft_store|tests/test_raft_store
 # Task EM: sequence binaries whose stores start KV compactor threads.
 meta_apply|tests/test_meta_apply
+append_transaction|tests/test_append_transaction
 session|tests/test_session
 reclaim|tests/test_reclaim
 query_disk_io|tests/test_query_disk_io
@@ -262,6 +263,7 @@ raft|tests/test_raft
 # start no thread, so they are on this list only).
 raft_store|tests/test_raft_store
 meta_apply|tests/test_meta_apply
+append_transaction|tests/test_append_transaction
 sim|tests/test_sim
 txn|tests/test_txn
 session|tests/test_session

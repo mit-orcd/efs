@@ -17,7 +17,9 @@ Usage: test_node_waiter_cut.py halted|slow|two|noreply|deadline|race|gating (one
  deadline a real operation deadline 20 s away and a halted member: the wait ends at the exchange verdict;
  race     two waiters, the exchange runs, one reply is readable before the cut: that waiter is not shut down and
           keeps its pool slot; the other is cut and its conn does not return to the pool;
- gating   which request types reach the hook: reads and the four directory mutations with an op-id, nothing else."""
+ gating   which request types reach the hook: reads, the four directory mutations with an op-id, a truncate SETATTR with
+          its op-id, an APPEND with its ack suffix, CREATE_RETAINED probe=0 and a REPORT with a publication id; chmod,
+          chown, utimens, XATTR, HOLD and FLOCK (non-GETLK) are never cut."""
 from pathlib import Path
 import os,shlex,subprocess,sys,tempfile
 sys.path.insert(0,str(Path(__file__).resolve().parent));from sanitize_env import cflags,wrap
@@ -60,8 +62,33 @@ int main(void){
  xa.op=EFS_XATTR_SET;assert(!rpc_reply_wait_cut(EFS_MSG_XATTR,&xa,sizeof xa));
  xa.op=EFS_XATTR_REMOVE;assert(!rpc_reply_wait_cut(EFS_MSG_XATTR,&xa,sizeof xa));
  struct efs_msg_create_retained cr;memset(&cr,0,sizeof cr);
- cr.probe=0;assert(!rpc_reply_wait_cut(EFS_MSG_CREATE_RETAINED,&cr,sizeof cr));
+ cr.probe=0;assert(rpc_reply_wait_cut(EFS_MSG_CREATE_RETAINED,&cr,sizeof cr));      /* K114: its op-id window */
  cr.probe=1;assert(rpc_reply_wait_cut(EFS_MSG_CREATE_RETAINED,&cr,sizeof cr));
+ assert(!rpc_reply_wait_cut(EFS_MSG_CREATE_RETAINED,&cr,sizeof cr-1));
+ /* SETATTR: only a truncate (SIZE in the mask) carrying its op-id; the same type for chmod, chown, utimens is not */
+ struct efs_msg_inode_setattr sa;memset(&sa,0,sizeof sa);uint8_t sb[sizeof sa+EFS_OPID_WIRE_LEN];
+ uint32_t masks[]={EFS_SETATTR_SIZE|EFS_SETATTR_MTIME,EFS_SETATTR_SIZE,EFS_SETATTR_MODE,EFS_SETATTR_UID,EFS_SETATTR_GID,
+  EFS_SETATTR_MODE|EFS_SETATTR_UID|EFS_SETATTR_GID,EFS_SETATTR_MTIME,EFS_SETATTR_ATIME,EFS_SETATTR_MTIME|EFS_SETATTR_ATIME,0,EFS_SETATTR_SIZE|EFS_SETATTR_MODE,EFS_SETATTR_SIZE|EFS_SETATTR_ATIME,
+  EFS_SETATTR_SIZE|EFS_SETATTR_MTIME|EFS_SETATTR_ATIME};
+ for(unsigned i=0;i<sizeof masks/sizeof*masks;i++){
+  sa.mask=masks[i];memcpy(sb,&sa,sizeof sa);
+  int want=i<2;
+  if(rpc_reply_wait_cut(EFS_MSG_INODE_SETATTR,sb,sizeof sb)!=want){fprintf(stderr,"setattr mask %x cut=%d\n",masks[i],!want);return 1;}
+  assert(!rpc_reply_wait_cut(EFS_MSG_INODE_SETATTR,sb,sizeof sa));                /* no op-id suffix: waits */
+ }
+ /* APPEND: only the form with uuid, epoch, seq and ack (the receipt identity) */
+ assert(rpc_reply_wait_cut(EFS_MSG_INODE_APPEND,buf,sizeof(struct efs_msg_inode_append)+EFS_APPEND_ACK_LEN));
+ assert(!rpc_reply_wait_cut(EFS_MSG_INODE_APPEND,buf,sizeof(struct efs_msg_inode_append)+EFS_APPEND_OPID_LEN));
+ assert(!rpc_reply_wait_cut(EFS_MSG_INODE_APPEND,buf,sizeof(struct efs_msg_inode_append)+EFS_SESS_WIRE_LEN));
+ assert(!rpc_reply_wait_cut(EFS_MSG_INODE_APPEND,buf,sizeof(struct efs_msg_inode_append)));
+ /* HOLD in every length: never */
+ for(uint32_t n=0;n<200;n++)assert(!rpc_reply_wait_cut(EFS_MSG_INODE_HOLD,buf,n));
+ /* REPORT: only with a publication id */
+ struct efs_msg_report_chunks rp;memset(&rp,0,sizeof rp);
+ rp.sync=EFS_REPORT_F_SESSION;assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
+ rp.sync=EFS_REPORT_F_SESSION|EFS_REPORT_F_SYNC;assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
+ rp.sync=EFS_REPORT_F_SESSION|EFS_REPORT_F_PUBID;assert(rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp));
+ assert(!rpc_reply_wait_cut(EFS_MSG_REPORT_CHUNKS,&rp,sizeof rp-1));
  puts("client waiter cut: scenario PASS");return 0;}
 '''
  with tempfile.TemporaryDirectory(prefix='efs-node-waiter-gate-') as d:
