@@ -892,6 +892,12 @@ static int rpc_type_mutates(uint8_t type, const void *req, uint32_t req_len)
     }
 }
 
+/* K106 (a): 1 when a silent member's verdict may cut the wait for this reply: a read, or a directory op with its op-id. */
+static int rpc_reply_wait_cut(uint8_t type, const void *req, uint32_t req_len)
+{
+    return !rpc_type_mutates(type, req, req_len) || rpc_identified(type, req_len);
+}
+
 static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *req,
                                     uint32_t req_len, uint8_t expect, void *reply,
                                     uint32_t reply_len, uint32_t copy_cap,
@@ -977,7 +983,7 @@ static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *re
         uint32_t plen = 0;
         /* K106 (a): a halted member's silence cuts only a replay-safe wait: a read, or
          * a directory op carrying its op-id; any other mutation waits as before. */
-        if (!rpc_type_mutates(type, req, req_len) || rpc_identified(type, req_len))
+        if (rpc_reply_wait_cut(type, req, req_len))
             efs_client_conn_await_reply(nid, conn);
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
 #if EFS_FAULTS

@@ -107,6 +107,7 @@ void efs_client_conn_init(void)
              * recycle the same fd number under a live dest_qpn. */
             if (conn_pool_inited && g_client.conn_busy[i][s])
                 continue;
+            g_client.conn_wait[i][s] = 0;
             /* First init: BSS zeros are NULL — do not destroy. */
             if (conn_pool_inited && g_client.conn[i][s])
                 efs_conn_destroy(g_client.conn[i][s]);
@@ -116,6 +117,8 @@ void efs_client_conn_init(void)
         g_client.node_fail_streak[i] = 0;
         g_client.node_down_until_ms[i] = 0;
         g_client.node_probe_fd[i] = -1;
+        g_client.node_exch_busy[i] = 0;
+        g_client.node_exch_end_ms[i] = 0;
         if (!conn_pool_inited) {
             pthread_mutex_init(&g_client.conn_lock[i], NULL);
             pthread_cond_init(&g_client.conn_cv[i], NULL);
@@ -948,6 +951,8 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
     }
 }
 
+/* conn_wait: 0 no wait, 1 an owner waits for a reply, CONN_WAIT_CUT a verdict shut the conn down. */
+#define CONN_WAIT_CUT 2
 void efs_client_conn_release(efs_node_id_t node_id, struct efs_conn *conn)
 {
     int idx = node_index_for_id(node_id);
@@ -955,8 +960,14 @@ void efs_client_conn_release(efs_node_id_t node_id, struct efs_conn *conn)
         return;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int s = slot_for_conn((uint32_t)idx, conn);
-    if (s >= 0)
+    if (s >= 0) {
         g_client.conn_busy[idx][s] = 0;
+        if (g_client.conn_wait[idx][s] == CONN_WAIT_CUT) { /* shut down by a cut: never pooled again */
+            efs_conn_destroy(conn);
+            g_client.conn[idx][s] = NULL;
+            g_client.conn_wait[idx][s] = 0;
+        }
+    }
     conn_reap_idle_locked(idx, monotonic_ms());
     pthread_cond_signal(&g_client.conn_cv[idx]);
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
@@ -994,6 +1005,7 @@ void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn)
             efs_conn_destroy(g_client.conn[idx][s]);
         g_client.conn[idx][s] = NULL;
         g_client.conn_busy[idx][s] = 0;
+        g_client.conn_wait[idx][s] = 0;
     } else {
         efs_conn_destroy(conn);
     }
@@ -1072,10 +1084,15 @@ void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn)
                     g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
                     int n = pool_size();
                     for (int s = 0; s < n; s++) {
-                        if (g_client.conn_wait[idx][s] && g_client.conn[idx][s]) {
-                            shutdown(g_client.conn[idx][s]->fd, SHUT_RDWR);
-                            cut++;
-                        }
+                        if (g_client.conn_wait[idx][s] != 1 || !g_client.conn[idx][s])
+                            continue;
+                        /* A reply already queued is not cut: its owner reads it and the conn stays usable. */
+                        struct pollfd rp = {.fd = g_client.conn[idx][s]->fd, .events = POLLIN};
+                        if (poll(&rp, 1, 0) > 0 && (rp.revents & POLLIN))
+                            continue;
+                        shutdown(g_client.conn[idx][s]->fd, SHUT_RDWR);
+                        g_client.conn_wait[idx][s] = CONN_WAIT_CUT;
+                        cut++;
                     }
                 }
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
@@ -1103,7 +1120,8 @@ void efs_client_conn_await_reply(efs_node_id_t node_id, struct efs_conn *conn)
             break;
     }
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    g_client.conn_wait[idx][slot] = 0;
+    if (g_client.conn_wait[idx][slot] == 1)
+        g_client.conn_wait[idx][slot] = 0; /* a cut mark stays for release */
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 

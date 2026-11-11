@@ -257,6 +257,9 @@ test-report-pressure:
 	python3 tests/test_node_waiter_cut.py slow
 	python3 tests/test_node_waiter_cut.py two
 	python3 tests/test_node_waiter_cut.py noreply
+	python3 tests/test_node_waiter_cut.py deadline
+	python3 tests/test_node_waiter_cut.py race
+	python3 tests/test_node_waiter_cut.py gating
 	python3 tests/test_pack_budget.py
 	python3 tests/test_pack_compact_schedule.py
 	python3 tests/test_pack_base_reads.py

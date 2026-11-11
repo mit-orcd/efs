@@ -135,6 +135,9 @@ waiter_cut_halted|tests/test_node_waiter_cut.py halted
 waiter_cut_slow|tests/test_node_waiter_cut.py slow
 waiter_cut_two|tests/test_node_waiter_cut.py two
 waiter_cut_noreply|tests/test_node_waiter_cut.py noreply
+waiter_cut_deadline|tests/test_node_waiter_cut.py deadline
+waiter_cut_race|tests/test_node_waiter_cut.py race
+waiter_cut_gating|tests/test_node_waiter_cut.py gating
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
 # client read and write paths through efs-fuse under load (D4, short), and
 # the K38 swept-hint STALE replay through efs-fuse, and the K88 per-chunk
