@@ -82,11 +82,11 @@ int main(void){
  /* Request 10 > round 9: the next quorum starts round 10, then idle. */
  core.quorum=1;assert(host_read_start_requested(&h)==1u && core.round==10 && sends==2);
  core.quorum=1;assert(!host_read_start_requested(&h) && sends==2);
- /* Followers, unhosted groups and !h->s never start requested rounds. */
+ /* Followers and unhosted groups never start requested rounds. */
  other.role=1;host_read_request(&h,2,5);assert(other.round==3 && sends==2);
  assert(!host_read_start_requested(&h));
  other.role=EFS_RAFT_LEADER;h.g[1].hosted=0;assert(!host_read_start_requested(&h));
- h.g[1].hosted=1;h.s=0;assert(!host_read_start_requested(&h));h.s=&server;
+ h.g[1].hosted=1;
  assert(host_read_start_requested(&h)==2u && other.round==4 && h.g[1].ri_begun==4 && sends==3);
  return 0;
 }

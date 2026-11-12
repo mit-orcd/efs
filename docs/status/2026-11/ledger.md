@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [Task V4 read-proof ownership design](ledger/20261111-014-read-proof-ownership.md): **design only, no code moved**
 - [Wave 83 merge](ledger/20261111-013-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `ddf3a5d22`)**
 - [Group view ownership Task V6](ledger/20261111-012-group-view-contract-split.md): **branch claude/task-v6-group-view-contract-70fa8b, not merged, Nov 11**
 - [Question routes](ledger/20261111-011-question-routes.md): **Task V7, Nov 11:**

@@ -21,11 +21,10 @@ static void discard(void*p){discarded++;free(p);}
 #define HOST_NGROUPS 2
 int efs_batch_obs_on;
 void efs_batch_obs_count(enum efs_batch_counter c){(void)c;}
-struct server{int unused;};
 struct host_inbox_item{uint8_t*buf;uint32_t len;uint64_t queued_us;int read_noted;};
 /* the owner is stubbed; its struct is the host's first member so a stub can find the host */
 struct group_views {int unused;};
-struct efs_raft_host{struct group_views gv;struct server*s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
+struct efs_raft_host{struct group_views gv;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
 static struct efs_raft_host *current;
 static int calls,decoded,published,woken,expected_result,forced_result=-1,append_race;
 static struct host_inbox_item arrival;
@@ -40,8 +39,8 @@ int efs_raft_read_control(struct efs_raft*r,const struct efs_raft_msg*m){(void)r
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){assert(h==current&&g==2);published++;}
 static void host_waiters_wake(struct group_views*gv){assert((void*)gv==(void*)current);woken++;}
 '''+s[pure:pure_end]+s[a:b]+r'''
-int main(int argc,char **argv){
- struct server s={argc>1?atoi(argv[1]):0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572};current=&h;h.g[1].group=2;
+int main(void){
+ struct efs_raft_host h={.inbox_n=7,.inbox_bytes=572};current=&h;h.g[1].group=2;
  assert(!pthread_mutex_init(&h.inbox_mu,NULL));uint8_t (*p)[92]=calloc(HOST_INBOX_MAX,92),saved[HOST_INBOX_MAX][92];assert(p);
  for(int i=0;i<7;i++){p[i][0]=EFS_RAFT_MSG_AE_REQ;p[i][3]=1;p[i][35]=7;h.inbox[i]=(struct host_inbox_item){p[i],80,(uint64_t)i,0};}
  p[1][0]=EFS_RAFT_MSG_AE_REP;p[1][1]=2;p[1][3]=2;
@@ -51,7 +50,6 @@ int main(int argc,char **argv){
  p[5][2]=255; /* decoder failure */
  p[6][3]=0; /* core refuses: e.g. prefix/term/boot not yet eligible */
  memcpy(saved,p,sizeof(saved));
- h.s=NULL;host_pending_reads(&h);assert(!calls&&!decoded&&!published&&!woken);h.s=&s;
  host_pending_reads(&h);assert(calls==3&&decoded==4&&published==1&&woken==1);
  assert(h.inbox[0].read_noted&&h.inbox[1].read_noted&&!h.inbox[6].read_noted);
  assert(h.inbox_n==7&&h.inbox_bytes==572);

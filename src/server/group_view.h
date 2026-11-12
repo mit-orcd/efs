@@ -103,9 +103,11 @@
  *   an RPC, or return without the unlock. A caller holds h->mu either not at all or
  *   before the lock (h->mu, then cv_mu); none holds cv_mu or view_mu outside the bracket.
  *   host_waiter_sleep modes (any): 0 wakes when applied >= idx or the
- *   replica goes away; 1 when the view stamp moves past `seen`; 2 when
- *   host_read_floor_ready holds for the request; 3 the same for a reader
- *   whose rounds the pump starts. The floor is caller memory, copied into
+ *   replica goes away; 1 when the view stamp moves past `seen`; 3 when
+ *   host_read_floor_ready holds for the request (a reader whose rounds the
+ *   pump starts). There is no mode 2: it served the direct mode, in which
+ *   readers began rounds themselves, and was removed with it; the number
+ *   is not reused. The floor is caller memory, copied into
  *   the slot at sleep and back at wake. When all HOST_WAITERS slots are
  *   busy the thread sleeps on the shared applied_cv instead and the pump
  *   broadcasts it. Sleeping ends at the wake or at `end`; the caller
@@ -121,7 +123,7 @@
 #define HOST_WAITERS 512
 #define HOST_VIEW_TRIES    64 /* odd v_seq loads before a reader waits on view_mu */
 
-/* Caller memory for the host_waiter_sleep modes 2 and 3. */
+/* Caller memory for host_waiter_sleep mode 3. */
 struct host_read_floor {uint64_t index,context;};
 
 /* The copy a reader gets. */
@@ -167,12 +169,11 @@ static inline int host_view_wait_apply(const struct host_view *v, uint64_t want,
                                        uint64_t round, uint64_t term);
 static inline int host_read_wait_ready(const struct host_view *v, uint64_t want,
                                        uint64_t round, uint64_t term,
-                                       int proof_only, int delegated);
+                                       int proof_only);
 static inline int host_read_floor_ready(const struct host_view *v,
                                         struct host_read_floor *floor,
                                         uint64_t want, uint64_t round,
-                                        uint64_t term, int proof_only,
-                                        int delegated);
+                                        uint64_t term, int proof_only);
 static inline void group_view_wait_lock(struct group_views *gv);
 static inline void group_view_wait_unlock(struct group_views *gv);
 

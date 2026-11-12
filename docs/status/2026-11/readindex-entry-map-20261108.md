@@ -1,5 +1,7 @@
 # ReadIndex entry map and investigation baseline before the `raft_host.c` split (W171 2b, Task DO)
 
+**Update (Nov 11, Task V4):** the direct mode (`h->s == NULL`: `host_read_admit`, `host_read_probe_needed` and the locked branches of `host_read_index_admitted` and `host_read_index_pair`) was deleted; rows and line numbers below are the Nov 9 snapshot, and the two removed functions no longer have rows ([read-proof design](read-proof-ownership-20261111.md)).
+
 **Verdict: PASS, map and baseline recorded; the split stays blocked** (Nov 9, 2026). Purpose: the two preconditions the [structure plan](structure-plan-20261102.md) (2b, and the Nov 5 decision in phase 3) sets for the `raft_host.c` pilot split besides Task DJ's merge: an entry map of the ReadIndex code, and a before-measurement of one unfamiliar ReadIndex investigation by the [reading-set method](reading-set-baseline-20261104.md). Docs and measurement only: no source or test changed, nothing built or run on a host. No K row; blocks alpha: no. The map does not unblock the split: 2b also waits on the `devel-w123-recovery` merge, which is the user's decision and still open. Merged into devel in wave 65 (Nov 9). Status Nov 9: remaining failures none; active run none; next action: the 2b split after the `devel-w123-recovery` merge.
 
 - Tested tree: `devel` at `df7d11371` (wave 64 merged). `src/server/raft_host.c` is 26,262 lines. Line numbers on this page are a snapshot of that commit; names are checked by the self-check below.
@@ -21,8 +23,6 @@ Callers are functions in `src/server/raft_host.c` unless a path says otherwise. 
 | `host_read_probe` | 1387 | probe transport (outbox) | `host_send` (under `h->mu`) | none | `struct host_outbox` fields `preserve_read`, `read_probe_term`, `read_probe_boot`, `read_probe_context`, `pri`, `npri`; `HOST_OUTBOX_MAX`, `HOST_OUTBOX_BYTES` | none |
 | `host_read_wait_ready` | 4484 | round: wake predicate | `host_read_floor_ready` | none | a `struct host_view` copy (`has`, `role`, `term`, `read_pending`, `read_done`) | none |
 | `host_read_floor_ready` | 4505 | round: wake predicate | `host_read_index_admitted`, `host_waiters_wake` (under `h->cv_mu`) | none | `struct host_read_floor` (`index`, `context`), view copy | none |
-| `host_read_admit` | 5305 | round: admission (direct mode) | `host_read_index_admitted` (under `h->mu`) | none | `struct host_read_admission`; core `efs_raft_read_round`, `efs_raft_commit`, `efs_raft_read_begin` | none |
-| `host_read_probe_needed` | 5330 | pair path | `host_read_index_pair` | none | `struct host_read_admission`; core `efs_raft_read_proven` | none |
 | `host_read_note_begin` | 5353 | round: start | `host_read_begin_tracked` (under `h->mu`) | none | `host_group.ri_begun` (atomic store) | none |
 | `host_read_begin_tracked` | 5363 | round: start | `host_read_index_admitted`, `host_read_index_pair`, `host_read_start_requested`, `host_publication_committed` | none | core `efs_raft_read_begin` | none |
 | `host_read_admit_view` | 5374 | round: admission (server mode, no `h->mu`) | `host_read_index_admitted`, `host_read_index_pair` | none | `host_group.ri_begun` (atomic load), view copy | none |
@@ -101,9 +101,9 @@ Shared state the cut must declare in host_internal.h (the header 2b plans; not i
 | `tests/test_k96_status_slots_live.py` | live cluster; STATUS slots (routed here, names no ReadIndex function) |
 | `tests/test_readindex_operation.py` | splices the round; `EFS_ERR_NOT_PRIMARY` on role change |
 | `tests/test_readindex_publish.py` | `host_view_get` and the publish order |
-| `tests/test_readindex_pair.py` | pair path; splices `host_read_probe_needed` to `host_read_start_requested` and reads `read_index_pair_remote.h` |
+| `tests/test_readindex_pair.py` | pair path; splices `host_read_note_begin` to `host_read_start_requested` and reads `read_index_pair_remote.h` |
 | `tests/test_readindex_tickets.py` | splices `host_read_note_begin` to `host_read_index_admitted` |
-| `tests/test_readindex_admission.py` | `host_read_admit` refusals (`EFS_ERR_BUSY`, `EFS_ERR_NOT_PRIMARY`) |
+| `tests/test_readindex_admission.py` | `host_read_admit_view` and `host_read_start_requested`: floor, shared next round, refusals (`EFS_ERR_BUSY`, `EFS_ERR_NOT_PRIMARY`) |
 | `tests/test_readindex_result.py` | `host_read_index_admitted`: proof floor, follower path through `host_remote_read_index` and `host_wait_applied`, term-change refusal, proof endpoint never forwards |
 | `tests/test_readindex_coalescer.py` | `struct host_ri_wait` to the `ReadIndex for one group` comment: the follower coalescer |
 | `tests/test_read_waiters.py` | waiter slots and wake predicates |
