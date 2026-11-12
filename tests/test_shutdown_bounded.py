@@ -164,7 +164,7 @@ print('test_shutdown_bounded: OK')
 raft_host = csrc.module('raft_host')
 raft_core = (root/'src/raft/raft.c').read_text()
 pump = fn(raft_host, 'static void *host_pump(void *arg)')
-stop_call = 'host_stop_leading(h, h->s && server_stop_requested());'
+stop_call = 'host_stop_leading(h, server_stop_requested());'
 assert pump.index('pthread_mutex_lock(&h->mu);') < pump.index(stop_call) < pump.index('host_pending_reads(h);')
 assert pump.index('drain_inbox(h);') < pump.rindex(stop_call) < pump.index('(void)efs_raft_tick(')
 code = r'''
