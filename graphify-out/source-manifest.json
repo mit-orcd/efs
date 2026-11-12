@@ -622,6 +622,10 @@
     "src/server/query_refresh.h": 11,
     "src/server/raft_host.c": 639,
     "src/server/read_index_pair_remote.h": 4,
+    "src/server/read_proof.c": 21,
+    "src/server/read_proof.h": 0,
+    "src/server/read_proof_host.h": 0,
+    "src/server/read_proof_impl.h": 12,
     "src/server/reclaim.c": 47,
     "src/server/recovery.c": 38,
     "src/server/segment_rebuild.c": 27,
@@ -1393,6 +1397,7 @@
     "tests/test_read_errno.py": 2,
     "tests/test_read_failure_admission.py": 1,
     "tests/test_read_peer_order.py": 1,
+    "tests/test_read_proof.c": 79,
     "tests/test_read_recorded_nodes.py": 1,
     "tests/test_read_refs_window.py": 1,
     "tests/test_read_retry_budget.py": 0,
@@ -1570,7 +1575,7 @@
   },
   "extraction_warnings": [
     "warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)",
-    "warning: 78 code file(s) yielded no symbols (0.26 MB) \u2014 a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+73 more)"
+    "warning: 80 code file(s) yielded no symbols (0.27 MB) \u2014 a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+75 more)"
   ],
   "extractor_sha256": "355f470579b44c0442ef38101e52bf2f075fdff4c6cfee8b1ef27d3508974fa5",
   "graphify_version": "0.9.97",
@@ -1692,7 +1697,7 @@
     "scripts/check_concern_map.py": "0c303c96ec868ddd6dd5cae9067041cc4c71dfa64c69831188ad5d3ba7ecf089",
     "scripts/check_doc_links.py": "3cc40133ba30aef5ac48df7e9adbdcb7c6a32d5c9385b24acbba0b3d5c18e37d",
     "scripts/check_failure_routes.py": "d5ec15d13174161747ca56a6e5ee433841cd0f36bbbc1823e13fb10198f7fa38",
-    "scripts/check_group_view_privacy.py": "e2f730e95dff05b83eeb1f366a564b66d4670e5eefab0a1b424119624babdb8a",
+    "scripts/check_group_view_privacy.py": "ecc68e459206da806e399505fcbbe995bb43485a9db9cc73bfc30d5b697a1ab8",
     "scripts/check_guide_counts.py": "2cb99aeeb33284de5e6809e2094819051cc5d9ea896942f5925a103eedb3bd77",
     "scripts/check_include_boundary.py": "138b840b33146e7c9c8d08d46d01a6f14d3926da23a95b7e07b8eebf70f54e83",
     "scripts/check_k_register.py": "bb253cb7def5f61a252c9a86d5da26e111ea62b3c0ecc248a7c5694f1251d080",
@@ -2224,7 +2229,7 @@
     "src/raft/raft_disk_internal.h": "9ff9eec41773a463fff79b35deac363bf60d7666f0fee4461f0485a4e21176e3",
     "src/raft/raft_log.c": "c2cd52a95d2619276efe12490c94396187cadb614ca7a198fabdaa3d4c771650",
     "src/raft/raft_mem.c": "b7ce9d87e2f93f351720b9429ed452a5d7db8a83f93d48a44697a447150a2a5f",
-    "src/server/README.md": "055cccfe822d9dafbef6822520dea765463b341bed39b06737983de59efc60ee",
+    "src/server/README.md": "8fc6dc9fd14ea4ff3e924717613c523260ec192dbda7d14110731c9bd12375ce",
     "src/server/apply_ring.h": "7b175de09f252077997ce4adc242cd3fea5f2d4256c95cb41801133ddcb86e8c",
     "src/server/apply_wait.h": "08e73413201fb19a9de7c50985945bd2f0d477c7253db993f94b5b0fc900b183",
     "src/server/cluster.c": "57765a7208592c76e95e0b42161356e2259fa8035aaaee84fdee7bf927fa83f3",
@@ -2250,6 +2255,10 @@
     "src/server/query_refresh.h": "e9508ec752fc826ed93079d1b9a9b12589631fe6eee9e5a81eef922f65ceff16",
     "src/server/raft_host.c": "9e9b8c70f51d0b56aec799e1bc4bcabf116c85689a116e9630e85c4b252155de",
     "src/server/read_index_pair_remote.h": "617194c8f2519ecfc0279503be164ba7e8652be20a0bf0aeb75efaa9d4ee9940",
+    "src/server/read_proof.c": "fcac20a490088f9c513b92ecc0d66272964a643bcc01fe82cc2535df1706d6bb",
+    "src/server/read_proof.h": "08c72b70b04abab65d4cfb56cf12bf453781aef029a78348003ffb69512de459",
+    "src/server/read_proof_host.h": "e72ba21e9690ab4e3266adb05a3266a41d0b7e28a19f935d02a7ac5903b2934c",
+    "src/server/read_proof_impl.h": "8c0195b2995bbdbf3859fe05976568d7ecff9a9e02b1f7342fd2d6493d72b65f",
     "src/server/reclaim.c": "954a9e1f426ff2bdda1640115f0d43dafca60808117e2287227191fbd9680258",
     "src/server/recovery.c": "3f45dcaf863a7c7d655a569a669dfc400b88b4c2ed51092f58eabc59229d8a58",
     "src/server/segment_rebuild.c": "03715b15299fd2728dcbbf927d56583dd3bf5faed7878a77f7df54ea619396f0",
@@ -3024,6 +3033,7 @@
     "tests/test_read_errno.py": "149bf31cf20901ddfdc66893cbac06daa3d3e04341d13666898bce11c1fec8e8",
     "tests/test_read_failure_admission.py": "adfde462d78fda4eddc86ad976013f6f0fac42661c357d79cf13f2af4890e807",
     "tests/test_read_peer_order.py": "9281f32d2386f48567964a5f7ccdd1942053e0e7d1e142524626798c05b9dee0",
+    "tests/test_read_proof.c": "2f5a0779f0aa87d1e2949baea45f850494581280a12d27a26164b06ec9df5472",
     "tests/test_read_recorded_nodes.py": "c28b13a9ce514a6e6d667b6bd3396511e2d848c453f6568916861bfb6dfd2990",
     "tests/test_read_refs_window.py": "6f3abb2d2485cb2b1f0958f073f895ea08211e35efd0f8da7f3b2cd7637ad39d",
     "tests/test_read_retry_budget.py": "d162ba06ff7dde28a608e9b8bc6a4630573fd7a62aad2c6740f63e7d11a01342",
@@ -3210,5 +3220,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "1960e327a6b768389c62d487cfb0042999876579"
+  "source_commit": "2572796fe22c6a377384c6a2569622f8c3c3a3c4"
 }

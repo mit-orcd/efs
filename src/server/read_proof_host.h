@@ -12,8 +12,9 @@
 struct efs_raft_host;
 struct efs_msg_raft_mkfs_reply;
 
-/* The pump tick and the read bound: a request ends BUSY after
- * HOST_READ_TRIES ticks (80 x 5 ms = 400 ms); the heartbeat is 50 ms. */
+/* The pump tick and the read grant: HOST_READ_TRIES ticks (80 x 5 ms =
+ * 400 ms). Each of the leader path, the host's remote call and the applied
+ * wait gets its own grant (see read_proof.h); the heartbeat is 50 ms. */
 #define HOST_TICK_US    5000
 #define HOST_READ_TRIES 80
 
@@ -26,7 +27,8 @@ struct read_prof_acc {
  * with the leader hint to give the caller in *hint; 0 otherwise (*hint
  * untouched). */
 int read_proof_host_gate(struct efs_raft_host *h, uint8_t group, int *hint);
-/* One ReadIndex RPC to `leader` for the group; OK fills *rep. Blocks. */
+/* One remote call for the group: a retry loop of up to 400 ms over hinted
+ * peers; `leader` is a preference, -1 allowed. OK fills *rep. Blocks. */
 int read_proof_host_remote(struct efs_raft_host *h, uint8_t group, int leader,
                            struct efs_msg_raft_mkfs_reply *rep);
 /* Wake the pump so it runs a cycle now. */

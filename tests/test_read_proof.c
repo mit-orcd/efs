@@ -91,7 +91,8 @@ struct efs_raft_host {
     /* gate */
     int gate_block, gate_hint, gate_calls;
     /* remote read */
-    int remote_rc, remote_hint, remote_calls;
+    int remote_rc, remote_hint, remote_calls, remote_leader, kicks_at_remote;
+    struct efs_raft core0; /* group 0, slot 0 */
     uint64_t remote_index;
     /* kick */
     int kicks;
@@ -108,8 +109,8 @@ struct efs_raft_host {
 int read_proof_host_gate(struct efs_raft_host *h, uint8_t group, int *hint)
 {
     (void)group;
-    h->gate_calls++;
-    if (h->on_gate && h->gate_calls == h->on_gate_call)
+    int n = __atomic_add_fetch(&h->gate_calls, 1, __ATOMIC_SEQ_CST);
+    if (h->on_gate && n == h->on_gate_call)
         h->on_gate(h);
     if (!h->gate_block)
         return 0;
@@ -120,8 +121,10 @@ int read_proof_host_gate(struct efs_raft_host *h, uint8_t group, int *hint)
 int read_proof_host_remote(struct efs_raft_host *h, uint8_t group, int leader,
                            struct efs_msg_raft_mkfs_reply *rep)
 {
-    (void)group; (void)leader;
-    h->remote_calls++;
+    (void)group;
+    __atomic_add_fetch(&h->remote_calls, 1, __ATOMIC_SEQ_CST);
+    h->remote_leader = leader;
+    h->kicks_at_remote = h->kicks;
     if (h->on_remote)
         h->on_remote(h);
     if (h->remote_rc == EFS_OK) {
@@ -142,7 +145,7 @@ int read_proof_host_wait_applied(struct efs_raft_host *h, uint8_t group,
                                  uint64_t idx, int *hint)
 {
     (void)group; (void)hint;
-    h->applied_calls++;
+    __atomic_add_fetch(&h->applied_calls, 1, __ATOMIC_SEQ_CST);
     h->applied_idx = idx;
     return h->applied_rc;
 }
@@ -254,8 +257,11 @@ static void req_join(struct req *q)
  * lock until the wait releases it, so the lock is granted only then. */
 static void wait_asleep(struct efs_raft_host *h)
 {
-    while (!group_view_waiting(h->gv))
+    /* bounded: a reader that returned early would otherwise spin us forever */
+    for (long i = 0; !group_view_waiting(h->gv); i++) {
+        assert(i < 2000000L && "the reader is not asleep (it returned early)");
         sched_yield();
+    }
     group_view_wait_lock(h->gv);
     group_view_wait_unlock(h->gv);
 }
@@ -298,7 +304,11 @@ static void test_follower_asks_leader_and_applies(void)
     h->remote_hint = 2;
     assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_OK);
     assert(h->remote_calls == 1 && h->applied_calls == 1 && h->applied_idx == 7);
-    assert(hint == 2 && !h->kicks);
+    assert(hint == 2 && !h->kicks && h->remote_leader == 2);
+    /* leader unknown: the call is still made, with -1 */
+    h->core.leader = -1;
+    publish(h);
+    assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_OK && h->remote_leader == -1);
     free_host(h);
 }
 
@@ -330,7 +340,7 @@ static void test_follower_leader_is_self_refuses(void)
 }
 
 /* ---- S9/S11: asking the leader ----------------------------------------- */
-static void test_follower_result_redirects_leader(void)
+static void test_follower_busy_apply_names_another_leader(void)
 {
     struct efs_raft_host *h = new_host();
     int hint = -9;
@@ -388,7 +398,7 @@ static void test_admission_overflow_is_busy(void)
 }
 
 /* ---- S3: request ------------------------------------------------------- */
-static void test_request_raises_ri_request_once_and_kicks(void)
+static void test_request_is_raised_once_and_kicks(void)
 {
     /* The view says round 4 began (the admission reads it) and shows round 5
      * already proven, so each request returns at its first check. Readers of
@@ -492,7 +502,7 @@ static void test_failed_begin_publishes_nothing_and_is_retried(void)
 }
 
 /* ---- S5: check ---------------------------------------------------------- */
-static void test_covered_read_returns_proven_index(void)
+static void test_read_returns_ok_once_applied_reaches_the_floor(void)
 {
     struct efs_raft_host *h = new_host();
     struct req q;
@@ -652,21 +662,6 @@ static void follower_view(struct efs_raft_host *h)
     publish(h);
 }
 
-static void test_loses_leadership_at_gate(void)
-{
-    /* S0: the role changes between the caller and the first view copy: a
-     * request that arrives while following asks the leader */
-    struct efs_raft_host *h = new_host();
-    int hint = -9;
-
-    publish(h);
-    h->on_gate = follower_view;
-    h->on_gate_call = 1;
-    assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_OK);
-    assert(h->remote_calls == 1 && !h->kicks);
-    free_host(h);
-}
-
 static void test_loses_leadership_after_admission(void)
 {
     /* S3: leadership goes while the reader raises its request (the kick): the
@@ -728,6 +723,16 @@ static void test_loses_leadership_while_checking_with_floor(void)
         if (proof_only) {
             /* proof_only returns at the quorum: the floor never waits */
             finish_round(h, 5, 12, 3);
+        } else {
+            /* the finished round is published while apply is still owed (8 < 12):
+             * the pump's scan freezes the floor in the slot and does not wake
+             * the reader, which stays asleep (it would have returned if the
+             * proof counted as complete); only then does the role flip. The
+             * frozen floor itself is private: test_frozen_floor_survives_a_
+             * later_round pins it. */
+            publish_and_wake(h);
+            wait_asleep(h); /* published, not enough: still asleep */
+            assert(!h->remote_calls && !h->applied_calls);
         }
         h->core.role = EFS_RAFT_FOLLOWER;
         h->core.leader = 2;
@@ -779,6 +784,224 @@ static void test_leadership_changes_while_asking_leader(void)
     free_host(h);
 }
 
+
+static void block_gate(struct efs_raft_host *h)
+{
+    h->gate_block = 1;
+    h->gate_hint = 5;
+}
+
+static void new_term_follower(struct efs_raft_host *h)
+{
+    h->core.term = 4;
+    h->core.role = EFS_RAFT_FOLLOWER;
+    h->core.leader = 2;
+    publish(h);
+}
+
+struct pairreq {
+    struct efs_raft_host *h;
+    int rc, hint;
+    pthread_t t;
+};
+
+static void *pair_main(void *p)
+{
+    struct pairreq *q = p;
+
+    q->rc = read_proof_read_pair(&q->h->rp, 0, GROUP, &q->hint);
+    return NULL;
+}
+
+static void pair_start(struct pairreq *q, struct efs_raft_host *h)
+{
+    memset(q, 0, sizeof(*q));
+    q->h = h;
+    assert(!pthread_create(&q->t, NULL, pair_main, q));
+}
+
+/* ---- what the admission and the check compare against ------------------- */
+static void test_proof_must_cover_the_arrival_commit(void)
+{
+    /* want = the commit seen on arrival (10). A finished round 5 whose index is
+     * 9 does not cover it; round 6 at 11 does. */
+    struct efs_raft_host *h = new_host();
+    struct efs_raft *cores[2];
+    struct req q;
+
+    publish(h);
+    req_start(&q, h, 1);
+    wait_asleep(h);
+    cores_of(h, cores, 1);
+    assert(read_proof_start_requested(&h->rp, cores) == 2u);
+    finish_round(h, 5, 9, 9);
+    h->core.commit = 10;
+    publish_and_wake(h);
+    wait_asleep(h); /* published, not enough: still asleep */
+    finish_round(h, 6, 11, 11);
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK && q.index == 11);
+    free_host(h);
+}
+
+static void test_begun_round_ahead_of_the_view_is_waited_for(void)
+{
+    /* A round was begun (the owner's begun counter = 6) that the published view does not show
+     * yet (read_round 4). The reader needs round 7: a proof of round 6 is
+     * not enough. */
+    struct efs_raft_host *h = new_host();
+    struct efs_raft *cores[2];
+    struct req q;
+
+    publish(h);
+    h->core.read_round = 5;
+    assert(read_proof_begin(&h->rp, GROUP, &h->core) == EFS_OK); /* counter = 6 */
+    h->core.read_round = 4;
+    h->core.read_pending = 0;
+    req_start(&q, h, 1);
+    wait_asleep(h);
+    assert(h->kicks == 1);
+    finish_round(h, 6, 12, 12);
+    publish_and_wake(h);
+    wait_asleep(h); /* published, not enough: still asleep */
+    cores_of(h, cores, 1);
+    finish_round(h, 7, 13, 13);
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK && q.index == 13);
+    free_host(h);
+}
+
+static void test_read_covered_by_round_waits_for_apply(void)
+{
+    /* read_epoch 0 (no context): no floor is frozen, and the covering-round
+     * test applies: the proof is used only once applied reaches it. */
+    struct efs_raft_host *h = new_host();
+    struct req q;
+
+    h->core.read_context = 0;
+    publish(h);
+    req_start(&q, h, 0);
+    wait_asleep(h);
+    finish_round(h, 5, 12, 8);
+    h->core.read_context = 0;
+    publish_and_wake(h);
+    wait_asleep(h); /* published, not enough: still asleep */
+    assert(!h->remote_calls);
+    h->core.applied = 12;
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK && !h->remote_calls);
+    free_host(h);
+}
+
+static void test_gate_refuses_on_a_later_pass(void)
+{
+    struct efs_raft_host *h = new_host();
+    int hint = -9;
+
+    publish(h);
+    h->on_gate = block_gate;
+    h->on_gate_call = 2; /* the first call is before the loop */
+    assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_ERR_NOT_PRIMARY && hint == 5);
+    assert(h->gate_calls == 2 && !h->kicks && !h->remote_calls);
+    free_host(h);
+}
+
+static void test_new_term_on_the_admission_pass_refuses_with_the_old_hint(void)
+{
+    /* The view copy of the pass says leader, term 3, leader 0 (this member).
+     * The gate hook publishes term 4, a follower, leader 2 before the
+     * admission. The re-read after admission shows term 4: only the term is
+     * tested there; the hint is the older copy's. */
+    struct efs_raft_host *h = new_host();
+    int hint = -9;
+
+    publish(h);
+    h->on_gate = new_term_follower;
+    h->on_gate_call = 2;
+    assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_ERR_NOT_PRIMARY);
+    assert(hint == 0 && h->kicks == 1 && !h->remote_calls);
+    free_host(h);
+}
+
+static void test_role_change_in_the_same_term_is_acted_on_at_the_next_pass(void)
+{
+    struct efs_raft_host *h = new_host();
+    int hint = -9;
+
+    publish(h);
+    h->on_gate = follower_view; /* same term 3, now a follower of member 2 */
+    h->on_gate_call = 2;
+    assert(read_proof_read(&h->rp, GROUP, &hint) == EFS_OK);
+    assert(h->kicks == 1 && h->remote_calls == 1 && h->remote_leader == 2);
+    free_host(h);
+}
+
+/* ---- read_proof_read_pair ------------------------------------------------ */
+static void publish0(struct efs_raft_host *h)
+{
+    host_publish_view(h->gv, 0, &h->core0);
+}
+
+static void test_pair_without_a_replica_uses_the_scalar_path(void)
+{
+    struct efs_raft_host *h = new_host();
+    int hint = -9;
+
+    publish(h); /* group 2 hosted, group 0 not */
+    assert(read_proof_read_pair(&h->rp, 0, GROUP, &hint) == EFS_ERR_NOT_PRIMARY);
+    assert(hint == -1 && !h->remote_calls && !h->kicks);
+    free_host(h);
+}
+
+static void test_pair_of_followers_asks_both_leaders(void)
+{
+    struct efs_raft_host *h = new_host();
+    int hint = -9;
+
+    h->core0 = h->core;
+    h->core0.role = EFS_RAFT_FOLLOWER;
+    h->core0.leader = 3;
+    h->core.role = EFS_RAFT_FOLLOWER;
+    h->core.leader = 2;
+    publish0(h);
+    publish(h);
+    assert(read_proof_read_pair(&h->rp, 0, GROUP, &hint) == EFS_OK);
+    assert(h->remote_calls == 2 && h->applied_calls == 2 && !h->kicks);
+    free_host(h);
+}
+
+static void note_kicks(struct efs_raft_host *h) { (void)h; }
+
+static void test_pair_requests_the_led_group_before_asking_the_other(void)
+{
+    /* group 0 follows (asks its leader), group 2 leads: both are admitted
+     * and the round of group 2 is requested before the remote call. */
+    struct efs_raft_host *h = new_host();
+    struct efs_raft *cores[2];
+    struct pairreq q;
+
+    h->core0 = h->core;
+    h->core0.role = EFS_RAFT_FOLLOWER;
+    h->core0.leader = 3;
+    publish0(h);
+    publish(h);
+    h->on_kick = note_kicks;
+    pair_start(&q, h);
+    wait_asleep(h);
+    assert(h->kicks == 1 && h->remote_calls == 1 && h->kicks_at_remote == 1);
+    cores[0] = NULL;
+    cores[1] = &h->core;
+    assert(read_proof_start_requested(&h->rp, cores) == 2u);
+    finish_round(h, 5, 12, 12);
+    publish_and_wake(h);
+    assert(!pthread_join(q.t, NULL));
+    assert(q.rc == EFS_OK);
+    free_host(h);
+}
+
 /* ---- driver --------------------------------------------------------------- */
 static int g_argc, g_list;
 static char **g_argv;
@@ -814,26 +1037,34 @@ int main(int argc, char **argv)
     RUN(test_follower_asks_leader_and_applies);
     RUN(test_follower_proof_endpoint_never_forwards);
     RUN(test_follower_leader_is_self_refuses);
-    RUN(test_follower_result_redirects_leader);
+    RUN(test_follower_busy_apply_names_another_leader);
     RUN(test_admission_takes_view_commit_and_next_round);
     RUN(test_admission_overflow_is_busy);
-    RUN(test_request_raises_ri_request_once_and_kicks);
+    RUN(test_request_is_raised_once_and_kicks);
     RUN(test_start_requested_begins_when_previous_quorum_done);
     RUN(test_start_requested_skips_unled_and_unhosted);
     RUN(test_failed_begin_publishes_nothing_and_is_retried);
-    RUN(test_covered_read_returns_proven_index);
+    RUN(test_read_returns_ok_once_applied_reaches_the_floor);
     RUN(test_frozen_floor_survives_a_later_round);
     RUN(test_proof_only_returns_quorum_index_before_apply);
     RUN(test_context_change_refuses);
     RUN(test_term_change_refuses);
     RUN(test_waits_in_slot_and_wakes_on_publish);
     RUN(test_replica_gone_while_asleep);
-    RUN(test_loses_leadership_at_gate);
     RUN(test_loses_leadership_after_admission);
     RUN(test_loses_leadership_after_request);
     RUN(test_loses_leadership_while_checking_with_floor);
     RUN(test_loses_leadership_while_asleep);
     RUN(test_leadership_changes_while_asking_leader);
+    RUN(test_proof_must_cover_the_arrival_commit);
+    RUN(test_begun_round_ahead_of_the_view_is_waited_for);
+    RUN(test_read_covered_by_round_waits_for_apply);
+    RUN(test_gate_refuses_on_a_later_pass);
+    RUN(test_new_term_on_the_admission_pass_refuses_with_the_old_hint);
+    RUN(test_role_change_in_the_same_term_is_acted_on_at_the_next_pass);
+    RUN(test_pair_without_a_replica_uses_the_scalar_path);
+    RUN(test_pair_of_followers_asks_both_leaders);
+    RUN(test_pair_requests_the_led_group_before_asking_the_other);
     RUN(test_deadline_returns_busy);
     if (g_list)
         return 0;

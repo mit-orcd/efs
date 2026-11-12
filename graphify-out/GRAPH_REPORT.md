@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `1960e327a6b768389c62d487cfb0042999876579`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 19,551 nodes, 82,599 directed typed edges, 584 communities.
+Source base: `2572796fe22c6a377384c6a2569622f8c3c3a3c4`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 19,672 nodes, 83,067 directed typed edges, 619 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -20,33 +20,33 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
 - `affects`: 8
 - `answered_by`: 13
-- `calls`: 28531
+- `calls`: 28693
 - `case_of`: 118
-- `contains`: 28791
-- `contract`: 46
-- `defines`: 2055
+- `contains`: 29011
+- `contract`: 47
+- `defines`: 2064
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 182
-- `implemented_by`: 140
-- `imports`: 8524
+- `implemented_by`: 141
+- `imports`: 8548
 - `imports_from`: 1051
 - `indirect_call`: 754
 - `inherits`: 17
 - `invokes`: 2
-- `mentions_symbol`: 5301
+- `mentions_symbol`: 5333
 - `method`: 687
 - `rationale_for`: 1501
 - `references`: 2246
-- `references_path`: 1366
+- `references_path`: 1383
 - `regression_for`: 8
-- `tested_by`: 1142
+- `tested_by`: 1144
 - `uses`: 101
 
 ## Extraction warnings
 
 - warning: 1 file(s) had syntax errors and may be partially extracted: include/efs/protocol.h (error region at line 340, 861 symbol(s) extracted)
-- warning: 78 code file(s) yielded no symbols (0.26 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+73 more)
+- warning: 80 code file(s) yielded no symbols (0.27 MB) — a data file, or source this extractor models no symbols for: include/efs/batch_obs.h, include/efs/checksum.h, include/efs/dir_layout.h, include/efs/erasure.h, include/efs/frag_record.h (+75 more)
 
 ## Limits
 

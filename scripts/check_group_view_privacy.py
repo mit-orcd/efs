@@ -35,7 +35,7 @@ OWNERS = [
                 "tests/test_raft_read_admission.py", "tests/test_readindex_admission.py",
                 "tests/test_readindex_coalescer.py", "tests/test_readindex_pair.py",
                 "tests/test_readindex_remote_pair.py", "tests/test_readindex_result.py",
-                "tests/test_readindex_tickets.py", "tests/test_read_proof.c"},
+                "tests/test_readindex_tickets.py"},
      "slot": None},
 ]
 ME = "scripts/check_group_view_privacy.py"
