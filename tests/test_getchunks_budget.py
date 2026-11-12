@@ -33,6 +33,7 @@ static void test_free(void *p) {if(p)freed++;free(p);}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n) {(void)n;return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t shard,efs_node_id_t *n,efs_node_id_t skip) {(void)shard;selections++;last_skip=skip;*n=skip==1?2:1;return no_conn?NULL:&connection;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;drops++;}
+static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;} /* K114 fix 2: the hook is the node cache's */
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;releases++;}
 static int rpc_prof_enabled(void) {return 0;}
 static unsigned long long rpc_prof_now_us(void) {return now*1000;}

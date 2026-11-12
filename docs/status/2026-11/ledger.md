@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K114 fix 2: read-only receive sites join the cut](ledger/20261111-016-k114-fix2-read-sites.md): **fix, Nov 11 (Task GC), K114 stays OPEN**
 - [Wave 84 merge](ledger/20261111-015-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `07bab2095`)**
 - [Task V4 read-proof ownership design](ledger/20261111-014-read-proof-ownership.md): **design only, no code moved**
 - [Wave 83 merge](ledger/20261111-013-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `ddf3a5d22`)**

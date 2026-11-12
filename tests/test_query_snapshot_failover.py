@@ -30,6 +30,7 @@ static struct efs_conn *efs_client_conn_get(efs_node_id_t n){
 static struct efs_conn *raft_voter_conn(efs_ino_t ino,efs_node_id_t*n){(void)ino;*n=1;return efs_client_conn_get(1);}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){assert(n==c->node);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){assert(n==c->node);}
+static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn *c) {(void)n;(void)c;} /* K114 fix 2: the hook is the node cache's */
 static int efs_client_rpc_past_deadline(void){return past;}
 static int rpc_writer_retry_pause(unsigned a){(void)a;return past?EFS_ERR_BUSY:EFS_OK;}
 int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){
