@@ -6,15 +6,18 @@
 /* What the read-proof owner (read_proof.h) needs from the host
  * (raft_host.c): six functions and two constants. raft_host.c defines them;
  * tests/test_read_proof.c defines fakes. The owner calls nothing else of the
- * host and reads no host field. Every function is called with no host lock
- * held, from any request thread, unless it says otherwise. */
+ * host and reads two host fields through the pointers given to
+ * read_proof_init: the member id (final before start) and the member count
+ * (atomic). Every function is called with no host lock held, from any request
+ * thread, unless it says otherwise. */
 
 struct efs_raft_host;
 struct efs_msg_raft_mkfs_reply;
 
 /* The pump tick and the read grant: HOST_READ_TRIES ticks (80 x 5 ms =
- * 400 ms). Each of the leader path, the host's remote call and the applied
- * wait gets its own grant (see read_proof.h); the heartbeat is 50 ms. */
+ * 400 ms). Each of the leader path, a wait for a call in flight, the host's
+ * remote call and the applied wait gets its own grant (see read_proof.h);
+ * the heartbeat is 50 ms. */
 #define HOST_TICK_US    5000
 #define HOST_READ_TRIES 80
 

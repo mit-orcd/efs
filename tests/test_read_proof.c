@@ -339,7 +339,7 @@ static void test_follower_leader_is_self_refuses(void)
     free_host(h);
 }
 
-/* ---- S9/S11: asking the leader ----------------------------------------- */
+/* ---- S9: asking the leader ----------------------------------------- */
 static void test_follower_busy_apply_names_another_leader(void)
 {
     struct efs_raft_host *h = new_host();
@@ -452,7 +452,10 @@ static void test_start_requested_begins_when_previous_quorum_done(void)
     assert(h->core.read_round == 5 && h->core.begins == 1);
     host_view_get(h->gv, GROUP, &v);
     assert(v.stamp != stamp && v.read_round == 5 && v.read_pending); /* published */
-    /* the request is satisfied: nothing more to start */
+    /* a pending round starts nothing */
+    assert(read_proof_start_requested(&h->rp, cores) == 0u && h->core.begins == 1);
+    /* the round is done and meets the request: nothing more to start */
+    finish_round(h, 5, 12, 12);
     assert(read_proof_start_requested(&h->rp, cores) == 0u && h->core.begins == 1);
     free_host(h);
 }
@@ -913,8 +916,8 @@ static void test_new_term_on_the_admission_pass_refuses_with_the_old_hint(void)
 {
     /* The view copy of the pass says leader, term 3, leader 0 (this member).
      * The gate hook publishes term 4, a follower, leader 2 before the
-     * admission. The re-read after admission shows term 4: only the term is
-     * tested there; the hint is the older copy's. */
+     * admission. The re-read after admission shows term 4: the role is not
+     * tested on that copy, the term is; the hint is the older copy's. */
     struct efs_raft_host *h = new_host();
     int hint = -9;
 
@@ -1020,6 +1023,83 @@ static int run_case(const char *name)
             hit = g_used[i] = 1;
     return hit;
 }
+
+/* S5: a reader that meets "quorum done, apply owed" AWAKE (published inside
+ * the gate call of its second pass) must go to sleep, not return; it returns
+ * once applied reaches the floor. */
+static void quorum_apply_owed(struct efs_raft_host *h)
+{
+    finish_round(h, 5, 12, 8);
+    publish(h);
+}
+static void test_awake_reader_with_floor_waits_for_apply(void)
+{
+    struct efs_raft_host *h = new_host();
+    struct req q;
+
+    publish(h);
+    h->on_gate = quorum_apply_owed;
+    h->on_gate_call = 2;
+    req_start(&q, h, 0);
+    wait_asleep(h); /* a reader that returned never sleeps: the bound asserts */
+    h->on_gate = NULL;
+    h->core.applied = 12;
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK);
+    free_host(h);
+}
+/* S5 with no read context: the covering-round row decides, and it also waits
+ * for apply. */
+static void quorum_apply_owed_ctx0(struct efs_raft_host *h)
+{
+    finish_round(h, 5, 12, 8);
+    h->core.read_context = 0;
+    publish(h);
+}
+static void test_awake_reader_covered_waits_for_apply(void)
+{
+    struct efs_raft_host *h = new_host();
+    struct req q;
+
+    h->core.read_context = 0;
+    publish(h);
+    h->on_gate = quorum_apply_owed_ctx0;
+    h->on_gate_call = 2;
+    req_start(&q, h, 0);
+    wait_asleep(h);
+    h->on_gate = NULL;
+    h->core.applied = 12;
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK && !h->remote_calls);
+    free_host(h);
+}
+/* S1 before S5: a sleeper with a frozen floor (12, applied 8); ONE publish
+ * shows a follower AND applied 12. The role is tested first: the read asks
+ * the new leader instead of returning on the covered floor. */
+static void test_role_change_beats_a_covered_floor_in_one_publish(void)
+{
+    struct efs_raft_host *h = new_host();
+    struct efs_raft *cores[2];
+    struct req q;
+
+    publish(h);
+    req_start(&q, h, 0);
+    wait_asleep(h);
+    cores_of(h, cores, 1);
+    assert(read_proof_start_requested(&h->rp, cores) == 2u);
+    finish_round(h, 5, 12, 8);
+    publish_and_wake(h); /* floor frozen in the slot, no wake */
+    h->core.applied = 12;
+    h->core.role = EFS_RAFT_FOLLOWER;
+    h->core.leader = 2;
+    publish_and_wake(h);
+    req_join(&q);
+    assert(q.rc == EFS_OK && h->remote_calls == 1 && h->applied_calls == 1);
+    free_host(h);
+}
+
 #define RUN(fn) do { if (run_case(#fn)) fn(); } while (0)
 
 int main(int argc, char **argv)
@@ -1059,6 +1139,9 @@ int main(int argc, char **argv)
     RUN(test_proof_must_cover_the_arrival_commit);
     RUN(test_begun_round_ahead_of_the_view_is_waited_for);
     RUN(test_read_covered_by_round_waits_for_apply);
+    RUN(test_awake_reader_with_floor_waits_for_apply);
+    RUN(test_awake_reader_covered_waits_for_apply);
+    RUN(test_role_change_beats_a_covered_floor_in_one_publish);
     RUN(test_gate_refuses_on_a_later_pass);
     RUN(test_new_term_on_the_admission_pass_refuses_with_the_old_hint);
     RUN(test_role_change_in_the_same_term_is_acted_on_at_the_next_pass);

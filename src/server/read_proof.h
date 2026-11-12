@@ -23,47 +23,60 @@
  * a follower it asks the leader (one coalesced remote call per round), then
  * the host's applied wait. It never takes h->mu. 400 ms (HOST_READ_TRIES x
  * HOST_TICK_US) bounds the leader path (S2 to S6) and a wait for another
- * caller's RPC. A follower read adds the host's remote call (own 400 ms) and
- * the applied wait (own 400 ms): about 800 ms, about 1.2 s when a sleeper
- * turns follower; a pair may run two in sequence. No caller cancellation.
+ * caller's RPC. A follower read waits up to that deadline for a call in
+ * flight, then makes the host's remote call (own 400 ms) and the applied wait
+ * (own 400 ms): about 800 ms when no call is in flight on arrival, about
+ * 1.2 s otherwise or when a sleeper turns follower. All are upper bounds: an
+ * inherited net deadline shortens the remote call. A pair may run two in
+ * sequence. No caller cancellation.
  *
  * State table. Each pass of the loop reads a fresh copy of the view and tests
  * the rows in order, except as S2 says.
  *  S0 gate    host gate refuses (damaged/incompatible group): NOT_PRIMARY with
  *             the host's hint. No replica (has == 0): NOT_PRIMARY. Every pass.
  *  S1 follower  role != leader. proof_only or leader == self: NOT_PRIMARY.
- *             Else ask the leader (S9). Reached at the first pass that sees a
- *             role change (S5 may return OK first on a covered frozen floor).
+ *             Else ask the leader (S9). Reached at the top of the first pass
+ *             whose copy shows role != leader. The role is tested before S5,
+ *             so a frozen floor never wins over a role change the copy shows.
+ *             A pass on an older copy finishes on it (S2 excepted).
  *  S2 not admitted  leader, round == 0. Takes want = commit, round = begun+1,
- *             term from the view. ri_begun at its limit: BUSY. A group without
- *             a slot: the view is re-read and the loop repeats; only S0's
- *             no-replica rule ends it, which cannot happen while both owners
- *             attach the same ids. S2 then re-reads the view; on that copy
- *             only the term is tested. A new term returns NOT_PRIMARY at
+ *             term from the view. The larger of ri_begun and the view's read
+ *             round at its limit: BUSY. A group without a slot: the view is
+ *             re-read and the loop spins, with no sleep and no deadline, until
+ *             S0 or S1 ends it; it cannot happen while both owners attach the
+ *             same ids. S2 then re-reads the view. S0 and S1 (gate, replica,
+ *             role) are not tested on that copy; S3, the term and all of S5
+ *             are. A new term returns NOT_PRIMARY at
  *             once, with the hint of the older copy (it may name this
  *             member), even if the role changed too. A role change in the
  *             same term is acted on at the next pass.
  *  S3 admitted, not requested  raises ri_request to round once (CAS) and
  *             kicks the pump; readers of one round share the raise and kick.
- *  S4 requested  the pump (read_proof_start_requested, with h->mu) begins the
+ *  S4 requested  the pump, or the read-ack path host_read_control on a
+ *             receive thread (read_proof_start_requested, with h->mu), begins the
  *             round once the previous one has its quorum, if the core still
  *             leads; else ri_request stays raised. A refused begin is
  *             retried; the reader meanwhile is in S5/S6, ends at its deadline.
  *  S5 check   term != admitted term: NOT_PRIMARY. Read context changed (the
  *             core's read_epoch: config change, storage failure, 0 when not
  *             leader): NOT_PRIMARY. A frozen floor with applied >= floor (or
- *             proof_only): OK(floor). proof_only quorum: OK. A covering
- *             round: OK(proven index). Past the deadline: BUSY. Else S6.
+ *             proof_only): OK(floor). With read context 0 only (with a
+ *             non-zero context the floor row decides first):
+ *             proof_only quorum: OK; a covering round: OK(proven index).
+ *             Past the deadline: BUSY. Else S6.
  *  S6 asleep  mode-3 slot, registered under the wait bracket after a re-read.
- *             Woken by the pump's publish when host_read_floor_ready holds
+ *             Woken by a publish and wake (the pump's cycle end or
+ *             host_read_control) when host_read_floor_ready holds
  *             (replica gone, role, term or context changed, proof
- *             sufficient), else by the deadline. Host stop: while the pump
- *             runs, host_stop_leading steps down and publishes; that cycle's
- *             end wakes the sleeper, which goes to S1 (leader -1). After
- *             server_raft_host_stop joins the pump the cores are freed and
- *             nothing is published or woken: a sleeper ends at its deadline
- *             (at most 400 ms) with BUSY. No run-time path publishes has == 0.
- *  S8 done    OK, NOT_PRIMARY or BUSY; nothing held; ri_request stays raised
+ *             sufficient), else by the deadline. Host stop: while handlers
+ *             drain the pump still runs; host_stop_leading steps down and
+ *             publishes, a wake follows in that cycle, the sleeper goes to S1
+ *             (leader -1). server_raft_host_stop must run with no request
+ *             alive: after the pump join it destroys the group view, frees
+ *             the host and wakes nobody. efsd guarantees that by draining the
+ *             connection handlers first. No run-time path publishes has == 0.
+ *  S8 done    OK, NOT_PRIMARY, BUSY or a passed-through code of the remote
+ *             call; nothing held; ri_request stays raised
  *             (the pump may run one round nobody waits for).
  *  S9 asking the leader  one remote call per round, leaf lock released
  *             across it; `leader` is a preference, -1 allowed. Callers of the
@@ -102,7 +115,8 @@
  * wait (host_wait_applied, mode 0) belongs to the host.
  *
  * Locks: h->mu, then the group view's two locks (the order is in
- *   group_view.h). The request side takes no host lock; the leaf lock
+ *   group_view.h). The request side never takes h->mu (the host's remote
+ *   call takes the server's node-table and peer-pool locks); the leaf lock
  *   g_ri_coal[].mu is released across the RPC; the pair path's
  *   host_read_pair_mu (read_index_pair_remote.h) guards its worker pool only.
  *   start_requested and begin need h->mu.

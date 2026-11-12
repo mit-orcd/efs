@@ -225,11 +225,11 @@ Historical October 22 legend (retained):
 | K103 | Task FB (found while diagnosing K38, Nov 10) | performance / Raft read path | FIXED | no | [K103](k/K103.md) |
 | K104 | Wave 70 merge gate (Nov 10, node9900, `b4bafedae`) | availability with one member unresponsive | FIXED | no | [K104](k/K104.md) |
 | K105 | Packer read error on a fresh small file fails D4 (cause inferred) | packer / small-file read, possibly data availability | VERIFY | no | [K105](k/K105.md) |
-| K106 | Request in flight to a halted member waits the 30 s transport timeout | availability with one member unresponsive | VERIFY | yes | [K106](k/K106.md) |
+| K106 | Request in flight to a halted member waits the 30 s transport timeout | availability with one member unresponsive | OPEN | yes | [K106](k/K106.md) |
 | K107 | Wave 72 merge (Nov 10, amd, TSan lane) | server / Raft host view, TSan lane | FIXED | no | [K107](k/K107.md) |
 | K108 | Snapshot import holds the whole key diff in memory (13.41 GiB peak) | server / resource bound | VERIFY | yes | [K108](k/K108.md) |
 | K109 | A stalled member's storage-fence error fails every clean unmount | server, client / clean stop with one member slow | VERIFY | yes | [K109](k/K109.md) |
-| K110 | fsync returns EIO after sequential SIGKILLs of members | durability proof / fsync availability across member restarts | VERIFY | yes | [K110](k/K110.md) |
+| K110 | fsync returns EIO after sequential SIGKILLs of members | durability proof / fsync availability across member restarts | OPEN | yes | [K110](k/K110.md) |
 | K111 | fsync stays EIO for good after a second kill inside a barrier window | durability proof / fsync availability across member restarts | OPEN | no | [K111](k/K111.md) |
 | K112 | One of three RDMA stop loops refused 20 of 20 clean stops (20 s budget) | clean stop on a healthy cluster / transaction retry | VERIFY | yes | [K112](k/K112.md) |
 | K113 | Snapshot rejoin never completes under sustained load (import restarts) | server / Raft snapshot rejoin under load | VERIFY | yes | [K113](k/K113.md) |
@@ -242,9 +242,10 @@ Historical October 22 legend (retained):
 | K120 | A blocking FLOCK that is sent again queues a second waiter | client, metadata / file locks under retry | OPEN | no | [K120](k/K120.md) |
 | K121 | A mutation the caller gave up on can still be applied later | client, metadata / late execution after a failed retry | OPEN | yes | [K121](k/K121.md) |
 | K122 | A late REPORT copy can publish a superseded object over a newer one | client, metadata / publication under retry | OPEN | yes | [K122](k/K122.md) |
-| K123 | TSan lane: packer moves none of the refused files after a member returns | test lane / packer after a member returns (TSan only) | OPEN | no | [K123](k/K123.md) |
+| K123 | TSan lane: packer moves none of the refused files after a member returns | test lane / packer after a member returns (TSan only) | FIXED | no | [K123](k/K123.md) |
+| K124 | TSan: unsynchronized retire counters (finisher against recovery thread) | data race on statistics counters (TSan lane) | FIXED | no | [K124](k/K124.md) |
 
-Current counts: 45 FIXED / 21 VERIFIED / 42 VERIFY / 3 CLOSED / 4 DECIDED / 8 OPEN (123 rows).
+Current counts: 47 FIXED / 21 VERIFIED / 40 VERIFY / 3 CLOSED / 4 DECIDED / 9 OPEN (124 rows).
 <!-- K-REGISTER:END -->
 
 

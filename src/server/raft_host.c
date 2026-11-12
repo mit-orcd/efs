@@ -9409,10 +9409,11 @@ static void host_txn_retire(struct efs_raft_host *h, const struct efs_txid *t,
 
     pack_retire(cmd, t, coord);
     rc = host_bg_propose(h, efs_raft_shard_group(coord), cmd, HOST_RETIRE_LEN, 0);
+    /* Finisher and recovery threads both retire: statistics, relaxed. */
     if (rc == EFS_OK)
-        h->dec_retired++;
+        __atomic_fetch_add(&h->dec_retired, 1, __ATOMIC_RELAXED);
     else
-        h->dec_retire_fail++;
+        __atomic_fetch_add(&h->dec_retire_fail, 1, __ATOMIC_RELAXED);
 }
 
 static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it)
