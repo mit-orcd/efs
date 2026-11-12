@@ -48,10 +48,13 @@ Tests: the floor case now publishes the finished round before the role flips; th
 
 Evidence files named here: `scripts/evidence/v4/functions_after_owner.txt` and `scripts/evidence/v4/functions_after_host.txt` (the function lists counted after the move) and `scripts/evidence/v4/instructions_after.txt` (the counts).
 
+Fix-round runs on host nuc (tree = branch head `c6f0c71f7`, gcc 14.3.1; raw logs `~/efs-artifacts/taskV4-20261111-c/` on nuc with `SHA256SUMS`, first attempt in `...-c-first`): `make`, `test_read_proof` and each of its 34 cases by name, `test_group_view`, the privacy check and its self-test, `make test` and the recipe test all rc 0; ASan lane PASS (1225 s). TSan lane, four runs: the first (before the atomics fix) failed `read_proof_interface` with two data races in the test's own fake host (written from two threads in the pair case; fixed with atomics, `c6f0c71f7`); the second failed `k96_status_slots_live` (a race on `h->dec_retired` in `host_txn_retire`, `raft_host.c`, between the finalizer and the recovery thread; code this task did not touch, see Findings); the third (rerun of the lane alone) failed `k37_segment_rebuild` (K123, known intermittent, not fixed here); the fourth run of the lane passed (54 run, 0 failed, 804 s) including `k96_status_slots_live`.
+
 ## Findings
 
 - Host stop wakes no read sleeper (design finding, unchanged by the move; the reader ends at its deadline). Documented, not changed.
-- `k37_segment_rebuild` (K123) intermittent: not seen in this run.
+- `k37_segment_rebuild` (K123) intermittent: seen once under TSan on nuc in the fix round; not fixed here.
+- New, unfixed: `host_txn_retire` increments `h->dec_retired` / `h->dec_retire_fail` (`raft_host.c`, L9413 at the fix round) without synchronisation from the finalizer thread (`host_fin_one`) and the recovery thread (`host_txn_decision_sweep`); TSan reported it once, inside `k96_status_slots_live` (74 s into the run). A statistics counter; no K row yet.
 
 ## History
 

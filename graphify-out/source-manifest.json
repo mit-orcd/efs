@@ -3033,7 +3033,7 @@
     "tests/test_read_errno.py": "149bf31cf20901ddfdc66893cbac06daa3d3e04341d13666898bce11c1fec8e8",
     "tests/test_read_failure_admission.py": "adfde462d78fda4eddc86ad976013f6f0fac42661c357d79cf13f2af4890e807",
     "tests/test_read_peer_order.py": "9281f32d2386f48567964a5f7ccdd1942053e0e7d1e142524626798c05b9dee0",
-    "tests/test_read_proof.c": "2f5a0779f0aa87d1e2949baea45f850494581280a12d27a26164b06ec9df5472",
+    "tests/test_read_proof.c": "de8fde90b7b174a0533b5d4a0f223ba6b85d875718602b214d171517ce9612f0",
     "tests/test_read_recorded_nodes.py": "c28b13a9ce514a6e6d667b6bd3396511e2d848c453f6568916861bfb6dfd2990",
     "tests/test_read_refs_window.py": "6f3abb2d2485cb2b1f0958f073f895ea08211e35efd0f8da7f3b2cd7637ad39d",
     "tests/test_read_retry_budget.py": "d162ba06ff7dde28a608e9b8bc6a4630573fd7a62aad2c6740f63e7d11a01342",
@@ -3220,5 +3220,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "2572796fe22c6a377384c6a2569622f8c3c3a3c4"
+  "source_commit": "c6f0c71f78420b8e6d084563aec0c7224bdf98b2"
 }
