@@ -85,7 +85,9 @@ def main():
                 r = subprocess.run([sys.executable, str(m.path / '.efs' / 'find'), 'f', '--match', 'prefix', '--json'], cwd='/',
                                    capture_output=True, timeout=120)
                 assert r.returncode == 0, r.stderr
-                return json.loads(r.stdout)['entries']  # the catalog's names, without the per-call snapshot fields
+                # the names only: size and mtime are what each member's own catalog had indexed at its last refresh, and the repeat
+                # goes to another member (a baseline of size 0 against 200800 was seen under load)
+                return sorted(e['path_hex'] for e in json.loads(r.stdout)['entries'])
             expect = op()  # the answer before the stop
         hold.write_text(f'{mtype} -1 0 {fifo}\n')
         res = {}
