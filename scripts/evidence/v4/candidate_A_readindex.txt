@@ -3,8 +3,6 @@ host_ri_complete
 host_ri_remove
 host_remote_read_index
 host_follower_read_result
-host_read_admit
-host_read_probe_needed
 host_read_note_begin
 host_read_begin_tracked
 host_read_admit_view
