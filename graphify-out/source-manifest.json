@@ -3098,7 +3098,7 @@
     "tests/test_settings_listing.py": "bb91d203109862a73638430b78d59985eaaeacf7d549a53afd6c13537f9e18c1",
     "tests/test_shared_primitives.c": "72a76e614e00427cd824a51e65b0ade2c0e1cd01fbed620a12d6b4a340577dee",
     "tests/test_shutdown_blocked_io.py": "269ffcc3aeecc22952159705fc2f9f87d53c94cc89e3262b9763388f4eef3ad5",
-    "tests/test_shutdown_bounded.py": "7904d24b40738a31dc919d88444f78f129339474048b7d82efd427f2e7f9119c",
+    "tests/test_shutdown_bounded.py": "595d0ec926422db86998c29bf9887e41567d8ca97a66319e51eee010569b89a6",
     "tests/test_shutdown_stuck_worker.py": "2207f1fd919ef1600e70fbdbaf2c2602e6b425c463ddab4724fac5d6fec793c6",
     "tests/test_sim.c": "4a9c6e7b981e13e2bded0dea9dcf8eb2a57a964b73fb07a6c8f5e34aa2cbd6ae",
     "tests/test_small_frame_receive.py": "123a77190701af527bab20c326c24567d63a3088245162da354b2ba0e6b1000c",
@@ -3206,5 +3206,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "87e25c5f068033a565dd46585d3e4014c033836c"
+  "source_commit": "666d280b1da73fc3c188ef2503506e14618b1db5"
 }
