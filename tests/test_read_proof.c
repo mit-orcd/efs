@@ -123,8 +123,8 @@ int read_proof_host_remote(struct efs_raft_host *h, uint8_t group, int leader,
 {
     (void)group;
     __atomic_add_fetch(&h->remote_calls, 1, __ATOMIC_SEQ_CST);
-    h->remote_leader = leader;
-    h->kicks_at_remote = h->kicks;
+    __atomic_store_n(&h->remote_leader, leader, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&h->kicks_at_remote, __atomic_load_n(&h->kicks, __ATOMIC_SEQ_CST), __ATOMIC_SEQ_CST);
     if (h->on_remote)
         h->on_remote(h);
     if (h->remote_rc == EFS_OK) {
@@ -136,7 +136,7 @@ int read_proof_host_remote(struct efs_raft_host *h, uint8_t group, int leader,
 
 void read_proof_host_kick(struct efs_raft_host *h)
 {
-    h->kicks++;
+    __atomic_add_fetch(&h->kicks, 1, __ATOMIC_SEQ_CST);
     if (h->on_kick)
         h->on_kick(h);
 }
@@ -146,7 +146,7 @@ int read_proof_host_wait_applied(struct efs_raft_host *h, uint8_t group,
 {
     (void)group; (void)hint;
     __atomic_add_fetch(&h->applied_calls, 1, __ATOMIC_SEQ_CST);
-    h->applied_idx = idx;
+    __atomic_store_n(&h->applied_idx, idx, __ATOMIC_SEQ_CST);
     return h->applied_rc;
 }
 
