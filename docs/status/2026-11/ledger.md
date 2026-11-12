@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K123 TSan packer after return](ledger/20261111-016-k123-tsan-packer-after-return.md): **fix, Nov 11 (Task GF): both signatures were test races, fixed in the test; 60 of 60 runs pass on amd (8 of 60 failed before); no product defect; K123 row to be updated by the coordinator**
 - [Wave 84 merge](ledger/20261111-015-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `07bab2095`)**
 - [Task V4 read-proof ownership design](ledger/20261111-014-read-proof-ownership.md): **design only, no code moved**
 - [Wave 83 merge](ledger/20261111-013-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `ddf3a5d22`)**

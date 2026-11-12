@@ -177,11 +177,15 @@ def up(c, i):
     c.wait_members([1, 2, 3], 3)
 
 
-def wait_up_status(c, timeout=60):
+def wait_status(c, *needles, timeout=60):
     end = time.time() + timeout
-    while 'Cluster state: OK (3 up, 0 down)' not in status(c, 1):
+    while not all(n in status(c, 1) for n in needles):
         assert time.time() < end, status(c, 1)
         time.sleep(0.5)
+
+
+def wait_up_status(c, timeout=60):
+    wait_status(c, 'Cluster state: OK (3 up, 0 down)', timeout=timeout)
 
 
 def batch(m, tag, n=len(SIZES)):
@@ -304,8 +308,9 @@ try:
     for g, sid, gen, fi, node in dw:
         p = seg_path(c, 3, g, sid, gen, fi)
         assert p.exists() and p.stat().st_size > 4096, p
-    st = status(c, 1)
-    assert 'Protection: full' in st and 'Cluster state: OK' in st, st
+    # The segment marks clear before the last degraded chunk is rebuilt:
+    # wait for the status the step asserts, not only for the segment count.
+    wait_status(c, 'Protection: full', 'Cluster state: OK')
     verify(c, 2, 'after the return of node 3')
     print(f'3. written with node 3 down: {len(dw)} segments written degraded and marked '
           f'(status {n3}), DEGRADED with all up while held, rebuilt on node 3, exact PASS')
@@ -361,7 +366,9 @@ try:
     (flags / 'refuse-2').unlink()
     c.restart(3)
     up(c, 3)
-    base = packed_total(c)
+    # `base` is the count taken while the files were refused: the packer
+    # resumes as soon as node 3 listens, before up() returns, so a count
+    # taken here could already include the four files.
     wait_packed(c, base, 4, 'refused files once node 3 is back', timeout=120)
     print(f'5. node 3 down and node 2 refusing: {now[2] - put_errors} copies with one durable '
           f'fragment cancelled, nothing packed or marked, files exact; packed once node 3 returned PASS')

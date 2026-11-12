@@ -1148,7 +1148,7 @@
     "tests/test_k36_recovery.py": 23,
     "tests/test_k36_segment_recovery.py": 22,
     "tests/test_k37_events.py": 2,
-    "tests/test_k37_segment_rebuild.py": 19,
+    "tests/test_k37_segment_rebuild.py": 20,
     "tests/test_k38_install_order.py": 2,
     "tests/test_k38_protection_now.py": 15,
     "tests/test_k38_report_bound.py": 2,
@@ -2777,7 +2777,7 @@
     "tests/test_k36_recovery.py": "863e5ad3b9504c8d12b9cabff0e6e4a4d5d5ce4b7b6093a34cc75e080341b468",
     "tests/test_k36_segment_recovery.py": "4d71913ecc0a1747fdfae25e8a98250284840cf5f98ca3c43a1c90fdd5c436c9",
     "tests/test_k37_events.py": "103ab79968529d788c3776cf42b6f4370f6099028b0fcfffcedecd9fab94c0d1",
-    "tests/test_k37_segment_rebuild.py": "9b77eaabd89881a429c2a4c4ee2a03927af2458c3fa03afe6bb34a83f11a31cb",
+    "tests/test_k37_segment_rebuild.py": "217dcda363559458034c91a35a1489a237585eef50b1ae1233391ab4a586529e",
     "tests/test_k38_install_order.py": "6e30e47938c126d09ccf139c483c0178ff756b552aa07954909f01af9f40f431",
     "tests/test_k38_protection_now.py": "41f27ad6a30f1b2fe5701cd8a1410a9c0d6a563726faecf4ae50cb869327e45e",
     "tests/test_k38_report_bound.py": "30936cdcdcdc69f8f1cbb1db62fd7c1f1ce804fd365be5d2b3901e2b9ae3febe",
@@ -3206,5 +3206,5 @@
   "output_tokens": 0,
   "schema": 1,
   "self_call_edges": 34,
-  "source_commit": "07bab209542b834a8f0d68b45e9ffa784efef404"
+  "source_commit": "60c9fcdada223f51acd9bf896d6a417fa290bf25"
 }
