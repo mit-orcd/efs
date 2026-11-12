@@ -8,14 +8,15 @@ Usage: test_k114_read_sites.py getchunks|query|pinned|report|mkdir|bounded (one 
  query      an unpinned query snapshot calls the hook before its receive, then repeats on another voter (skip = failed node);
  pinned     a query pinned to a token's node is not cut (its failed receive is returned, not repeated);
  report     K114 fix 3: a REPORT through rpc_send_recv_dual_once never calls the hook (K122), run by behaviour with type 67 as
-            the real caller sends it and with other lengths and bounds; the readdir, writer-view, lane-writer-view,
-            publication and receipt-query receives stay without it (text; their failure is returned to the caller, no repeat on
-            another member: docs/status/2026-11/k114-fix2-read-sites-20261111.md);
+            the real caller sends it and with other lengths and bounds; and the hook is called from exactly four places in
+            the whole file (rpc_send_recv_shard_once, efs_client_rpc_getchunks_fileid, query_snapshot_rpc, rpc_send_recv_dual_once):
+            any other receive (readdir, writer view, publication, receipt query, mutations) that gains a call fails here
+            (their failure is returned to the caller, no repeat on another member: docs/status/2026-11/k114-fix2-read-sites-20261111.md);
  mkdir      K114 fix 3: an identified INODE_CREATE (a directory) through rpc_send_recv_dual_once calls the hook once per attempt,
             and after the cut repeats on the other dual voter with the same op-id bytes;
  bounded    K114 fix 3: the same request with a bound of its own (recv_ms > 0) is not cut (the probe must not outlast it)."""
 from pathlib import Path
-import os,shlex,subprocess,sys,tempfile
+import os,re,shlex,subprocess,sys,tempfile
 sys.path.insert(0,str(Path(__file__).resolve().parent));from sanitize_env import cflags,wrap
 case=sys.argv[1];assert case in('getchunks','query','pinned','report','mkdir','bounded'),case
 root=Path(__file__).resolve().parents[1];r=(root/'src/client/inode_rpc.c').read_text()
@@ -25,10 +26,14 @@ def cut(t,x,y):
  while t.index('{',i)>t.index(';',i)or t[t.rindex('\n',0,i)+1:i].strip():i=t.index(x,i+1)
  return t[i:t.index(y,i)]
 if case=='report':
- for name,end in(('int efs_client_rpc_readdir_cur(','int efs_client_rpc_writer_view('),
-   ('int efs_client_rpc_writer_view(','int efs_client_rpc_publication_session('),('int efs_client_rpc_publication(','int efs_client_rpc_lane_writer_view('),
-   ('static int rpc_report_receipt_query(','/* REPORT rcs that say nothing')):
-  assert 'efs_client_conn_await_reply' not in cut(r,name,end),name
+ # every call of the hook in the whole file, with its enclosing function: exactly the four covered sites, no other
+ body=re.sub(r'/\*.*?\*/','',r,flags=re.S);body=re.sub(r'//[^\n]*','',body)
+ found=[]
+ for m in re.finditer(r'efs_client_conn_await_reply\(',body):
+  fns=re.findall(r'^[A-Za-z_][\w \*]*?\b(\w+)\([^;{]*?\)\s*\{',body[:m.start()],flags=re.M|re.S)
+  found.append(fns[-1])
+ want=['rpc_send_recv_shard_once','efs_client_rpc_getchunks_fileid','query_snapshot_rpc','rpc_send_recv_dual_once']
+ assert sorted(found)==sorted(want),(found,want)
 CC=shlex.split(os.environ.get('CC','cc'))
 DUAL=case in('report','mkdir','bounded')
 def build(code):

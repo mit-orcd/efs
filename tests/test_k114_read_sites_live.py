@@ -4,7 +4,7 @@
 Three loopback daemons and a mount on node 1; node 3 leads. The held member (node 3 for GETCHUNKS, node 1 for a query) carries the hold hook (EFS_FAULT_HOLD_REQUEST_FILE).
 The hook holds the first request of the type under test inside that member; the test stops it (SIGSTOP: the
 connection stays open and silent), waits for the client's node-waiter-cut line, resumes it, and asserts that the
-operation returned the answer it gave before the stop, in about 6 s and not the 30 s transport timeout.
+operation returned the answer it gave before the stop, in about 6 s (before the cut: the 30 s receive bound for the read, the 8 s command deadline with EBUSY for the query).
 Usage: test_k114_read_sites_live.py getchunks|query|mkdir (one scenario each, no argument runs all; make test-long):
  getchunks  reading a file through a fresh mount (no cached chunk map) sends GETCHUNKS: the bytes are the ones written;
  query      the `.efs/find` command of the mount sends QUERY_SNAPSHOT (an unpinned first page): the same names as before;
@@ -108,7 +108,7 @@ def main():
         t.join(timeout=60 * k.SLOW)
         assert not t.is_alive(), 'operation did not return after the member was resumed'
         assert 'error' not in res, res
-        assert res['seconds'] < 20, f"operation took {res['seconds']:.1f} s (the bound is 30 s; a cut ends it in about 6 s)"
+        assert res['seconds'] < 20, f"operation took {res['seconds']:.1f} s (30 s receive bound, 8 s command deadline for the query; a cut ends it in about 6 s)"
         if kind == 'mkdir':
             ino = (m.path / 'e').stat().st_ino  # created once: no FileExistsError above, a directory here
             assert sorted(x for x in os.listdir(m.path) if x == 'e') == ['e']
