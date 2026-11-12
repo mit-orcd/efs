@@ -5,9 +5,11 @@ Three loopback daemons and a mount on node 1; node 3 leads. The held member (nod
 The hook holds the first request of the type under test inside that member; the test stops it (SIGSTOP: the
 connection stays open and silent), waits for the client's node-waiter-cut line, resumes it, and asserts that the
 operation returned the answer it gave before the stop, in about 6 s and not the 30 s transport timeout.
-Usage: test_k114_read_sites_live.py getchunks|query (one scenario each, no argument runs both; make test-long):
+Usage: test_k114_read_sites_live.py getchunks|query|mkdir (one scenario each, no argument runs all; make test-long):
  getchunks  reading a file through a fresh mount (no cached chunk map) sends GETCHUNKS: the bytes are the ones written;
- query      the `.efs/find` command of the mount sends QUERY_SNAPSHOT (an unpinned first page): the same names as before.
+ query      the `.efs/find` command of the mount sends QUERY_SNAPSHOT (an unpinned first page): the same names as before;
+ mkdir      (K114 fix 3) a directory create takes rpc_send_recv_dual: the directory exists once, with the inode of the first answer,
+            and the late first copy is replayed from the op-id receipt.
 Readdir, writer view, lane writer view, publication status and the receipt query are not covered (no repeat on another
 member after a failed receive; docs/status/2026-11/k114-fix2-read-sites-20261111.md), so they have no live scenario."""
 import json, os, signal, subprocess, sys, tempfile, threading, time
@@ -18,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / 'live'))
 from query_timing import wait_indexed  # noqa: E402
 
 root = Path(__file__).resolve().parents[1]
-KINDS = ('getchunks', 'query')
+KINDS = ('getchunks', 'query', 'mkdir')
 kind = sys.argv[1] if len(sys.argv) > 1 else ''
 if not kind:
     for kd in KINDS:
@@ -28,7 +30,7 @@ if not kind:
     sys.exit(0)
 assert kind in KINDS, kind
 MOUNT_NODE = 1
-# GETCHUNKS goes to the leader (node 3); a query to the first dual voter, node 1 (a follower)
+# GETCHUNKS goes to the leader (node 3); a query and a MKDIR (dual path) to the first dual voter, node 1 (a follower)
 HOLD_NODE = 3 if kind == 'getchunks' else 1
 
 
@@ -45,7 +47,7 @@ def main():
         print('NOTRUN: needs FUSE (fusermount3 and /dev/fuse)')
         return 0
     work = Path(tempfile.mkdtemp(prefix=f'efs-k114r-{kind}-', dir=os.environ.get('TMPDIR')))
-    mtype = msg_type(work, {'getchunks': 'EFS_MSG_INODE_GETCHUNKS', 'query': 'EFS_MSG_QUERY_SNAPSHOT'}[kind])
+    mtype = msg_type(work, {'getchunks': 'EFS_MSG_INODE_GETCHUNKS', 'query': 'EFS_MSG_QUERY_SNAPSHOT', 'mkdir': 'EFS_MSG_INODE_CREATE'}[kind])
     hold, fifo = work / 'hold', work / 'release'
     os.mkfifo(fifo)
     env = {x: v for x, v in os.environ.items() if not x.startswith('EFS_FAULT_')}
@@ -69,6 +71,10 @@ def main():
             target = reader
             op = lambda: (reader.path / 'd' / 'f.txt').read_bytes()  # noqa: E731
             expect = want
+        elif kind == 'mkdir':
+            target = m
+            op = lambda: (m.path / 'e').mkdir()  # noqa: E731  # a directory create goes to a dual voter (rpc_send_recv_dual)
+            expect = None
         else:
             target = m
             for i in (1, 2, 3):  # every member serves queries from its own catalog: wait until each one has indexed the file
@@ -103,10 +109,19 @@ def main():
         assert not t.is_alive(), 'operation did not return after the member was resumed'
         assert 'error' not in res, res
         assert res['seconds'] < 20, f"operation took {res['seconds']:.1f} s (the bound is 30 s; a cut ends it in about 6 s)"
+        if kind == 'mkdir':
+            ino = (m.path / 'e').stat().st_ino  # created once: no FileExistsError above, a directory here
+            assert sorted(x for x in os.listdir(m.path) if x == 'e') == ['e']
         assert res['value'] == expect, f'{kind}: answer after the cut {res["value"]!r} differs from the answer before the stop {expect!r}'
         fd = os.open(fifo, os.O_WRONLY)  # let the held first copy run: it is a read
         os.close(fd)
         c.wait_log(HOLD_NODE, r'EFS_FAULT_HOLD_REQUEST_FILE dispatched type=')
+        if kind == 'mkdir':  # the late first copy meets the op-id receipt of the repeat: replayed, not run again
+            end = time.time() + 30 * k.SLOW
+            while not any('opid-receipt: replay' in c.last_run(i) for i in (1, 2, 3)):
+                assert time.time() < end, 'late first copy was not replayed from the op-id receipt'
+                time.sleep(0.05)
+            assert (m.path / 'e').stat().st_ino == ino and [x for x in os.listdir(m.path) if x == 'e'] == ['e']
         print(f"K114 read site {kind}: operation returned in {res['seconds']:.2f} s with the answer it gave before the stop PASS",
               flush=True)
         ok = True
