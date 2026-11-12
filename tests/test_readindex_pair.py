@@ -91,7 +91,7 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !waits && !h.g[0].ri_request);
  reset(&h);wait_error=EFS_ERR_NOT_PRIMARY;
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && waits==1);
- /* Server mode, host_append_authority: an absent group refuses with the peer hint and requests nothing; both led: both rounds requested, none begun. */
+ /* host_append_authority: an absent group refuses with the peer hint and requests nothing; both led: both rounds requested, none begun. */
  reset(&h);h.absent=3;
  assert(host_append_authority(&h,&hint)==EFS_ERR_NOT_PRIMARY && hint==7 && !begun && !scalar);
  reset(&h);assert(!host_append_authority(&h,&hint) && !begun && waits==2);
@@ -115,7 +115,7 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !begun && !scalar && !waits && !h.g[0].ri_request);
  /* Group 0 follower, group 2 led: group 0 reads scalar, group 2 waits on its requested round. */
  reset(&h);h.core[0].role=0;
- assert(!host_read_index_pair(&h,0,2,&hint) && scalar==1 && waits==1 && !begun && h.g[2].ri_request==18);
+ assert(!host_read_index_pair(&h,0,2,&hint) && scalar==1 && waits==1 && !begun && h.g[2].ri_request==18 && !h.g[0].ri_request);
  /* An absent group with a scalar read error returns that error after one scalar read. */
  reset(&h);h.absent=3;wait_error=EFS_ERR_NOT_PRIMARY;
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && scalar==1 && !begun && !waits);

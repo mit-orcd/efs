@@ -47,9 +47,9 @@ static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
 static void host_publish_view(struct group_views*gv,int i,struct efs_raft*r){(void)gv;(void)i;(void)r;published++;}
 '''+s[a:b]+r'''
 int main(void){
- struct server server={0};struct efs_raft core={.round=7,.term=11,.role=EFS_RAFT_LEADER};
+ struct efs_raft core={.round=7,.term=11,.role=EFS_RAFT_LEADER};
  struct efs_raft other={.round=3,.term=11,.role=EFS_RAFT_LEADER};
- struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.s=&server,.g={{.r=&core,.hosted=1,.group=0},{.r=&other,.hosted=1,.group=2}}};
+ struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.g={{.r=&core,.hosted=1,.group=0},{.r=&other,.hosted=1,.group=2}}};
  host=&h;
  struct host_view v={1,EFS_RAFT_LEADER,40,11,0};struct host_read_admission ad;
  assert(!host_read_begin_tracked(&h,0,&core) && core.round==8 && h.g[0].ri_begun==8);

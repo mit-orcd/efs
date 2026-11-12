@@ -4838,7 +4838,7 @@ static struct {
     struct read_prof_acc ri_leader_covered; /* ... and no new round needed */
     struct read_prof_acc ri_remote;   /* host_read_index, forwarded */
     struct read_prof_acc ri_remote_wait; /* host_wait_applied after it */
-    struct read_prof_acc ri_lock, ri_begin, ri_sleep_quorum, ri_sleep_apply;
+    struct read_prof_acc ri_sleep_quorum, ri_sleep_apply;
     struct read_prof_acc lk_total, lk_ri_parent, lk_kv, lk_lanes, lk_getattr;
     struct read_prof_acc ga_total, ga_lanes, ga_getattr;
     uint64_t lk_fwd, ga_fwd, pair_parallel, pair_scalar;
@@ -4915,13 +4915,12 @@ static void read_prof_tick(void)
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.pair_parallel,__ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.pair_scalar,__ATOMIC_RELAXED));
-    const struct read_prof_acc *phase[] = {&g_read_prof.ri_lock,
-        &g_read_prof.ri_begin, &g_read_prof.ri_sleep_quorum,
+    const struct read_prof_acc *phase[] = {&g_read_prof.ri_sleep_quorum,
         &g_read_prof.ri_sleep_apply};
-    const char *names[] = {"lock", "begin", "sleep_quorum", "sleep_apply"};
+    const char *names[] = {"sleep_quorum", "sleep_apply"};
     snprintf(line, sizeof(line), "read-phase-prof mono_us=%llu",
             (unsigned long long)efs_batch_obs_now_us());
-    for (i=0; i<4; i++) {
+    for (i=0; i<2; i++) {
         size_t used = strlen(line);
         snprintf(line+used, sizeof(line)-used, " %s=%llu/%llu/%llu", names[i],
             (unsigned long long)__atomic_load_n(&phase[i]->n,__ATOMIC_RELAXED),
@@ -16983,10 +16982,6 @@ int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t le
  * proof before serving LOOKUP/GETATTR. This is routing only: the recipient
  * still admits a new ReadIndex and rechecks all inode/dentry/lane authority. */
 static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
-static int host_read_leader_hint(struct efs_raft_host *h,uint8_t group)
-{
-    return host_namespace_leader_hint(h,group);
-}
 
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 {
@@ -17011,7 +17006,7 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 
     {
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
-        hint=host_read_leader_hint(h,ig);
+        hint=host_namespace_leader_hint(h,ig);
         if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, ig)) {
             if (prof)
@@ -17532,7 +17527,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
-    hint=host_read_leader_hint(h,pg);
+    hint=host_namespace_leader_hint(h,pg);
     if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, pg)) {
         uint8_t need[2];
@@ -26033,7 +26028,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         p++;
     {
         uint8_t sg = efs_raft_shard_group(efs_kv_inode_shard(cur));
-        hint=host_read_leader_hint(h,sg);
+        hint=host_namespace_leader_hint(h,sg);
         if(hint>=0){set_inode_rc((struct efs_msg_inode_reply *)out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, sg)) {
             uint8_t need[2];

@@ -32,7 +32,7 @@ static void group_view_wait_unlock(struct group_views *gv){pthread_mutex_unlock(
 struct efs_raft_host {void *telemetry;struct server *s;pthread_mutex_t mu;struct group_views gv;int raft_id,n;};
 struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};
-static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader,ri_lock,ri_begin,ri_sleep_apply,ri_sleep_quorum;} g_read_prof;
+static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader,ri_sleep_apply,ri_sleep_quorum;} g_read_prof;
 '''+view+r'''
 '''+floor+r'''
 static uint64_t efs_batch_obs_now_us(void){return 0;}

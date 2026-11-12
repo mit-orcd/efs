@@ -269,12 +269,13 @@ Verdict: PASS. Exact tree: commits `506ee3aa2` (deletion and test ports) and `fd
 
 ## Stage A2: what was still left of the direct mode (commit `87e25c5f0`, on devel `88bc1189a`)
 
-**Every `h->s` use in a condition in `raft_host.c`, before and after.** Before (devel plus stage A): L923 `peer_addr` (`!h->s` before it dereferences `h->s->lock`), L5133 `host_read_start_requested` (`if(!h->s)return 0;`), L8286 `host_pending_reads` (`if(!h->s)return;`), L8451 and L8491 (`host_stop_leading(h, h->s && server_stop_requested())`, pump), L13912 `host_read_control` (`fresh_probe=h->s && ...`), L13931 (`handled && h->s && BO_ON()`), L15965 (`EFS_FAULTS` hook: `d && *d && h->s && snprintf(.. h->s->id ..)`), L16991 `host_read_leader_hint` (`h->s ? host_namespace_leader_hint(h,group) : -1`). After: L923 and L15962 only.
+**Every `h->s` use in a condition in `raft_host.c`, before and after.** Before (devel plus stage A): L923 `peer_addr` (`!h->s` before it dereferences `h->s->lock`), L5133 `host_read_start_requested` (`if(!h->s)return 0;`), L8286 `host_pending_reads` (`if(!h->s)return;`), L8451 and L8491 (`host_stop_leading(h, h->s && server_stop_requested())`, pump), L13912 `host_read_control` (`fresh_probe=h->s && ...`), L13931 (`handled && h->s && BO_ON()`), L15965 (`EFS_FAULTS` hook: `d && *d && h->s && snprintf(.. h->s->id ..)`), L16991 `host_read_leader_hint` (`h->s ? host_namespace_leader_hint(h,group) : -1`). After: five null guards remain, none a read-path mode switch: L923 `peer_addr`, L15961 fault hook, and three `h->s ? h->s->id : 0` reads that fill a node id in a reply (L16078 `out->node_id`, L17041 and L17645 `out->read_node_id`). The first count of two missed the last three; the table below lists the first two and the three id reads are the same kind (protect the dereference, nothing else).
 
 | Use | What it was for | Decision |
 |---|---|---|
 | L923 `peer_addr` | protects the dereference of `h->s->lock` on the next lines | kept: a real guard |
-| L15962 fault hook | protects `h->s->id`; compiled only with `EFS_FAULTS` | kept: a real guard |
+| L15961 fault hook | protects `h->s->id`; compiled only with `EFS_FAULTS` | kept: a real guard |
+| L16078, L17041, L17645 | `h->s ? h->s->id : 0` fills a node id in a reply | kept: real guards |
 | L5133, L8286 | mode switches: a host without a server requested rounds nobody starts, and skipped the early read control | removed; `tests/test_readindex_tickets.py` (the `h.s=0` line) and `tests/test_raft_pending_reads.py` (the `h.s=NULL` call, the `struct server` and the field) no longer build a host without a server |
 | L8451, L8491 | `server_stop_requested()` is a global and touches no `h->s`; the `h->s &&` meant "a host without a server never relinquishes" | removed |
 | L13912, L13931 | `fresh_probe` and the batch-obs counters were off without a server | removed |
@@ -298,3 +299,10 @@ Tree `87e25c5f0` (code identical to the later commits except `tests/test_shutdow
 - Sanitizers (first run, before the text-only fix): ASan gate PASS (77 run, 0 failed, 499 s of gate, 612 s wall); TSan gate PASS (53 run, 0 failed, 678 s; wall 719 s), including `k96_status_slots_live` and `k37_segment_rebuild` (K123 did not fail this time; it is an intermittent, not fixed here).
 - Mac: `make docs-check`, `check_doc_links`, `tests/test_code_graph.py`, `tests_for`, `csrc`, and the group-view privacy check with its self-test pass. `test_host_view_spin` and `test_readindex_publish` fail to compile on the Mac with clang unused-function errors; the same on devel `88bc1189a`, they pass on Linux.
 - Not run: no `tests/budgets.tsv` row was changed.
+
+## Stage B step 0: cleanup on devel `60c9fcdad`
+
+- `g_read_prof.ri_lock` and `ri_begin` (never incremented since A2) are removed with their two fields in the `read-phase-prof` line, which now prints `sleep_quorum` and `sleep_apply` only. Proof: the only readers were `read_prof_tick` and the stub struct in `tests/test_readindex_result.py`; no script parses the line.
+- `host_read_leader_hint` was a bare forwarder to `host_namespace_leader_hint`; its three callers (L17009, L17530, L26031) call that directly; `tests/test_namespace_leader_route.py`, `test_lookup_path_authority.py` and `test_lookup_replacement.py` follow, and the two map pages drop the name.
+- `host_waiters_wake`: the re-scan condition `w->any<2 || ...` is now `w->any!=3 || ...`: same result for modes 0, 1 and 3, and mode 2 does not exist. `tests/test_read_waiters.py` gets four cases for it (a notified mode-3 sleeper with a context and no index is scanned again and captures the index without a new signal; with an index, or with no context, it is skipped; notified modes 0 and 1 are final); with the condition replaced by `1` the test fails.
+- Test text: "Delegated" and "Server mode" wording, redundant `.any=3`, and the unused `.s=&server` fixtures are gone; the group 0 follower pair case asserts `!h.g[0].ri_request`.
