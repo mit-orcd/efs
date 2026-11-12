@@ -4,6 +4,7 @@
 
 - `efsd.c` — daemon entry, startup/stop; `cluster.c` — cluster formation and membership wiring; `discovery.c/.h` — local-subnet discovery (never defines membership).
 - `raft_host.c` — the production Raft host (hosted groups, apply pump, ReadIndex, publication, GC, sessions, transactions); owns every hosted group's state. **The file the [W171 plan](../../docs/status/2026-11/structure-plan-20261102.md) splits next** (the split waits for W123). ReadIndex code (`host_read_*`, `host_wait_*`, the view, the waiter slots, the follower RPC): [entry map](../../docs/status/2026-11/readindex-entry-map-20261108.md#entry-map), checked by `make docs-check`.
+- `read_proof.c/.h` — the ReadIndex request side: admission, request, wait for the quorum proof, loss of leadership (Task V4); contract in `read_proof.h`, guide below.
 - `group_view.c/.h` — the published group view and its sleepers (what handlers read without `h->mu`, and the wait bracket); extracted from `raft_host.c` in Task V3; contract in `group_view.h`, guide below.
 - Concern map of `raft_host.c` (every function under one concern, with state, mutex, entry points, logs and tests; the lock order): [raft-host-map.md](../../docs/how-it-works/raft-host-map.md), checked by `make docs-check`. Start there for a defect in the file.
 - `handler.c` — request dispatch per connection; `thread.c` — conn/writer thread stacks; `writer.c` — writer pool; `peer_pool.c` — persistent server→server connections.
@@ -73,11 +74,38 @@ Select the catalogue rows ([tests/budgets.tsv](../../tests/budgets.tsv), column 
 - `python3 scripts/tests_for.py server/query_refresh`
 - `python3 scripts/tests_for.py server/raft_host`
 - `python3 scripts/tests_for.py server/raft_host.read_index`
+- `python3 scripts/tests_for.py server/read_proof`
 - `python3 scripts/tests_for.py server/reclaim`
 - `python3 scripts/tests_for.py server/server_internal`
 - `python3 scripts/tests_for.py server/storage_roots`
 - `python3 scripts/tests_for.py server/store`
 - `python3 scripts/tests_for.py server/writer`
+
+**Read proof (`read_proof.c`, `read_proof.h`).** Owns the ReadIndex request side of every hosted group: the per-group `ri_begun` and `ri_request`, the follower coalescer, the profile counters, admission against the published view, the request, the sleep for the quorum proof and the follower ask. `raft_host.c` embeds one `struct read_proof`, keeps `host_read_index` and `host_read_index_pair` as thin wrappers, and answers the six functions in [`read_proof_host.h`](read_proof_host.h) (gate, remote call, pump kick, applied wait, profile switch and add); `scripts/check_group_view_privacy.py` fails if another file names the owner's private fields. Contract (state table S0 to S9, locks, publication) in [`read_proof.h`](read_proof.h); `read_proof_impl.h` is private. Interface test: [`tests/test_read_proof.c`](../../tests/test_read_proof.c) (links the real `read_proof.c` and `group_view.c` over a fake Raft core; `--list` prints the cases). Page: [read-proof-ownership-20261111.md](../../docs/status/2026-11/read-proof-ownership-20261111.md).
+
+| State or invariant | Cases | Command |
+|---|---|---|
+| The gate refuses a damaged or incompatible group with NOT_PRIMARY and a hint | `test_gate_refuses_incompatible_group` | `make tests/test_read_proof && ./tests/test_read_proof test_gate_refuses_incompatible_group` |
+| A group with no replica is refused | `test_no_replica_refuses` | `make tests/test_read_proof && ./tests/test_read_proof test_no_replica_refuses` |
+| A follower asks the leader, then waits for its own apply | `test_follower_asks_leader_and_applies` | `make tests/test_read_proof && ./tests/test_read_proof test_follower_asks_leader_and_applies` |
+| A proof-only request on a follower never forwards | `test_follower_proof_endpoint_never_forwards` | `make tests/test_read_proof && ./tests/test_read_proof test_follower_proof_endpoint_never_forwards` |
+| A follower whose leader is itself is refused | `test_follower_leader_is_self_refuses` | `make tests/test_read_proof && ./tests/test_read_proof test_follower_leader_is_self_refuses` |
+| A leader reply that redirects is passed on | `test_follower_result_redirects_leader` | `make tests/test_read_proof && ./tests/test_read_proof test_follower_result_redirects_leader` |
+| Admission takes the view's commit and the next round | `test_admission_takes_view_commit_and_next_round` | `make tests/test_read_proof && ./tests/test_read_proof test_admission_takes_view_commit_and_next_round` |
+| An overflowing round count is BUSY | `test_admission_overflow_is_busy` | `make tests/test_read_proof && ./tests/test_read_proof test_admission_overflow_is_busy` |
+| A request raises `ri_request` once and kicks the pump | `test_request_raises_ri_request_once_and_kicks` | `make tests/test_read_proof && ./tests/test_read_proof test_request_raises_ri_request_once_and_kicks` |
+| `read_proof_start_requested` begins a round only after the previous quorum is done | `test_start_requested_begins_when_previous_quorum_done` | `make tests/test_read_proof && ./tests/test_read_proof test_start_requested_begins_when_previous_quorum_done` |
+| It skips groups that are not led or not hosted | `test_start_requested_skips_unled_and_unhosted` | `make tests/test_read_proof && ./tests/test_read_proof test_start_requested_skips_unled_and_unhosted` |
+| A failed begin publishes nothing and is retried | `test_failed_begin_publishes_nothing_and_is_retried` | `make tests/test_read_proof && ./tests/test_read_proof test_failed_begin_publishes_nothing_and_is_retried` |
+| A covered read returns the proven index | `test_covered_read_returns_proven_index` | `make tests/test_read_proof && ./tests/test_read_proof test_covered_read_returns_proven_index` |
+| A frozen floor survives a later round | `test_frozen_floor_survives_a_later_round` | `make tests/test_read_proof && ./tests/test_read_proof test_frozen_floor_survives_a_later_round` |
+| A proof-only read returns the quorum index before apply | `test_proof_only_returns_quorum_index_before_apply` | `make tests/test_read_proof && ./tests/test_read_proof test_proof_only_returns_quorum_index_before_apply` |
+| A changed read context or term is refused | `test_context_change_refuses`, `test_term_change_refuses` | `make tests/test_read_proof && ./tests/test_read_proof test_context_change_refuses` |
+| A reader sleeps in its slot and wakes on a publish | `test_waits_in_slot_and_wakes_on_publish` | `make tests/test_read_proof && ./tests/test_read_proof test_waits_in_slot_and_wakes_on_publish` |
+| The replica going away wakes and refuses the sleeper | `test_replica_gone_while_asleep` | `make tests/test_read_proof && ./tests/test_read_proof test_replica_gone_while_asleep` |
+| The local replica stops leading, in each state (gate, admitted, requested, checking with a floor, asleep, asking the leader) | `test_loses_leadership_at_gate, _after_admission, _after_request, _while_checking_with_floor, _while_asleep, test_leadership_changes_while_asking_leader` | `make tests/test_read_proof && ./tests/test_read_proof test_loses_leadership_at_gate` |
+| A reader past its deadline gets BUSY (waits the product's 400 ms bound once) | `test_deadline_returns_busy` | `make tests/test_read_proof && ./tests/test_read_proof test_deadline_returns_busy` |
+| Host stop wakes no sleeper; the sleep of a follower RPC; lock order under the real pump | none (needs the host) | `python3 scripts/tests_for.py server/read_proof` |
 
 **Group view (`group_view.c`, `group_view.h`).** Owns each hosted group's published view (a sequence-locked copy of commit, applied, term, role, leader, read round and proof) and the table of 512 sleeper slots with their condition variables, the locks `view_mu` and `cv_mu` and the shared `applied_cv`. `raft_host.c` embeds one `struct group_views` and never names those fields (`scripts/check_group_view_privacy.py` fails the fast suite if it or any other file does). Contract in [`group_view.h`](group_view.h) (the file a caller reads; `group_view_impl.h` holds the representation and the inline bodies, is private, and is included only by `group_view.h`): lock order `h->mu`, then `cv_mu`, then `view_mu`; `host_view_get` is a coherent copy with no lock held on return, and after 64 odd sequence loads it waits on `view_mu` (K107); the three waits have three different predicates, so the owner exposes the lock bracket `group_view_wait_lock` / `host_view_get` / the caller's test / `host_waiter_sleep` / `group_view_wait_unlock` and no single wait operation. Interface test: [`tests/test_group_view.c`](../../tests/test_group_view.c) (links the real `group_view.c` over stub core getters; `--list` prints the cases). Page: [group-view-ownership-20261111.md](../../docs/status/2026-11/group-view-ownership-20261111.md).
 

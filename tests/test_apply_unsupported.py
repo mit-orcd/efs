@@ -28,11 +28,18 @@ dispatch = function('static int host_apply_dispatch(')
 assert dispatch.rstrip().endswith('return EFS_ERR_UNSUPPORTED;\n}'), dispatch[-200:]
 assert 'if(EFS_MD_CMD_IS_RESERVED(cmd[0]))\n        return EFS_ERR_UNSUPPORTED;' in dispatch
 # Proposals and reads of an incompatible group are refused.
-for name in ('static int host_propose_impl(', 'static int host_read_index_admitted('):
-    body = function(name)
-    gate = body[body.index('if (host_group_incompatible(h, group))'):]
-    gate = gate[:gate.index('\n    }')]
-    assert 'host_halted_hint(h, group)' in gate and 'return EFS_ERR_NOT_PRIMARY;' in gate
+body = function('static int host_propose_impl(')
+gate = body[body.index('if (host_group_incompatible(h, group))'):]
+gate = gate[:gate.index('\n    }')]
+assert 'host_halted_hint(h, group)' in gate and 'return EFS_ERR_NOT_PRIMARY;' in gate
+# Reads: the owner asks the host's gate (read_proof_host_gate: incompatible group, halted hint) at entry and on every pass.
+rp = csrc.module('read_proof')
+body = rp[rp.index('static int host_read_index_admitted('):]
+body = body[:body.index('\n}')]
+assert body.count('read_proof_host_gate(rp->rp_host, group, &gate_hint)') == 2
+assert body.count('if (leader_hint) *leader_hint = gate_hint;\n        return EFS_ERR_NOT_PRIMARY;') + body.count('if (leader_hint) *leader_hint = gate_hint;\n            return EFS_ERR_NOT_PRIMARY;') == 2
+gatefn = function('int read_proof_host_gate(')
+assert 'host_group_incompatible(h, group)' in gatefn and '*hint = host_halted_hint(h, group);' in gatefn
 
 code = '#define EFS_FAULTS 0\n#define HOST_APPLY_RC_RING 16\n#define HOST_APPLY_RC_MASK 15\n' + lens + r'''
 #include "efs/kv.h"

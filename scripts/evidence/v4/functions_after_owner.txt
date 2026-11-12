@@ -1,0 +1,20 @@
+# read_proof.c after Task V4 stage B: the moved functions under their new names
+host_follower_read_result
+host_read_admit_view
+read_proof_begin
+host_read_index_admitted
+read_proof_read
+read_proof_prove
+read_proof_read_pair
+host_read_index_remote_pair
+host_read_index_scalar_pair
+host_read_note_begin
+host_read_pair_capacity
+host_read_pair_init
+host_read_pair_note
+host_read_pair_run
+host_read_request
+read_proof_start_requested
+host_remote_read_index
+host_ri_complete
+host_ri_remove

@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 import csrc
-root=Path(__file__).resolve().parents[1];s=csrc.module('raft_host')
+root=Path(__file__).resolve().parents[1];s=csrc.module('read_proof')
 a=s.index('static int host_follower_read_result(');b=s.index('\n}',a)+2
 code='#include "efs/common.h"\n#include <assert.h>\n#include <stdio.h>\n'+s[a:b]+r'''
 int main(void){
@@ -18,8 +18,8 @@ int main(void){
 }
 '''
 # The redirect is only reached inside the successful remote-authority branch.
-branch=s[s.index('rc = host_remote_read_index(h, group, v.leader, &end, &ridx,'):]
-assert 'if (rc == EFS_OK) {\n                rc = host_wait_applied' in branch
+branch=s[s.index('rc = host_remote_read_index(rp, group, v.leader, &end, &ridx,'):]
+assert 'if (rc == EFS_OK) {\n                rc = read_proof_host_wait_applied' in branch
 with tempfile.TemporaryDirectory(prefix='efs-read-redirect-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)

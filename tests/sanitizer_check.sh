@@ -131,6 +131,8 @@ find_res_interface|tests/test_find_res_interface
 put_window_interface|tests/test_put_window_interface
 # Task V3: the real group view (publish, coherent reader race, predicates, wait bracket) through group_view.h.
 group_view_interface|tests/test_group_view
+# Task V4: the real read-proof owner (admission, request, wait, leadership loss) through read_proof.h.
+read_proof_interface|tests/test_read_proof
 # Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
 put_window_callers_ok|tests/test_put_window_callers.py ok
 put_window_callers_fail|tests/test_put_window_callers.py fail
@@ -230,6 +232,8 @@ find_res_interface|tests/test_find_res_interface
 put_window_interface|tests/test_put_window_interface
 # Task V3: the real group view (publish, coherent reader race, predicates, wait bracket) through group_view.h.
 group_view_interface|tests/test_group_view
+# Task V4: the real read-proof owner (admission, request, wait, leadership loss) through read_proof.h.
+read_proof_interface|tests/test_read_proof
 # Task V1: every exit of a flusher closes its PUT window (real put_window.c, stubbed cache).
 put_window_callers_ok|tests/test_put_window_callers.py ok
 put_window_callers_fail|tests/test_put_window_callers.py fail

@@ -222,7 +222,6 @@ Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 374 `fpr
 | `raft-host` | `src/server/raft_host.c` | `host_pump` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `host_put_drain_pass` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `host_put_orphan_pass` | `server/raft_host` |
-| `raft-host` | `src/server/raft_host.c` | `host_read_index_admitted` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `host_rebuild_pass` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `host_resize_decide` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `host_retire_check` | `server/raft_host` |
@@ -249,6 +248,7 @@ Found: 103 diagnostic keys in 264 (key, function) rows, 29 error codes; 374 `fpr
 | `raft-host` | `src/server/raft_host.c` | `server_raft_host_unlink` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `set_inode_rc` | `server/raft_host` |
 | `raft-host` | `src/server/raft_host.c` | `snap_import_poll` | `server/raft_host` |
+| `raft-host` | `src/server/read_proof.c` | `host_read_index_admitted` | `server/read_proof` |
 | `raft-log` | `src/raft/raft_log.c` | `rotate_run` | `raft/raft_log` |
 | `raft-session` | `src/mgmt/efs_mgmt.c` | `cmd_raft_session` | `mgmt/efs_mgmt` |
 | `raft-snap` | `src/raft/raft_disk.c` | `raft_group_snap` | `raft/raft_disk` |

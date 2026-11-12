@@ -12,7 +12,7 @@
 #endif
 #define HOST_READ_PAIR_STACK (128u << 10)
 struct host_read_pair_task {
-    struct efs_raft_host *host;
+    struct read_proof *rp;
     uint8_t group;
     uint64_t deadline;
     int rc,hint;
@@ -37,7 +37,7 @@ static void *host_read_pair_run(void *arg)
         pthread_mutex_unlock(&host_read_pair_mu);
         uint64_t previous=efs_net_deadline_ms();
         efs_net_set_deadline_ms(task->deadline);
-        task->rc=host_read_index(task->host,task->group,&task->hint);
+        task->rc=read_proof_read(task->rp,task->group,&task->hint);
         efs_net_set_deadline_ms(previous);
         pthread_mutex_lock(&host_read_pair_mu);
         worker->done=1;
@@ -71,17 +71,17 @@ static void host_read_pair_init(void)
     }
     pthread_attr_destroy(&attr);
 }
-static int host_read_index_scalar_pair(struct efs_raft_host *host,uint8_t first,
+static int host_read_index_scalar_pair(struct read_proof *rp,uint8_t first,
                                        uint8_t second,int *hint)
 {
-    int rc=host_read_index(host,first,hint);
-    return rc==EFS_OK?host_read_index(host,second,hint):rc;
+    int rc=read_proof_read(rp,first,hint);
+    return rc==EFS_OK?read_proof_read(rp,second,hint):rc;
 }
-static int host_read_index_remote_pair(struct efs_raft_host *host,uint8_t first,
+static int host_read_index_remote_pair(struct read_proof *rp,uint8_t first,
                                        uint8_t second,int *hint)
 {
     pthread_once(&host_read_pair_once,host_read_pair_init);
-    struct host_read_pair_task task={host,second,efs_net_deadline_ms(),EFS_ERR_BUSY,-1};
+    struct host_read_pair_task task={rp,second,efs_net_deadline_ms(),EFS_ERR_BUSY,-1};
     struct host_read_pair_worker *worker=NULL;
     pthread_mutex_lock(&host_read_pair_mu);
     for(unsigned i=0;i<host_read_pair_count;i++) {
@@ -92,8 +92,8 @@ static int host_read_index_remote_pair(struct efs_raft_host *host,uint8_t first,
     }
     pthread_mutex_unlock(&host_read_pair_mu);
     HOST_READ_PAIR_NOTE(worker!=NULL);
-    if(!worker)return host_read_index_scalar_pair(host,first,second,hint);
-    int first_hint=-1,rc=host_read_index(host,first,&first_hint);
+    if(!worker)return host_read_index_scalar_pair(rp,first,second,hint);
+    int first_hint=-1,rc=read_proof_read(rp,first,&first_hint);
     /* Even a failed first proof waits for the second task's bounded existing
      * read deadline. No callback or stack/host reference escapes this RPC. */
     pthread_mutex_lock(&host_read_pair_mu);

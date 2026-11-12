@@ -12,6 +12,7 @@ ref=os.environ.get('EFS_HANDOFF_SOURCE_REF')
 s=subprocess.check_output(['git','show',ref+':src/server/raft_host.c'],cwd=root,text=True) if ref else csrc.module('raft_host')
 def fn(signature):
     a=s.index(signature);return s[a:s.index('\n}',a)+2]
+publisher=fn('static void host_publish_hosted_and_wake(') if 'static void host_publish_hosted_and_wake(' in s else ''
 helper=fn('static void host_inbox_batch_handoff(') if 'static void host_inbox_batch_handoff(' in s else ''
 code=r'''
 #include <assert.h>
@@ -68,7 +69,7 @@ static int __attribute__((unused)) unlock_seen(pthread_mutex_t*m){
 static int __attribute__((unused)) lock_seen(pthread_mutex_t*m){return pthread_mutex_lock(m);}
 #define pthread_mutex_unlock unlock_seen
 #define pthread_mutex_lock lock_seen
-'''+helper+fn('static void drain_inbox(')+r'''
+'''+publisher+helper+fn('static void drain_inbox(')+r'''
 #undef pthread_mutex_unlock
 #undef pthread_mutex_lock
 static void *observe(void*p){struct efs_raft_host*h=p;assert(!pthread_mutex_lock(&h->mu));assert(!active && published==3 && wakes>=1 && kv_hold);atomic_store(&observer_seen,1);assert(!pthread_mutex_unlock(&h->mu));return NULL;}

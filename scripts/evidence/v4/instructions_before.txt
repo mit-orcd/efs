@@ -34,3 +34,6 @@ raft_host.c server_raft_host_submit 2074
 # lines raft_host: 110294
 # 36ad58daf67266a21f66bcc011fc9f23440acaf0df8a9a7a4bdfecd143b3ba70  disasm_before_group_view.txt
 # lines group_view: 896
+# extra before-counts of two callers changed in step 4 (tree 73c2d70ef, same method)
+raft_host.c host_receive_persist 42
+raft_host.c host_inbox_batch_handoff 33
