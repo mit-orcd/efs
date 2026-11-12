@@ -160,6 +160,8 @@ read_sites_getchunks|tests/test_k114_read_sites.py getchunks
 read_sites_query|tests/test_k114_read_sites.py query
 read_sites_pinned|tests/test_k114_read_sites.py pinned
 read_sites_report|tests/test_k114_read_sites.py report
+read_sites_mkdir|tests/test_k114_read_sites.py mkdir
+read_sites_bounded|tests/test_k114_read_sites.py bounded
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
 # client read and write paths through efs-fuse under load (D4, short), and
 # the K38 swept-hint STALE replay through efs-fuse, and the K88 per-chunk

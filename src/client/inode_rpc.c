@@ -3297,6 +3297,12 @@ static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_l
         if (recv_ms > 0)
             efs_conn_set_recv_timeout(conn, recv_ms);
         unsigned long long t_recv = rpc_prof_now_us();
+        /* K114 fix 3: same cut as rpc_send_recv_shard_once (a directory op with its op-id), so a halted
+         * dual voter does not hold a MKDIR for the 30 s default. Only when this call sets no bound of its
+         * own (recv_ms == 0): the hook's probe exchange can take about 6 s, which a shorter caller bound
+         * must not wait for. A REPORT is never cut (rpc_reply_wait_cut is 0 for it: K122). */
+        if (recv_ms == 0 && rpc_reply_wait_cut(type, req, req_len))
+            efs_client_conn_await_reply(nid, conn);
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
