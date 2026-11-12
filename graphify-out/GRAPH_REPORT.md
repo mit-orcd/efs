@@ -1,7 +1,7 @@
 # EFS defect-navigation graph
 
-Source base: `183f699da9eb4596f806f531eed26698ca977222`; exact inputs: `source-manifest.json`.
-Graphify 0.9.97; 19,714 nodes, 83,218 directed typed edges, 648 communities.
+Source base: `e290900386de60221e296806f84d6a15be0cd7fe`; exact inputs: `source-manifest.json`.
+Graphify 0.9.97; 19,727 nodes, 83,286 directed typed edges, 625 communities.
 Parallel edges retained. Community clustering uses an undirected projection only; stored edges remain directed.
 Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
@@ -20,27 +20,27 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 
 - `affects`: 8
 - `answered_by`: 13
-- `calls`: 28748
+- `calls`: 28762
 - `case_of`: 118
-- `contains`: 29067
+- `contains`: 29084
 - `contract`: 47
 - `defines`: 2066
 - `documents_finding`: 8
 - `exercises`: 7
 - `guided_by`: 182
 - `implemented_by`: 141
-- `imports`: 8574
-- `imports_from`: 1056
+- `imports`: 8591
+- `imports_from`: 1060
 - `indirect_call`: 756
 - `inherits`: 17
 - `invokes`: 2
 - `mentions_symbol`: 5333
 - `method`: 687
-- `rationale_for`: 1506
+- `rationale_for`: 1509
 - `references`: 2246
-- `references_path`: 1383
+- `references_path`: 1392
 - `regression_for`: 8
-- `tested_by`: 1144
+- `tested_by`: 1148
 - `uses`: 101
 
 ## Extraction warnings
@@ -51,7 +51,7 @@ Extraction cost: 0 input / 0 output LLM tokens (local structural extraction).
 ## Limits
 
 Health warning: 34 self-call edges retained. These can be recursion or ambiguous callback resolution; inspect source before interpreting them.
-Unresolved edges omitted: {'calls': 1908}. These are extraction gaps, not absent dependencies.
+Unresolved edges omitted: {'calls': 1916}. These are extraction gaps, not absent dependencies.
 Literal mentions and reviewed exercises links are not calls or runtime coverage. AST edges retain their confidence labels.
 Component nodes come from the source layout and scripts/tests_for.py's answer over the test catalogue (tests/budgets.tsv): tested_by is a catalogue route, not measured coverage; a route inherited from the parent tag is INFERRED with evidence_method inherited:<parent>.
 No automatic lock ownership, shared-state access, persistence-order, happens-before, or exhaustive build-variant analysis.

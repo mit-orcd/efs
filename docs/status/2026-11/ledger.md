@@ -4,8 +4,10 @@
 
 ## Recent evidence and remaining acceptance
 
+- [K114 fix 3: directory creates on the dual path join the cut](ledger/20261112-005-k114-fix3-dual-path.md): **fix, Nov 12 (Task GC follow-up), K114 stays OPEN**
 - [Wave 85 merge](ledger/20261112-002-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 12 (gate at `183f699da`)**
 - [Stage 1 batch R: owed distinct-host and RDMA gates of six K rows (Task GD)](ledger/20261112-001-batch-r-rdma-reruns.md): **K42, K112, K15, K43 and K110-on-TCP PASS; K106 FAIL (0 of 3 on TCP and on RDMA) and K110-on-RDMA FAIL (3 of 6); nothing fixed or diagnosed, the four-hour K43 soak not run**
+- [K114 fix 2: read-only receive sites join the cut](ledger/20261111-017-k114-fix2-read-sites.md): **fix, Nov 11 (Task GC), K114 stays OPEN**
 - [K123 TSan packer after return](ledger/20261111-016-k123-tsan-packer-after-return.md): **fix, Nov 11 (Task GF): both signatures were test races, fixed in the test; 60 of 60 runs pass on amd (8 of 60 failed before); no product defect; K123 row to be updated by the coordinator**
 - [Wave 84 merge](ledger/20261111-015-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `07bab2095`)**
 - [Task V4 read-proof ownership](ledger/20261111-014-read-proof-ownership.md): **stage B done**
