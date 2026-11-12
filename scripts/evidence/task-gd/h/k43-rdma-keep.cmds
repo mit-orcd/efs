@@ -1,0 +1,1 @@
+k43-coordinator-kill-keep	3	EFS_K43_KEEP=1 python3 tests/test_k43_coordinator_kill.py

@@ -1,0 +1,98 @@
+{
+ "name": "gd-3x1-rdma",
+ "candidate": "60c9fcdada223f51acd9bf896d6a417fa290bf25",
+ "ssh": "scripts/evidence/task-gd/task_gd_ssh.sh",
+ "source": "/home/erbmi1/work/efs-taskGD-fcstor012/src",
+ "seed": "172.16.223.66:18432",
+ "nodes": [
+  {
+   "addr": "172.16.223.66:18432",
+   "host": "fcstor012",
+   "store": "/tmp/efs-taskGD/cluster/n1"
+  },
+  {
+   "addr": "172.16.223.67:18432",
+   "host": "fcstor013",
+   "store": "/tmp/efs-taskGD/cluster/n2"
+  },
+  {
+   "addr": "172.16.223.68:18432",
+   "host": "fcstor014",
+   "store": "/tmp/efs-taskGD/cluster/n3"
+  }
+ ],
+ "mounts": [
+  {
+   "path": "/tmp/efs-taskGD/cluster/mnt",
+   "host": "fcstor010"
+  },
+  {
+   "path": "/tmp/efs-taskGD/cluster/mnt",
+   "host": "fcstor011"
+  }
+ ],
+ "transport": "rdma",
+ "features": {
+  "packing": "built in (background packer)",
+  "efs_commands": "cluster commands-policy (default enabled)",
+  "expiry": "off by default; d5-expiry turns it on and off",
+  "containers": "off"
+ },
+ "quota": "16G per member",
+ "hardware": "fcstor010-014: AMD EPYC 7402P (24 CPUs), 250 GB, RHEL 9 (5.14.0-687.39.1.el9_8); IPoIB ibs1f0 172.16.223.64-68 on mlx5_2 (InfiniBand); stores on local /tmp (md0)",
+ "mgmt_host": "fcstor012",
+ "private": {
+  "host": "fcstor012",
+  "root": "/tmp/efs-taskGD/live",
+  "port_base": 19400
+ },
+ "private_cluster": {
+  "root": "/tmp/efs-taskGD/cluster",
+  "quota": "16G",
+  "ready_timeout_s": 300,
+  "env": {
+   "EFS_RDMA_DEV": "mlx5_2"
+  }
+ },
+ "fixture": {
+  "posix_timeout_s": 150,
+  "remote_tmp": "/tmp/efs-taskGD/tmp"
+ },
+ "notes": "Task GD batch R: 3 efsd on 3 distinct hosts, clients on fcstor010 and fcstor011; driver-owned, fresh stores every run",
+ "rdma_dev": "mlx5_2",
+ "plugins": {
+  "d4-progress": {
+   "command": "cd {source} && python3 scripts/d4_progress.py --cluster {cluster} --out {gate_dir}",
+   "host": "fcstor010",
+   "requires": "{source}/scripts/d4_progress.py",
+   "items": "D4",
+   "ledger": "Scale/progress evidence (E4, D4)",
+   "deadline_s": 7200,
+   "doc": "D4 bounded progress under packing, indexing and KV compaction (run on the fcstor010 client; the driver host has no mount)"
+  },
+  "k106-halt": {
+   "command": "python3 \"$GD_REPO\"/scripts/evidence/task-gd/k106_halt.py --cluster {cluster} --out {gate_dir}/k106 --source {source}",
+   "host": "local",
+   "deadline_s": 900,
+   "items": "K106",
+   "ledger": "POSIX and concurrent I/O",
+   "doc": "SIGSTOP of the group 0 leader under a client load (Task EY K106 case)"
+  },
+  "k15-w52": {
+   "command": "python3 \"$GD_REPO\"/scripts/evidence/task-gd/k15_append.py --cluster {cluster} --out {gate_dir}/k15 --source {source} --records 20000",
+   "host": "local",
+   "deadline_s": 3600,
+   "items": "K15",
+   "ledger": "POSIX and concurrent I/O",
+   "doc": "W52: 20k appended records, two mounts on two hosts"
+  },
+  "k15-stepdown": {
+   "command": "python3 \"$GD_REPO\"/scripts/evidence/task-gd/k15_append.py --cluster {cluster} --out {gate_dir}/k15 --source {source} --records 8000 --failover step-down",
+   "host": "local",
+   "deadline_s": 3600,
+   "items": "K15",
+   "ledger": "POSIX and concurrent I/O",
+   "doc": "8k appended records with both groups stepped down every 4 s"
+  }
+ }
+}

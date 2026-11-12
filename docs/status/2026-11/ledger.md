@@ -4,6 +4,7 @@
 
 ## Recent evidence and remaining acceptance
 
+- [Stage 1 batch R: owed distinct-host and RDMA gates of six K rows (Task GD)](ledger/20261112-001-batch-r-rdma-reruns.md): **K42, K112, K15, K43 and K110-on-TCP PASS; K106 FAIL (0 of 3 on TCP and on RDMA) and K110-on-RDMA FAIL (3 of 6); nothing fixed or diagnosed, the four-hour K43 soak not run**
 - [Wave 84 merge](ledger/20261111-015-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `07bab2095`)**
 - [Task V4 read-proof ownership design](ledger/20261111-014-read-proof-ownership.md): **design only, no code moved**
 - [Wave 83 merge](ledger/20261111-013-alpha-1.0-2plus1-checklist.md): **merged into devel Nov 11 (gate at `ddf3a5d22`)**
