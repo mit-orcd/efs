@@ -260,6 +260,12 @@ test-report-pressure:
 	python3 tests/test_node_waiter_cut.py deadline
 	python3 tests/test_node_waiter_cut.py race
 	python3 tests/test_node_waiter_cut.py gating
+	python3 tests/test_k114_read_sites.py getchunks
+	python3 tests/test_k114_read_sites.py query
+	python3 tests/test_k114_read_sites.py pinned
+	python3 tests/test_k114_read_sites.py report
+	python3 tests/test_k114_read_sites.py mkdir
+	python3 tests/test_k114_read_sites.py bounded
 	python3 tests/test_pack_budget.py
 	python3 tests/test_pack_compact_schedule.py
 	python3 tests/test_pack_base_reads.py
@@ -1322,6 +1328,9 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k114_false_cut.py truncate
 	python3 tests/test_k114_false_cut.py append
 	python3 tests/test_k114_false_cut.py create
+	python3 tests/test_k114_read_sites_live.py getchunks
+	python3 tests/test_k114_read_sites_live.py query
+	python3 tests/test_k114_read_sites_live.py mkdir
 	python3 tests/test_k42_reap_owed.py
 	python3 tests/test_k54_member_down_fence.py
 	python3 tests/test_k54_member2_unmount.py

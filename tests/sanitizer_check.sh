@@ -158,6 +158,12 @@ waiter_cut_noreply|tests/test_node_waiter_cut.py noreply
 waiter_cut_deadline|tests/test_node_waiter_cut.py deadline
 waiter_cut_race|tests/test_node_waiter_cut.py race
 waiter_cut_gating|tests/test_node_waiter_cut.py gating
+read_sites_getchunks|tests/test_k114_read_sites.py getchunks
+read_sites_query|tests/test_k114_read_sites.py query
+read_sites_pinned|tests/test_k114_read_sites.py pinned
+read_sites_report|tests/test_k114_read_sites.py report
+read_sites_mkdir|tests/test_k114_read_sites.py mkdir
+read_sites_bounded|tests/test_k114_read_sites.py bounded
 # Daemons: K36 recovery thread, K37 segment rebuild and audit, and the
 # client read and write paths through efs-fuse under load (D4, short), and
 # the K38 swept-hint STALE replay through efs-fuse, and the K88 per-chunk

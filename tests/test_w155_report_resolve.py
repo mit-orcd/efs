@@ -54,6 +54,7 @@ client = ''.join([
     fn(cli, 'static uint64_t rpc_resolve_ms(').replace('return 8000;', 'return %d;' % int(os.environ.get('W155_RESOLVE_MS', '8000'))),
     fn(cli, 'static int rpc_writer_retry_pause(', 2),
     fn(cli, 'static int rpc_type_mutates('),
+    fn(cli, 'static int rpc_reply_wait_cut('),
     fn(cli, 'static int rpc_resolve_identified('),
     fn(cli, 'static int rpc_send_recv_dual_once(', 2),
     span(cli, 'static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,\n'
@@ -223,6 +224,7 @@ static struct efs_conn *raft_dual_voter_conn(efs_node_id_t *n,efs_node_id_t skip
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;c->have=0;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
 static void efs_conn_set_recv_timeout(struct efs_conn *c,int ms){(void)c;(void)ms;}
+static void efs_client_conn_await_reply(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;} /* K114 fix 3: the node cache's hook; no timer here */
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n){
  assert(type==EFS_MSG_REPORT_CHUNKS);int node=(int)(c-conns);c->node=node;
  const struct efs_msg_report_chunks *h=p;
