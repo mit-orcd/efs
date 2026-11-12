@@ -201,7 +201,7 @@ void host_waiters_wake(struct group_views *gv)
         int wake;
 
         if (!w->active || (w->notified &&
-            (w->any<2 || w->floor.index || !w->floor.context)))
+            (w->any!=3 || w->floor.index || !w->floor.context)))
             continue;
         g = group_view_slot(gv, w->group);
         if (!g || !V_LOAD(g->v_has))

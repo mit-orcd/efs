@@ -165,8 +165,8 @@ TEST_BINS += tests/test_kv_reader_gate
 TEST_SRCS += tests/test_append_interleave.c
 TEST_BINS += tests/test_append_interleave
 TEST_SRCS += tests/test_crc32.c tests/test_kv_seg_stdio.c tests/test_kv_compact_manifest_view.c tests/test_kv_snap_import.c tests/test_kv_manifest_order.c tests/test_kv_fold_reopen.c
-TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c tests/test_group_view.c
-TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface tests/test_group_view
+TEST_SRCS += tests/test_wb_interface.c tests/test_open_interface.c tests/test_find_res_interface.c tests/test_put_window_interface.c tests/test_group_view.c tests/test_read_proof.c
+TEST_BINS += tests/test_wb_interface tests/test_open_interface tests/test_find_res_interface tests/test_put_window_interface tests/test_group_view tests/test_read_proof
 TEST_BINS += tests/test_crc32 tests/test_kv_seg_stdio tests/test_kv_compact_manifest_view tests/test_kv_snap_import tests/test_kv_manifest_order tests/test_kv_fold_reopen
 TEST_BINS += tests/test_snap_import_host tests/test_snap_import_pump
 
@@ -175,7 +175,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
-              src/server/raft_host.c src/server/group_view.c src/server/reclaim.c src/server/segment_store.c src/server/segment_rebuild.c \
+              src/server/raft_host.c src/server/group_view.c src/server/read_proof.c src/server/reclaim.c src/server/segment_store.c src/server/segment_rebuild.c \
               src/server/packer.c src/server/member_store.c src/server/discovery.c \
               src/server/recovery.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
@@ -467,7 +467,7 @@ docs-check:
 	python3 scripts/gen_ledger.py
 	python3 scripts/check_guide_counts.py
 	python3 scripts/check_concern_map.py docs/how-it-works/write-path-map.md src/client/write.c src/client/put_window.c
-	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h
+	python3 scripts/check_concern_map.py docs/how-it-works/raft-host-map.md src/server/raft_host.c src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h src/server/read_proof.c src/server/read_proof.h src/server/read_proof_impl.h src/server/read_proof_host.h
 	python3 scripts/evidence/do/check_entry_map.py
 	python3 scripts/gen_diagnostics.py --check
 	python3 scripts/check_failure_routes.py
@@ -901,6 +901,7 @@ test: all $(TEST_SPECIAL_BINS) decoder-bins
 	./tests/test_find_res_interface
 	./tests/test_put_window_interface
 	./tests/test_group_view
+	./tests/test_read_proof
 	python3 scripts/check_group_view_privacy.py
 	python3 scripts/check_group_view_privacy.py --self-test
 	python3 tests/test_tests_for.py
@@ -1033,6 +1034,11 @@ tests/test_put_window_interface: tests/test_put_window_interface.c src/client/pu
 # it takes, so no $(LIB).
 tests/test_group_view: tests/test_group_view.c src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/server -o $@ $< src/server/group_view.c $(LDFLAGS)
+
+# Task V4: the real read-proof owner and group view through read_proof.h; the test defines the Raft core
+# getters, the six host functions and three library calls it takes, so no $(LIB).
+tests/test_read_proof: tests/test_read_proof.c src/server/read_proof.c src/server/read_proof.h src/server/read_proof_impl.h src/server/read_proof_host.h src/server/read_index_pair_remote.h src/server/group_view.c src/server/group_view.h src/server/group_view_impl.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/server -o $@ $< src/server/read_proof.c src/server/group_view.c $(LDFLAGS)
 
 # K88 Task DK: the slot-less library writer on real daemons (test_k88_chunk_hints_live.py).
 tests/test_k88_chunk_hints: tests/test_k88_chunk_hints.c $(LIB)
@@ -1184,8 +1190,9 @@ tests/test_data_commit tests/test_data_commit_index: %: %.c tests/test_data_comm
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< -lpthread
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
-src/server/raft_host.o: src/server/read_index_pair_remote.h
-src/server/raft_host.o src/server/group_view.o: src/server/group_view.h src/server/group_view_impl.h
+src/server/read_proof.o: src/server/read_index_pair_remote.h
+src/server/raft_host.o src/server/group_view.o src/server/read_proof.o: src/server/group_view.h src/server/group_view_impl.h
+src/server/raft_host.o src/server/read_proof.o: src/server/read_proof.h src/server/read_proof_impl.h src/server/read_proof_host.h
 src/server/raft_host.o: src/server/write_prof.h src/server/apply_ring.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.

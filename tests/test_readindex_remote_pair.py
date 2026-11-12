@@ -4,7 +4,7 @@ from pathlib import Path
 import os, shlex, subprocess, tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
-source=csrc.module('raft_host')
+source=csrc.module('read_proof')
 a=source.index('static unsigned host_read_pair_capacity(');capacity=source[a:source.index('\n}',a)+2]
 code=r'''
 #include "efs/common.h"
@@ -15,7 +15,7 @@ code=r'''
 #include <stdlib.h>
 #include <stdio.h>
 struct efsd_server {int unused;};
-struct efs_raft_host {struct efsd_server *s;pthread_mutex_t mu;pthread_cond_t cv;unsigned entered[3];
+struct read_proof {struct efsd_server *s;pthread_mutex_t mu;pthread_cond_t cv;unsigned entered[3];
  int wait,first_rc,second_rc,done,result,hint;uint64_t deadline;};
 static __thread uint64_t scope;
 uint64_t efs_net_deadline_ms(void){return scope;}
@@ -29,7 +29,7 @@ static int checked_create(pthread_t *t,const pthread_attr_t *a,void *(*fn)(void 
  creates++;if(creates>deny_after)return 11;
  return pthread_create(t,a,fn,arg);
 }
-static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
+int read_proof_read(struct read_proof *h,uint8_t group,int *hint)
 {
  assert((group==0 || group==2) && scope==h->deadline);
  pthread_mutex_lock(&h->mu);h->entered[group]++;
@@ -39,7 +39,7 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
  int rc=group==0?h->first_rc:h->second_rc;
  pthread_mutex_unlock(&h->mu);if(hint)*hint=group==0?11:22;return rc;
 }
-static struct efs_raft_host *g_host;
+static struct read_proof *g_host;
 static unsigned parallel_notes,scalar_notes;
 static void test_note(int parallel){if(parallel)__atomic_fetch_add(&parallel_notes,1,__ATOMIC_RELAXED);else __atomic_fetch_add(&scalar_notes,1,__ATOMIC_RELAXED);}
 '''+capacity+r'''
@@ -48,34 +48,34 @@ static void test_note(int parallel){if(parallel)__atomic_fetch_add(&parallel_not
 #define pthread_create checked_create
 '''+(root/'src/server/read_index_pair_remote.h').read_text()+r'''
 #undef pthread_create
-static void init(struct efs_raft_host *h,uint64_t deadline)
-{*h=(struct efs_raft_host){.deadline=deadline};pthread_mutex_init(&h->mu,NULL);pthread_cond_init(&h->cv,NULL);}
-static void finish(struct efs_raft_host *h)
+static void init(struct read_proof *h,uint64_t deadline)
+{*h=(struct read_proof){.deadline=deadline};pthread_mutex_init(&h->mu,NULL);pthread_cond_init(&h->cv,NULL);}
+static void finish(struct read_proof *h)
 {assert(!pthread_mutex_destroy(&h->mu));assert(!pthread_cond_destroy(&h->cv));}
-static int run(struct efs_raft_host *h)
+static int run(struct read_proof *h)
 {
  scope=h->deadline;int rc=host_read_index_remote_pair(h,0,2,&h->hint);
  assert(scope==h->deadline && h->entered[0]==1);
  return rc;
 }
 static void *caller(void *ctx)
-{struct efs_raft_host *h=ctx;h->result=run(h);__atomic_store_n(&h->done,1,__ATOMIC_RELEASE);return NULL;}
+{struct read_proof *h=ctx;h->result=run(h);__atomic_store_n(&h->done,1,__ATOMIC_RELEASE);return NULL;}
 int main(int argc,char **argv)
 {
  assert(HOST_READ_PAIR_WORKERS==32 && HOST_READ_PAIR_STACK<=(128u<<10));
  struct efsd_server server={argc>2?atoi(argv[2]):0};
- struct efs_raft_host fixture={.s=&server};g_host=&fixture;
+ struct read_proof fixture={.s=&server};g_host=&fixture;
  unsigned limit=8;assert(host_read_pair_capacity()==limit);
  g_host=NULL;assert(host_read_pair_capacity()==8);g_host=&fixture;
  if(argc>1)deny_after=atoi(argv[1]);
- struct efs_raft_host h;init(&h,777);h.wait=deny_after?1:0;
+ struct read_proof h;init(&h,777);h.wait=deny_after?1:0;
  assert(!run(&h) && h.entered[2]==1 && h.hint==22);finish(&h);
  unsigned count=host_read_pair_count;assert(count==(deny_after==0?0:deny_after==3?3:limit));
  int startup_creates=creates;
  /* Fill every real helper with a distinct caller/deadline; overflow uses
   * the scalar path immediately and every borrowed stack/host is joined. */
  if(count) {
-  struct efs_raft_host hosts[HOST_READ_PAIR_WORKERS];pthread_t callers[HOST_READ_PAIR_WORKERS];
+  struct read_proof hosts[HOST_READ_PAIR_WORKERS];pthread_t callers[HOST_READ_PAIR_WORKERS];
   for(unsigned i=0;i<count;i++) {
    init(&hosts[i],2000+i);hosts[i].wait=2;
    assert(!pthread_create(&callers[i],NULL,caller,&hosts[i]));

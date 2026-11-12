@@ -1,10 +1,64 @@
-# Read-proof ownership: design (Task V4, phase 1)
+# Read-proof ownership (Task V4)
 
-**Current state (Nov 11):** the read-proof owner is designed and accepted with the coordinator's decisions (section "Coordinator decisions"); stage A and A2 are done in the code: the direct mode (`h->s == NULL`) and every gate that existed only for it are deleted from `raft_host.c` and from the group-view owner, and its tests are ported to the server-mode path (commits listed under "Stage A2"); the extraction itself (stage B) has not started and waits for the coordinator. Verdict: PASS for stage A and A2 on host intel2 (results below); no K row; blocks alpha: no. Base: devel `88bc1189a`.
+**Current state (Nov 11):** stage A and A2 (the direct ReadIndex mode deleted, tests ported) are merged in wave 84 (devel `60c9fcdad`). Stage B is done on branch `claude/task-v4-read-proof-11dd55`: the ReadIndex request side lives in `src/server/read_proof.c` behind the contract `src/server/read_proof.h` (149 lines), with the private layout in `read_proof_impl.h` (44) and six host declarations in `read_proof_host.h` (42). `raft_host.c` fell from 26165 to 25779 lines. All 17 moved functions keep their instruction counts except two that differ by a few instructions for a stated reason; intel2 gate: PASS (details under "Proof"). Verdict: PASS; no K row; blocks alpha: no. `k37_segment_rebuild` (K123) was not observed failing in this run.
 
 Linked item: structure review ([structure-review-20261110.md](structure-review-20261110.md)), candidate A of the [lifecycle inventory](raft-host-lifecycle-inventory-20261111.md); the finished model is [group-view-ownership-20261111.md](group-view-ownership-20261111.md). The older [entry map](readindex-entry-map-20261108.md) is the function-level table this page builds on.
 
-## Before-numbers
+## Stage B result
+
+What moved to `read_proof.c` (the 17 functions of `moved_functions.txt`; the file has 497 lines): `host_ri_complete`, `host_ri_remove`, `host_remote_read_index`, `host_follower_read_result`, `host_read_note_begin`, `read_proof_begin` (was `host_read_begin_tracked`), `host_read_admit_view`, `host_read_request`, `read_proof_start_requested` (was `host_read_start_requested`), `host_read_index_admitted`, `host_read_pair_capacity`, `host_read_pair_note`, `read_proof_read_pair` (was `host_read_index_pair`), and from `read_index_pair_remote.h` the pair workers (`host_read_pair_run`, `host_read_pair_init`, `host_read_index_scalar_pair`, `host_read_index_remote_pair`; the header now takes `struct read_proof *`). New public entry points: `read_proof_init/attach/set_telemetry`, `read_proof_read`, `read_proof_prove`.
+
+Became private: `ri_begun` and `ri_request` (per group slot), the follower coalescer `g_ri_coal`, `host_ri_wait`/`host_ri_coal`, the profile accumulators (now `g_read_proof_prof`, read by the host tick) and `host_read_index_admitted`. `scripts/check_group_view_privacy.py` (name kept) now checks both owners and fails the fast suite if another file names them; its self-test covers six bad snippets.
+
+Stayed in `raft_host.c`: the four transport functions, `host_wait_applied` and its modes, the thin wrappers `host_read_index`, `host_read_start_requested` (builds the core array) and `host_read_index_pair`, and four new functions the owner calls (`read_proof_host_gate`, `_remote`, `_kick`, `_wait_applied`; with `read_prof_on` and `read_prof_add`, now external, these are the six declarations of `read_proof_host.h`). `host_read_wait_ready` and `host_read_floor_ready` stay in group view.
+
+Publish sites (step 4). `host_publish_hosted_and_wake` replaces three identical sites: `host_receive_persist`, `host_inbox_batch_handoff` and the end of the pump cycle. It publishes every hosted group and wakes the sleepers. Sites left as they are, with their difference: `host_pending_reads` (publishes only the groups in its `published` mask, wakes only if one was); the read-ACK path in `host_read_control` (publishes one group after `start_requested`). Sites that publish without waking are listed in `read_proof.h` (start_requested, stop-leading, mark-incompatible, `host_publication_committed`, the propose paths, attach).
+
+Facts to know. `read_prof_on` is called on every read (it is the profiling switch) and, with `read_prof_add`, is now an external call from the owner: no cross-file inlining on the read path. Each leader read makes three to four new cross-file calls (the gate at entry and on each pass, `read_prof_on`, and `read_proof_host_kick` for the reader that raises the request); the cost was not measured. `read_proof_host_gate` calls `host_halted_hint` on every refusal; before the move that call was made only when the caller gave a hint pointer. Hand-built test hosts skip `read_proof_init`, so a splice test that drives the owner builds its own `struct read_proof`. `read_proof.c` has its own copies of three clock helpers (`now_us_`, `host_deadline_us`, `host_past_deadline`); they are kept duplicated on purpose to avoid a seventh declaration.
+
+## Proof of no behaviour change (intel2, gcc 14.3.1, tree = branch head)
+
+Counts are instruction lines with inlining off (`scripts/evidence/v4/instruction_run.sh`; before `instructions_before.txt`, after `instructions_after.txt`).
+
+- Identical (15): `host_ri_complete` 21, `host_ri_remove` 14, `host_follower_read_result` 16, `host_read_note_begin` 27, `read_proof_begin` 12, `host_read_admit_view` 36, `host_read_request` 22, `host_read_index_admitted` 669, `read_proof_start_requested` 64, `host_read_pair_capacity` 2, `host_read_pair_note` 16, `host_read_pair_init` 66, `host_read_pair_run` 38, `host_read_index_scalar_pair` 30, `host_read_index_remote_pair` 108.
+- Different, explained by the disassembly diff: `host_remote_read_index` 140 to 131 (it called `host_remote_cmd` with six arguments, two of them constant NULL and 0; `read_proof_host_remote` takes four); `read_proof_read_pair` 138 to 137 (the group view is loaded from the owner (`mov 0x8(%rdi)`) instead of computed from the host (`lea`), one spill gone).
+- Wrappers: `host_read_index` 9 to 7, `host_read_index_pair` 138 to 8, `host_read_start_requested` 64 to 18; the old bodies are the owner's `read_proof_read` (9), `read_proof_read_pair` and `read_proof_start_requested` (64).
+- Step 4 callers: `host_pump` 663 to 648, `host_receive_persist` 42 to 25, `host_inbox_batch_handoff` 33 to 16; the publisher is 32. Unchanged callers: `host_publication_committed` 408, `host_read_control` 152, `host_append_authority` 45, `host_query_source_once` 391, `host_read_inode_lanes_mask` 94, `server_raft_host_lookup` 441, `_mkdir` 1147, `_query_page` 319, `_query_read` 115; `_submit` 2074 to 2072.
+- `nm`: none of the 15 moved non-inline names is a defined symbol in `raft_host.o`; the six that survive `-O2` as symbols are in `read_proof.o`.
+- Disassembly of the as-built objects (`-O2`): `group_view.o` is byte-identical (sha256 `36ad58da...a70`, 896 lines). `raft_host.o` shrank from 110294 to 106245 lines; `read_proof.o` has 3753.
+- Tests, all rc 0 on intel2: `make`; `test_read_proof` (26 cases at the first gate run; 34 after the fix round below); `test_group_view`; the 16 read-path and ported Python tests; `test_k96_status_slots_live`; the privacy check and its self-test; `tests_for server/group_view --run` and `server/read_proof --run`; `tests_for server/raft_host --run` and `make test` after the one fix below; the recipe test; `tests/sanitizer_check.sh asan` (609 s) and `tsan` (709 s), both including `k96_status_slots_live`.
+- One failure found and fixed: `tests/test_receive_persist.py` splices `host_receive_persist`, which now calls the publisher; it splices the publisher too. First run: `tests_for raft_host` and `make test` stopped on it; rerun below.
+- Raw logs: `~/efs-artifacts/taskV4-20261111-b/` on intel2 with `SHA256SUMS`; they stay outside Git.
+
+## Behaviour claim
+
+No change to read behaviour: bodies moved unchanged except for how they reach the state. Two step-0 changes are visible outside the move: the `read-phase-prof` line lost its `ri_lock` and `ri_begun` fields, and the wake re-scan condition in `host_waiters_wake` is written `w->any!=3 || ...` (same result for the modes that exist).
+
+## Tests and what they do not cover
+
+`tests/test_read_proof.c` (34 cases, fast suite, budget 5 s) links the real `read_proof.c` and `group_view.c` over a fake Raft core: one case per state transition of the table, five cases for loss of leadership (at the gate, after admission, after the request, while checking with a floor, while asleep) and one for a change during the leader ask; one case waits the product's own 400 ms bound once; no sleeps, no test-only knob. Ten Python tests that read `raft_host.c` text were ported to `read_proof.c`.
+
+Not covered: a host stop does not wake a read sleeper (finding below, unchanged); lock order under the real pump (the splice and live tests cover it); the real transport functions and the RPC to the leader (faked).
+
+## Fix round after review (contract review of `2572796fe`)
+
+The contract header had three wrong statements, now corrected against the code (`read_proof.c`, `raft_host.c`): the 400 ms bound covers the leader path (S2 to S6) and a wait for another caller's RPC, not the caller that issues the RPC; a follower read adds the host's remote call and applied wait (own 400 ms each); the admission pass tests only the term on its re-read, with the hint of the older copy; a local role or term change during the RPC or the applied wait is not seen. Also stated: host stop after the pump is joined (a sleeper ends BUSY at its deadline), the other return codes of the remote call, the S2 loop for a group without a slot, the remote call as a retry loop, the publication sites by function name (five step-downs publish nothing: `host_mark_incomplete`, the apply path's `host_mark_incompatible`, `host_retire_check`, `server_raft_host_step_down`, `host_decide_lost_fault`) and `host_read_pair_mu` among the locks. `read_proof.h` is 149 lines.
+
+Tests: the floor case now publishes the finished round before the role flips; the duplicate `at_gate` case is removed; `wait_asleep` is bounded; eight cases are new (the arrival commit, a begun round ahead of the view, the covering-round test, a gate refusal on a later pass, a new term on the admission pass, a role change in the same term, and three for `read_proof_read_pair`); the fake records the leader asked. 34 cases; each of three mutations of `read_proof.c` (begun round, term test, role test) fails the cases meant for it. Not pinned: the index the covering-round branch gives (no public call reads it), the follower coalescer under concurrency, host stop. The privacy script no longer exempts the interface test.
+
+Evidence files named here: `scripts/evidence/v4/functions_after_owner.txt` and `scripts/evidence/v4/functions_after_host.txt` (the function lists counted after the move) and `scripts/evidence/v4/instructions_after.txt` (the counts).
+
+Fix-round runs on host nuc (tree = branch head `c6f0c71f7`, gcc 14.3.1; raw logs `~/efs-artifacts/taskV4-20261111-c/` on nuc with `SHA256SUMS`, first attempt in `...-c-first`): `make`, `test_read_proof` and each of its 34 cases by name, `test_group_view`, the privacy check and its self-test, `make test` and the recipe test all rc 0; ASan lane PASS (1225 s). TSan lane, four runs: the first (before the atomics fix) failed `read_proof_interface` with two data races in the test's own fake host (written from two threads in the pair case; fixed with atomics, `c6f0c71f7`); the second failed `k96_status_slots_live` (a race on `h->dec_retired` in `host_txn_retire`, `raft_host.c`, between the finalizer and the recovery thread; code this task did not touch, see Findings); the third (rerun of the lane alone) failed `k37_segment_rebuild` (K123, known intermittent, not fixed here); the fourth run of the lane passed (54 run, 0 failed, 804 s) including `k96_status_slots_live`.
+
+## Findings
+
+- Host stop wakes no read sleeper (design finding, unchanged by the move; the reader ends at its deadline). Documented, not changed.
+- `k37_segment_rebuild` (K123) intermittent: seen once under TSan on nuc in the fix round; not fixed here.
+- New, unfixed: `host_txn_retire` increments `h->dec_retired` / `h->dec_retire_fail` (`raft_host.c`, L9413 at the fix round) without synchronisation from the finalizer thread (`host_fin_one`) and the recovery thread (`host_txn_decision_sweep`); TSan reported it once, inside `k96_status_slots_live` (74 s into the run). A statistics counter; no K row yet.
+
+## History
+
+### Before-numbers
 
 `python3 scripts/evidence/v4/lifecycle_inventory.py src/server/raft_host.c` (a copy of the V2 script with its own candidate list, because the V3 extraction moved two of the 25 listed functions, `host_read_wait_ready` and `host_read_floor_ready`, to `group_view.h`; the V2 script exits 1 on the old list). Output committed as `scripts/evidence/v4/inventory_A_before.txt`; the 23 names are in `scripts/evidence/v4/candidate_A_readindex.txt`.
 
@@ -17,7 +71,7 @@ Linked item: structure review ([structure-review-20261110.md](structure-review-2
 | fields used / only inside | 14 / 2 | 20 / 2 (`ri_begun`, `ri_request`); file-scope variables 2 / 1 (`g_ri_coal`) |
 | test files naming a function | 55 | 54 (51 splice `raft_host` through `tests/csrc.py`) |
 
-## The lifecycle as a state table
+### The lifecycle as a state table
 
 A request is a call of `host_read_index_admitted` (L5196) with `admission == NULL`, or with an admission from the pair path. `delegated` means `h->s != NULL`. In production it always is: `h->s` is assigned only at L13703, from the only caller `efsd.c:1539`, which passes `&server`. The `!delegated` branches (L5274-L5279, L5323-L5350, L5447-L5500, and `host_read_admit` L5074-L5093, `host_read_probe_needed` L5099-L5114) serve only a host built without a server; see finding 7. Cells are written for `delegated`. "Return" means what the handler gets.
 
@@ -38,9 +92,9 @@ A request is a call of `host_read_index_admitted` (L5196) with `admission == NUL
 
 Where the change is published, from the code (these are the only places a handler can learn of a role or term change): the end of every pump cycle, `host_publish_view` for each hosted group then `host_waiters_wake` (L8708-L8712); `host_stop_leading` when the server is stopping (L8523-L8526, publish only; the wake follows at the end of the same cycle); `host_pending_reads` (L8485-L8486); `host_read_control` on a read ACK (L14080-L14082); the batch handoff (L7601-L7602). Step-downs that publish nothing themselves: `server_raft_host_step_down` L16676, `host_retire_check` L9098, `host_mark_incomplete` L3457, `host_mark_incompatible` L3487 (the pump publishes at L8526 after the incompatible mark, but only for `damaged_row == 2`), and the decide-lost test hook L18886. Each is picked up by the next pump cycle's publish. Not determined: the longest wait between those and the next cycle; the pump's idle timer decides (`host_pump`, not read for this design).
 
-## The boundary
+### The boundary
 
-### a. Public operations
+#### a. Public operations
 
 One struct `read_proof` per host, embedded as `h->rp` (as `h->gv` is). Files `src/server/read_proof.c` and `src/server/read_proof.h`. Nothing here changes a handler: `host_read_index(h, group, hint)` stays in `raft_host.c` as a four-line `static` wrapper over `read_proof_read` (the 55 callers, the two header-only helpers `read_index_pair_remote.h` and `publication_session_fast.h` and the 18 routed tests see the same name and signature).
 
@@ -59,7 +113,7 @@ Of the 23 functions: **7 become the interface** (`host_read_index_admitted` as t
 
 `read_index_pair_remote.h` (106 lines, four functions, included at L5406 with two macros defined around it) is included by `read_proof.c` instead; `publication_session_fast.h` (16 lines, L15352) stays included by `raft_host.c`.
 
-### b. State
+#### b. State
 
 Moves into the owner (only these functions use them): `struct host_group.ri_begun`, `ri_request` (L252; 3 references inside, none outside), the file-scope `g_ri_coal`, `struct host_ri_coal`, `struct host_ri_wait` (L4944-L4961; process-global today, stays process-global), `obs_wait_timeouts`, `obs_wait_timeouts_own`, `obs_wait_extends` (L533-L535). The last three have 1 reference inside and 2 to 3 outside: the `host_periodic_render` text (L8027-L8029), the stats copy (L8083-L8086) and the struct copy (L7896-L7899). They move behind `read_proof_stats`, which changes six lines of the render code.
 
@@ -77,7 +131,7 @@ Shared, stay in `struct efs_raft_host`, and what the owner needs of each:
 | `inbox`, `inbox_mu`, `inbox_n`, `inbox_bytes` | the inbox, 10-12 each | not used by the owner; used by the four staying functions |
 | `g_read_prof` | the profile tick and 34 outside references | see d |
 
-### c. Division with `group_view`
+#### c. Division with `group_view`
 
 `group_view` publishes the view and owns the sleeper slots; it never decides what a request does. The owner calls: `host_view_get` (L5221, L5280, L5284, L5348, L5359, L5381, L5426, L5523, L5531, L5561), `host_view_covers` L5313, `host_view_quorum_index` L5306, `host_view_wait_apply` L5324 and L5364, `host_read_floor_ready` L5296 and L5363, `group_view_wait_lock` / `group_view_wait_unlock` L5358/L5380 and L5560/L5573, `host_waiter_sleep` L5367 and L5564, and `host_publish_view` in `read_proof_start_requested` (L5189). It does not call `host_waiters_wake`; the pump and the read-ACK path do (L8712, L14082, L8486). `host_waiter_sleep` mode 1 is used only by `host_publication_committed` and stays with it.
 
@@ -91,7 +145,7 @@ Where do `host_read_wait_ready` and `host_read_floor_ready` live? They define "t
 
 Recommended: A. Not decided by taste: it is the only choice that moves no hot-path code and keeps the V3 tests unchanged; its cost is the two-file reading, which the contract in `read_proof.h` must remove by stating the rule in words with the line of each predicate.
 
-### d. Outside helpers (17 `static` functions the candidate calls today)
+#### d. Outside helpers (17 `static` functions the candidate calls today)
 
 | Helper | Calls | Proposal |
 |---|---|---|
@@ -106,15 +160,15 @@ Recommended: A. Not decided by taste: it is the only choice that moves no hot-pa
 
 Result: 4 hooks, 3 owner copies, 1 internal header item, 3 not needed, 3 stay with their callers. That is below the line of about 8 for an internal header. With the direct-mode branches kept, `group_raft`, `host_publish_group` and a lock hook for `h->mu` join (7 hooks plus the header): that is the sign the boundary is wrong, and the smaller boundary is to remove the dead branches first (decision 1).
 
-### e. Hot path
+#### e. Hot path
 
 `host_read_index` is called 87 times from 55 handlers. It stays a `static` four-line wrapper in `raft_host.c`; the call into `read_proof_read` is the one new call. Not determined: whether `host_read_index_admitted` (188 lines) is inlined into it today; the `-O2` object decides, and phase 2 measures instruction counts as V3 did (`scripts/evidence/v3/instruction_counts.sh`). Stay `static inline` in `group_view.h`: `host_view_get`, `host_view_covers`, `host_view_quorum_index`, `host_view_wait_apply`, `host_read_wait_ready`, `host_read_floor_ready`, the bracket (unchanged by this task). Ordinary functions: everything in `read_proof.c`. The hooks add indirect calls: `gate` twice per loop pass (L5213, L5229), `kick` per round. They are the one measurable cost of the hook choice (decision 2).
 
-### f. Lock rules
+#### f. Lock rules
 
 Order: `h->mu`, then `cv_mu`, then `view_mu` (the V3 order, unchanged). The request-side operations (`read_proof_read`, `read_proof_read_pair`, `read_proof_prove`, `read_proof_wait_applied`) must be called with no lock held: they sleep, and `host_remote_read_index` makes an RPC. Inside they take: `cv_mu` only through the bracket (no other lock inside it, per `group_view.h`); `g_ri_coal[].mu`, a leaf, released across `host_remote_cmd` (L5018-L5021) and held with `c->cv` waits; `view_mu` only inside `host_view_get` after 64 odd loads. They take `h->mu` nowhere once direct mode is gone (today at L5275 and L5330 only when `!delegated`). `read_proof_start_requested` and `read_proof_begin` require `h->mu` held and take `view_mu` through `host_publish_view`; they take no other lock. The pump calls the wake under `h->mu` (order `h->mu`, `cv_mu`). Not determined: that no one of the 55 callers holds `h->mu` or `cv_mu` when it calls `host_read_index`; a lock-order check over the callers would decide (the entry map says "no host lock held" only for the forwarding branch).
 
-### g. Tests
+#### g. Tests
 
 Owner interface test `tests/test_read_proof.c`, linking the real `read_proof.c` and `group_view.c` over the V3 stub getters plus stubs for `efs_raft_read_begin`, `efs_raft_read_round`, `efs_raft_read_pending`, `efs_raft_read_quorum`, `efs_raft_role`, `efs_raft_commit`, `efs_raft_term` and fake hooks. Threads are needed only where a reader must be asleep; use the V3 trick (the main thread can take `cv_mu` only when the sleeper is inside its wait). No sleeps; the deadline is passed in the past or made short by the owner's `end` argument only if the owner is given a settable budget (a test-only parameter; otherwise the cases with a deadline use a pre-expired `end`, which needs one internal entry point; open question in decision 6).
 
@@ -147,13 +201,13 @@ One named case per transition, and one per state for the replica losing leadersh
 
 Tests that name these functions: 54 files; 51 read `raft_host` through `tests/csrc.py` (`MODULES['raft_host']`, L22-L23): the ones that cut a moved function's text break when it moves (V3 ported 20 of its own). Which break: not determined; `python3 scripts/tests_for.py server/raft_host --run` on the moved tree decides. The routed set that must reach the owner is the entry map's 18 rows. The three that inventory counted as including `raft_host.c` directly (`test_apply_ring.py`, `test_host_batch_handoff.py`, `test_put_ticket_batch.py`) and the text anchor of `test_read_retry_budget.py` (slice from `host_remote_cmd_impl` to the forward declaration of `host_wait_applied`) need the first look.
 
-### h. Size
+#### h. Size
 
 Lines that move: 540 of the 703 (19 functions) plus 18 (`host_ri_wait`, `host_ri_coal`, `g_ri_coal`) plus the block comments before them (about 40), so about 600; `raft_host.c` after: about 25,700 of 26,314. If direct mode is removed first, about 105 fewer lines move and `raft_host.c` is about 105 lines shorter before the move. `read_proof.c` about 500 lines, `read_proof.h` about 200 (contract, no more than `group_view.h`), `read_index_pair_remote.h` unchanged (106).
 
 Expected reading set for the trial question (A group's local replica loses leadership...): `read_proof.h` (about 200), the request half of `read_proof.c` (about 330), `group_view.h` and `group_view.c` (580), and three excerpts of `raft_host.c` that the contract names as the publication points (`host_stop_leading`, the pump cycle end, `server_raft_host_step_down`; about 80): about 1,200 lines. The trial of Nov 11 needed the publishers, the read loop and the leadership handling in `raft_host.c`; whether it falls is not determined by this design. A reader trial after phase 2 decides. I did not read the key of the trial page.
 
-## Findings in the code as it is (cells the code does not handle, and what does not fit)
+### Findings in the code as it is (cells the code does not handle, and what does not fit)
 
 No behaviour changes for any of them. The coordinator decides at the merge whether one becomes a K row (1, 3, 5, 6, 9, 10 are the documented ones).
 
@@ -170,7 +224,7 @@ No behaviour changes for any of them. The coordinator decides at the merge wheth
 11. **No test joins a failed begin to the reader's BUSY.** `test_readindex_admission.py` pins that the pump retries an early refusal and publishes nothing; no test connects a failed begin to the reader returning BUSY at its bound.
 12. **`host_publication_committed` still begins a round under `h->mu` on the reader thread** (`host_read_begin_tracked`, L25217). "Readers never take `h->mu` to begin" holds for `host_read_index_admitted` and `host_read_index_pair` only; `test_raft_read_admission.py` asserts it for those two bodies.
 
-## Open decisions
+### Open decisions
 
 1. **Delete the direct mode before the extraction?** (a) Yes, as its own commit first: about 105 lines gone, the owner needs no `h->mu`, no `group_raft`, no `host_publish_group`, 4 hooks instead of 7; cost: one splice test (`test_readindex_admission.py`) and parts of `test_readindex_operation.py` and `test_readindex_tickets.py` change; it is a change of what the product contains, though not of what it does. (b) No, keep it in the owner: 3 more hooks, an `h->mu` lock hook, and an owner that can take `h->mu`; the lock rules gain a case. Recommended: (a).
 2. **Outside helpers as hooks or an internal header?** (a) 4 hooks plus 3 clock copies plus `read_prof.h`: indirect calls (the gate twice per loop pass), a fake-hook test is possible. (b) A `host_internal.h` declaring `host_group_incompatible`, `host_halted_hint`, `host_group_retired`, `host_fwd_leader_pick`, `host_remote_cmd`, `host_pump_kick`, `group_raft`, `host_publish_group`, `read_prof_*`, `now_us_`: no indirect calls, but 11 or more symbols made visible and the test needs the real `raft_host.c`. Recommended: (a).
@@ -181,7 +235,7 @@ No behaviour changes for any of them. The coordinator decides at the merge wheth
 7. **Do findings 1, 3, 5 and 6 get a K row now?** This is a refactor with no behaviour change, so the contract would document them as they are. (a) Document only. (b) Open K rows (blocks alpha: not determined; a live run would decide). Recommended: (a), and the coordinator decides about rows.
 8. **Reading-set measurement**: run a fifth reader trial after phase 2 (one agent, the same question)? Cost: one agent run. Recommended: yes, as for V3.
 
-## Reproduction
+### Reproduction
 
 ```
 python3 scripts/evidence/v4/lifecycle_inventory.py src/server/raft_host.c            # inventory (exit 0)
@@ -190,7 +244,7 @@ python3 scripts/evidence/v4/lifecycle_inventory.py src/server/raft_host.c --func
 
 The state table was read from the code at the lines given; nothing was executed. Limitations: the table is for the delegated mode; pump idle timing, handler drain order and the tests' pinned behaviour were not read (marked "not determined" above).
 
-## Coordinator decisions and stage A (Nov 11)
+### Coordinator decisions and stage A (Nov 11)
 
 **Decisions.** (1) Delete the direct mode first, as its own commit, only if no test executes it. (2) No function pointers (an indirect call on every metadata read). One small internal header `src/server/read_proof_host.h` declares what the owner needs from the host, each with a one-line contract; those functions lose `static` in `raft_host.c`; tests define stubs with the same names. (3) `host_read_wait_ready` and `host_read_floor_ready` stay in `group_view.h`; the read-proof contract names them as its wake rule and completion rule and says why they live there (the wake needs them and they are pure over a view copy). (4) The applied wait (`host_wait_applied_mode`, `host_wait_applied_own`, `host_wait_applied`) does not move: five write-verdict waiters use it and write paths must not depend on the read-proof owner. The contract says "the follower read's applied wait is the host's"; the owner reaches it through `read_proof_host.h`. `read_proof_wait_applied` and `read_proof_stats` therefore leave the owner's operations, and `obs_wait_*` stay in the host. (5) The four transport functions stay. (6) No test-only budget setter; the owner test uses the real bounds, a timeout case waits the product's own bound (at most 400 ms) once, few such cases, no sleep. (7) Findings 1, 3, 5, 6, 9, 10 are documented, not changed. (8) The fifth reader trial is the coordinator's, after the merge.
 
@@ -228,13 +282,13 @@ Per the rule, nothing was deleted. The decision is the coordinator's: deleting t
 
 If direct mode is deleted: 4 declarations (gate, remote read, kick, wait_applied); `retired` is not needed because decision 4 keeps the applied wait in the host. If it stays: 8 (those four plus `group_raft`, `host_publish_group`, lock, unlock). Outside `static` callees of the candidate: 17 today; the owner takes 3 by copying clock helpers, 2 through `read_prof.h` (not yet decided against the header rule: it would be a second internal header; alternative is to give the owner its own counter struct), 3 not needed, 3 stay with the transport functions, and 4 (or 8) through `read_proof_host.h`.
 
-## Stage A decision and result: the direct mode is deleted
+### Stage A decision and result: the direct mode is deleted
 
 Decision (coordinator, Nov 11): delete the direct mode and port the tests that exercised it to the mode production runs. Profile helpers `read_prof_on` and `read_prof_add` go into `read_proof_host.h` as two more declarations, no second header and no new counter struct. The planned header then has **six declarations**: gate, remote read, kick, wait applied, `read_prof_on`, `read_prof_add`. The earlier table's `retired`, `group_raft`, `host_publish_group` and the lock pair are not needed. The direct mode is now gone from the product, so the 8-declaration variant above no longer exists.
 
 Removed from `raft_host.c`: `host_read_admit`, `host_read_probe_needed`, the `else` branch of the admission and the locked begin in `host_read_index_admitted` (with the `delegated` variable: its three uses became the constants 1 and mode 3), and everything after the `if(h->s)` section of `host_read_index_pair`. 197 lines changed: 28 added, 169 removed (net 141 shorter). The two `h->s` guards kept here at first were removed in stage A2 (below). Remaining `g_read_prof.ri_lock` and `ri_begin` counters are now never incremented; they still render (value 0), unchanged to avoid a behaviour change in the profile line. The count of 12 before and 4 after used a pattern that missed several spellings; the complete list is in stage A2.
 
-### Guarantee pinned today → where it lives after
+#### Guarantee pinned today → where it lives after
 
 | # | Test and assertion group (before) | Guarantee | After |
 |---|---|---|---|
@@ -263,18 +317,19 @@ Removed from `raft_host.c`: `host_read_admit`, `host_read_probe_needed`, the `el
 
 Totals: 22 rows. Ported: 14 (rows 1-7, 10, 11, 12, 15, 16, 19, 20); text assertions replaced: 1 (row 21); unchanged: 2 (rows 9, 22); ported in part with the direct-only part removed: 2 (rows 13, 17); removed with the direct mode: 3 (rows 8, 14, 18). No row ends otherwise.
 
-### Stage A test results (host intel2, tree `fd2a410d8`, Nov 11)
+#### Stage A test results (host intel2, tree `fd2a410d8`, Nov 11)
 
 Verdict: PASS. Exact tree: commits `506ee3aa2` (deletion and test ports) and `fd2a410d8` (map pages), built from `git archive HEAD` into `~/efs-taskV4/` (removed afterwards). Raw logs outside Git in `~/efs-artifacts/taskV4-20261111/` on intel2 with `SHA256SUMS`. Order and results (seconds): `make` rc 0 (28); fixtures `make test-bins tests/faults/efsd` rc 0 (15); the five tests `test_readindex_admission`, `test_readindex_pair`, `test_readindex_result`, `test_raft_read_admission`, `test_readindex_tickets` each rc 0 in under 1 s (no budget row touched); `python3 scripts/tests_for.py server/raft_host --run` rc 0 (581); `make test` rc 0 (154); `python3 tests/test_make_test_recipe.py` rc 0 (1); `tests/sanitizer_check.sh asan` rc 0 (605); `tests/sanitizer_check.sh tsan` rc 0, 53 run, 0 failed (721; `k96_status_slots_live` and `k37_segment_rebuild` both passed). Limitation: the ASan variant inside `test_readindex_pair.py` is skipped on the Mac (no ASan leak runtime) and ran on intel2 only.
 
-## Stage A2: what was still left of the direct mode (commit `87e25c5f0`, on devel `88bc1189a`)
+### Stage A2: what was still left of the direct mode (commit `87e25c5f0`, on devel `88bc1189a`)
 
-**Every `h->s` use in a condition in `raft_host.c`, before and after.** Before (devel plus stage A): L923 `peer_addr` (`!h->s` before it dereferences `h->s->lock`), L5133 `host_read_start_requested` (`if(!h->s)return 0;`), L8286 `host_pending_reads` (`if(!h->s)return;`), L8451 and L8491 (`host_stop_leading(h, h->s && server_stop_requested())`, pump), L13912 `host_read_control` (`fresh_probe=h->s && ...`), L13931 (`handled && h->s && BO_ON()`), L15965 (`EFS_FAULTS` hook: `d && *d && h->s && snprintf(.. h->s->id ..)`), L16991 `host_read_leader_hint` (`h->s ? host_namespace_leader_hint(h,group) : -1`). After: L923 and L15962 only.
+**Every `h->s` use in a condition in `raft_host.c`, before and after.** Before (devel plus stage A): L923 `peer_addr` (`!h->s` before it dereferences `h->s->lock`), L5133 `host_read_start_requested` (`if(!h->s)return 0;`), L8286 `host_pending_reads` (`if(!h->s)return;`), L8451 and L8491 (`host_stop_leading(h, h->s && server_stop_requested())`, pump), L13912 `host_read_control` (`fresh_probe=h->s && ...`), L13931 (`handled && h->s && BO_ON()`), L15965 (`EFS_FAULTS` hook: `d && *d && h->s && snprintf(.. h->s->id ..)`), L16991 `host_read_leader_hint` (`h->s ? host_namespace_leader_hint(h,group) : -1`). After: five null guards remain, none a read-path mode switch: L923 `peer_addr`, L15961 fault hook, and three `h->s ? h->s->id : 0` reads that fill a node id in a reply (L16078 `out->node_id`, L17041 and L17645 `out->read_node_id`). The first count of two missed the last three; the table below lists the first two and the three id reads are the same kind (protect the dereference, nothing else).
 
 | Use | What it was for | Decision |
 |---|---|---|
 | L923 `peer_addr` | protects the dereference of `h->s->lock` on the next lines | kept: a real guard |
-| L15962 fault hook | protects `h->s->id`; compiled only with `EFS_FAULTS` | kept: a real guard |
+| L15961 fault hook | protects `h->s->id`; compiled only with `EFS_FAULTS` | kept: a real guard |
+| L16078, L17041, L17645 | `h->s ? h->s->id : 0` fills a node id in a reply | kept: real guards |
 | L5133, L8286 | mode switches: a host without a server requested rounds nobody starts, and skipped the early read control | removed; `tests/test_readindex_tickets.py` (the `h.s=0` line) and `tests/test_raft_pending_reads.py` (the `h.s=NULL` call, the `struct server` and the field) no longer build a host without a server |
 | L8451, L8491 | `server_stop_requested()` is a global and touches no `h->s`; the `h->s &&` meant "a host without a server never relinquishes" | removed |
 | L13912, L13931 | `fresh_probe` and the batch-obs counters were off without a server | removed |
@@ -288,7 +343,7 @@ Proof that no product caller passes the other value: `h->s` is assigned only at 
 
 **Guarantee table, totals after A2.** The 22 rows of stage A stand (14 ported, 1 text replaced, 2 unchanged, 2 ported in part, 3 removed with the direct mode). Added rows: 23 (pair, saturation with mixed leadership): ported; 24 (pair, group 0 follower success): ported; 25 (pair, absent group with a scalar error): ported; 26 (`test_read_waiters.py`, an idle or older finished round wakes a waiter, and the first-signal-then-capture block): removed with mode 2; 27 (`test_group_view.c`, idle round ready in mode 2): removed with mode 2. Totals: 27 rows, 17 ported, 1 text replaced, 2 unchanged, 2 ported in part, 5 removed with the direct mode or mode 2.
 
-### Stage A2 test results (intel2, PASS)
+#### Stage A2 test results (intel2, PASS)
 
 Tree `87e25c5f0` (code identical to the later commits except `tests/test_shutdown_bounded.py`). Method as stage A: `git archive HEAD` to `~/efs-taskV4`, `make -j8`, run in `screen`; raw logs with `SHA256SUMS` stay on intel2 in `~/efs-artifacts/taskV4-20261111-a2/` (first run) and `-a2b/` (rerun), not in Git; the tree is removed.
 
@@ -298,3 +353,14 @@ Tree `87e25c5f0` (code identical to the later commits except `tests/test_shutdow
 - Sanitizers (first run, before the text-only fix): ASan gate PASS (77 run, 0 failed, 499 s of gate, 612 s wall); TSan gate PASS (53 run, 0 failed, 678 s; wall 719 s), including `k96_status_slots_live` and `k37_segment_rebuild` (K123 did not fail this time; it is an intermittent, not fixed here).
 - Mac: `make docs-check`, `check_doc_links`, `tests/test_code_graph.py`, `tests_for`, `csrc`, and the group-view privacy check with its self-test pass. `test_host_view_spin` and `test_readindex_publish` fail to compile on the Mac with clang unused-function errors; the same on devel `88bc1189a`, they pass on Linux.
 - Not run: no `tests/budgets.tsv` row was changed.
+
+### Stage B step 0: cleanup on devel `60c9fcdad`
+
+- `g_read_prof.ri_lock` and `ri_begin` (never incremented since A2) are removed with their two fields in the `read-phase-prof` line, which now prints `sleep_quorum` and `sleep_apply` only. Proof: the only readers were `read_prof_tick` and the stub struct in `tests/test_readindex_result.py`; no script parses the line.
+- `host_read_leader_hint` was a bare forwarder to `host_namespace_leader_hint`; its three callers (L17009, L17530, L26031) call that directly; `tests/test_namespace_leader_route.py`, `test_lookup_path_authority.py` and `test_lookup_replacement.py` follow, and the two map pages drop the name.
+- `host_waiters_wake`: the re-scan condition `w->any<2 || ...` is now `w->any!=3 || ...`: same result for modes 0, 1 and 3, and mode 2 does not exist. `tests/test_read_waiters.py` gets four cases for it (a notified mode-3 sleeper with a context and no index is scanned again and captures the index without a new signal; with an index, or with no context, it is skipped; notified modes 0 and 1 are final); with the condition replaced by `1` the test fails.
+- Test text: "Delegated" and "Server mode" wording, redundant `.any=3`, and the unused `.s=&server` fixtures are gone; the group 0 follower pair case asserts `!h.g[0].ri_request`.
+
+### Stage B step 1: before-numbers (tree `73c2d70ef`, intel2, gcc 14.3.1)
+
+`scripts/evidence/v4/instruction_run.sh` (inlining and inter-procedural optimisation off, the method of `scripts/evidence/v3/instruction_counts.sh`) over the 17 functions that will move (`scripts/evidence/v4/moved_functions.txt`) and the 12 functions that call one of them (`scripts/evidence/v4/callers_of.py` lists them; the list is `scripts/evidence/v4/functions_before.txt`). Result: `scripts/evidence/v4/instructions_before.txt` (29 functions; for example `host_read_index_admitted` 669, `host_remote_read_index` 140, `host_read_index_pair` 138, `host_read_start_requested` 64, `host_read_index` 9, `host_pump` 663, `host_publication_committed` 408). The address-free disassembly of the as-built `raft_host.o` (110,294 lines) and `group_view.o` (896 lines) stays on intel2 in `~/efs-artifacts/taskV4-20261111-b/`; the file holds their sha256. The 55 callers of `host_read_index` are not in the list: they call the wrapper, which stays.

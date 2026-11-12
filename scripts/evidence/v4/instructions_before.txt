@@ -1,0 +1,39 @@
+# Task V4 stage B before: instruction lines per function, inlining off, intel2 (gcc 14.3.1), tree 73c2d70ef
+# produced by: scripts/evidence/v4/instruction_run.sh <tree> <out> before scripts/evidence/v4/functions_before.txt
+raft_host.c host_append_authority 45
+raft_host.c host_follower_read_result 16
+raft_host.c host_publication_committed 408
+raft_host.c host_pump 663
+raft_host.c host_query_source_once 391
+raft_host.c host_read_admit_view 36
+raft_host.c host_read_begin_tracked 12
+raft_host.c host_read_control 152
+raft_host.c host_read_index 9
+raft_host.c host_read_index_admitted 669
+raft_host.c host_read_index_pair 138
+raft_host.c host_read_index_remote_pair 108
+raft_host.c host_read_index_scalar_pair 30
+raft_host.c host_read_inode_lanes_mask 94
+raft_host.c host_read_note_begin 27
+raft_host.c host_read_pair_capacity 2
+raft_host.c host_read_pair_init 66
+raft_host.c host_read_pair_note 16
+raft_host.c host_read_pair_run 38
+raft_host.c host_read_request 22
+raft_host.c host_read_start_requested 64
+raft_host.c host_remote_read_index 140
+raft_host.c host_ri_complete 21
+raft_host.c host_ri_remove 14
+raft_host.c server_raft_host_lookup 441
+raft_host.c server_raft_host_mkdir 1147
+raft_host.c server_raft_host_query_page 319
+raft_host.c server_raft_host_query_read 115
+raft_host.c server_raft_host_submit 2074
+# address-free objdump of the as-built objects (make, -O2): sha256 and line count; the text stays on intel2 in ~/efs-artifacts/taskV4-20261111-b/
+# ee7e7c64d2118db8ba39fac0dc8fde7504937050124567fda89e092c900d4b5c  disasm_before_raft_host.txt
+# lines raft_host: 110294
+# 36ad58daf67266a21f66bcc011fc9f23440acaf0df8a9a7a4bdfecd143b3ba70  disasm_before_group_view.txt
+# lines group_view: 896
+# extra before-counts of two callers changed in step 4 (tree 73c2d70ef, same method)
+raft_host.c host_receive_persist 42
+raft_host.c host_inbox_batch_handoff 33

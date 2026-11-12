@@ -1,0 +1,48 @@
+# Task V4 stage B after: instruction lines per function, inlining off, intel2 (gcc 14.3.1), tree = stage B head (see the page)
+# produced by: scripts/evidence/v4/instruction_run.sh <tree> <out> after functions_after_host.txt functions_after_owner.txt
+raft_host.c host_append_authority 45
+raft_host.c host_publication_committed 408
+raft_host.c host_pump 648
+raft_host.c host_query_source_once 391
+raft_host.c host_read_control 152
+raft_host.c host_read_index 7
+raft_host.c host_read_index_pair 8
+raft_host.c host_read_inode_lanes_mask 94
+raft_host.c host_read_start_requested 18
+raft_host.c host_publish_hosted_and_wake 32
+raft_host.c read_proof_host_gate 24
+raft_host.c read_proof_host_remote 10
+raft_host.c read_proof_host_kick 5
+raft_host.c read_proof_host_wait_applied 6
+raft_host.c server_raft_host_lookup 441
+raft_host.c server_raft_host_mkdir 1147
+raft_host.c server_raft_host_query_page 319
+raft_host.c server_raft_host_query_read 115
+raft_host.c server_raft_host_submit 2072
+raft_host.c host_receive_persist 25
+raft_host.c host_inbox_batch_handoff 16
+read_proof.c host_follower_read_result 16
+read_proof.c host_read_admit_view 36
+read_proof.c read_proof_begin 12
+read_proof.c host_read_index_admitted 669
+read_proof.c read_proof_read 9
+read_proof.c read_proof_prove 9
+read_proof.c read_proof_read_pair 137
+read_proof.c host_read_index_remote_pair 108
+read_proof.c host_read_index_scalar_pair 30
+read_proof.c host_read_note_begin 27
+read_proof.c host_read_pair_capacity 2
+read_proof.c host_read_pair_init 66
+read_proof.c host_read_pair_note 16
+read_proof.c host_read_pair_run 38
+read_proof.c host_read_request 22
+read_proof.c read_proof_start_requested 64
+read_proof.c host_remote_read_index 131
+read_proof.c host_ri_complete 21
+read_proof.c host_ri_remove 14
+# f93ddf199c3ce2b60773824577afb5f152e731194b87af85f1d6a9b56b7055b9  disasm_after_raft_host.txt
+# lines raft_host: 106245
+# 36ad58daf67266a21f66bcc011fc9f23440acaf0df8a9a7a4bdfecd143b3ba70  disasm_after_group_view.txt
+# lines group_view: 896
+# 46c222347b3bf89c2b0fb3a5a5e881f36f995c2c179d4c6716c081b528bfa6e9  disasm_after_read_proof.txt
+# lines read_proof: 3753

@@ -1,0 +1,22 @@
+# raft_host.c after Task V4 stage B: the callers of the moved functions, the wrappers, the publisher and the host functions the owner calls
+host_append_authority
+host_publication_committed
+host_pump
+host_query_source_once
+host_read_control
+host_read_index
+host_read_index_pair
+host_read_inode_lanes_mask
+host_read_start_requested
+host_publish_hosted_and_wake
+read_proof_host_gate
+read_proof_host_remote
+read_proof_host_kick
+read_proof_host_wait_applied
+server_raft_host_lookup
+server_raft_host_mkdir
+server_raft_host_query_page
+server_raft_host_query_read
+server_raft_host_submit
+host_receive_persist
+host_inbox_batch_handoff

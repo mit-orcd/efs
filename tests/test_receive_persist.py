@@ -5,6 +5,7 @@ import os,shlex,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
 s=csrc.module('raft_host');a=s.index('static int host_receive_persist(');hook=s[a:s.index('\n}',a)+2]
+b=s.index('static void host_publish_hosted_and_wake(');hook=s[b:s.index('\n}',b)+2]+'\n'+hook
 code=r'''
 #include "efs/raft.h"
 #include <assert.h>

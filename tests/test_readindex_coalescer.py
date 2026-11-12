@@ -4,7 +4,7 @@ from pathlib import Path
 import os,subprocess,tempfile
 import csrc
 root=Path(__file__).resolve().parents[1]
-s=csrc.module('raft_host')
+s=csrc.module('read_proof')
 legacy=os.environ.get('EFS_TEST_LEGACY_COALESCER')=='1'
 a=s.index('struct host_ri_coal {' if legacy else 'struct host_ri_wait {');b=s.index('/* ReadIndex for one group',a)
 code=r'''
@@ -17,14 +17,15 @@ code=r'''
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
-#define HOST_NGROUPS 2
+#define READ_PROOF_NGROUPS 2
 struct efs_raft_host {int unused;};
+struct read_proof {struct efs_raft_host *rp_host;};
 static pthread_mutex_t test_mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t test_cv=PTHREAD_COND_INITIALIZER;
 static unsigned calls,entered[4],release1,release2,d_done,delayed;
 static __thread int who;
-static int host_remote_cmd(struct efs_raft_host*h,uint8_t group,const uint8_t*cmd,uint32_t len,struct efs_msg_raft_mkfs_reply*r,int leader){
- (void)h;(void)group;(void)cmd;(void)len;(void)leader;
+static int read_proof_host_remote(struct efs_raft_host*h,uint8_t group,int leader,struct efs_msg_raft_mkfs_reply*r){
+ (void)h;(void)group;(void)leader;
  pthread_mutex_lock(&test_mu);unsigned n=++calls;pthread_cond_broadcast(&test_cv);
  while((n==1&&!release1)||(n==2&&!release2))pthread_cond_wait(&test_cv,&test_mu);
  pthread_mutex_unlock(&test_mu);assert(n<=3);*r=(struct efs_msg_raft_mkfs_reply){.index=n==1?100:n==2?110:900,.leader_hint=1};return EFS_OK;
@@ -43,8 +44,8 @@ static int delayed_wait(pthread_cond_t*cv,pthread_mutex_t*mu,const struct timesp
 #undef pthread_cond_timedwait
 struct result {uint64_t index;int rc,hint,id;};
 static void *reader(void*arg){
- struct result*r=arg;who=r->id;struct efs_raft_host h={0};struct timespec end;clock_gettime(CLOCK_REALTIME,&end);end.tv_sec+=5;
- r->rc=host_remote_read_index(&h,0,1,&end,&r->index,&r->hint);
+ struct result*r=arg;who=r->id;struct read_proof rp={0};struct timespec end;clock_gettime(CLOCK_REALTIME,&end);end.tv_sec+=5;
+ r->rc=host_remote_read_index(&rp,0,1,&end,&r->index,&r->hint);
  if(who==3){pthread_mutex_lock(&test_mu);d_done=1;pthread_cond_broadcast(&test_cv);pthread_mutex_unlock(&test_mu);}return NULL;
 }
 int main(void){
@@ -68,10 +69,10 @@ int main(void){
  host_ri_complete(&c,12,EFS_OK,999,3);assert(old.rc==EFS_ERR_IO&&!old.index&&future.done&&future.index==999);
  host_ri_remove(&c,&old);host_ri_remove(&c,&future);assert(!c.waiters);
  /* Timeout and exhausted context detach/refuse without leaked stack nodes. */
- g_ri_coal[0].inflight=1;struct efs_raft_host h={0};struct timespec end={0};uint64_t idx=0;int hint=0;who=0;
- assert(host_remote_read_index(&h,0,1,&end,&idx,&hint)==EFS_ERR_BUSY&&!g_ri_coal[0].waiters);
+ g_ri_coal[0].inflight=1;struct read_proof rp={0};struct timespec end={0};uint64_t idx=0;int hint=0;who=0;
+ assert(host_remote_read_index(&rp,0,1,&end,&idx,&hint)==EFS_ERR_BUSY&&!g_ri_coal[0].waiters);
  g_ri_coal[0].inflight=0;g_ri_coal[0].started=UINT64_MAX;
- assert(host_remote_read_index(&h,0,1,&end,&idx,&hint)==EFS_ERR_BUSY&&!g_ri_coal[0].waiters);
+ assert(host_remote_read_index(&rp,0,1,&end,&idx,&hint)==EFS_ERR_BUSY&&!g_ri_coal[0].waiters);
  return 0;
 }
 '''
