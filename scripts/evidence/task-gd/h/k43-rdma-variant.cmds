@@ -1,0 +1,1 @@
+k43-rdma-variant	3	sed -e 55s/.tcp.$/os.environ.get\\x28\\x27EFS_TRANSPORT\\x27,\\x27tcp\\x27\\x29/ tests/test_k43_coordinator_kill.py > tests/test_k43_rdma_variant.py; sed -n 55p tests/test_k43_rdma_variant.py; EFS_K43_KEEP=1 python3 tests/test_k43_rdma_variant.py; rc=$?; rm -f tests/test_k43_rdma_variant.py; exit $rc

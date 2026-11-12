@@ -1,0 +1,2 @@
+sigkill-8k	3	python3 tests/live/append_failover.py --root $T/run --port 19500 --rel $S --records 8000 --writers 4 --failover kill --interval 4 --first-event 3 --down 5 --transport rdma
+combined-2k	3	python3 tests/live/append_failover.py --root $T/run --port 19500 --rel $F --records 2000 --writers 4 --peer-writers 1 --lose-reserve-every 97 --lose-reserve-max 4 --failover kill --interval 4 --first-event 3 --down 5 --transport rdma
